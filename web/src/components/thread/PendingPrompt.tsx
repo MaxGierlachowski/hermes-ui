@@ -8,6 +8,7 @@ import { respond } from '@/lib/store'
 import { stripRecommended } from '@/lib/format'
 import type { PendingPrompt as P } from '@/lib/types'
 import { t } from '@/lib/i18n'
+import { haptic } from '@/lib/haptics'
 
 const APPROVAL_LABEL: Record<string, { label: string; hint: string }> = {
   once: { label: t('Einmal erlauben'), hint: t('nur diesen Befehl') },
@@ -44,7 +45,7 @@ export function PendingPrompt({ sessionId, prompt }: { sessionId: string; prompt
 
 function Approval({ sessionId, p }: { sessionId: string; p: P }) {
   const [busy, setBusy] = useState<string | null>(null)
-  const go = async (choice: string) => { setBusy(choice); await respond(sessionId, { promptId: p.promptId, choice }); setBusy(null) }
+  const go = async (choice: string) => { haptic(); setBusy(choice); await respond(sessionId, { promptId: p.promptId, choice }); setBusy(null) }
   const allow = p.choices.filter((c) => c !== 'deny')
   return (
     <Shell kind="approval" p={p}>
@@ -71,6 +72,7 @@ function Clarify({ sessionId, p }: { sessionId: string; p: P }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const send = async (body: { answer?: string; answers?: string[] }) => {
+    haptic()
     setBusy(true)
     await respond(sessionId, { promptId: p.promptId, ...body })
     setBusy(false)
@@ -82,7 +84,7 @@ function Clarify({ sessionId, p }: { sessionId: string; p: P }) {
       {choices.length > 0 && (p.multiSelect ? (
         <div className="mb-3 flex flex-col gap-1.5">
           {choices.map((c) => (
-            <label key={c.raw} className={cn('flex cursor-pointer items-center gap-2 rounded-md border bg-background/70 px-2.5 py-2 text-sm transition-colors hover:bg-background', picked.includes(c.label) && 'border-primary/60')}>
+            <label key={c.raw} className={cn('flex cursor-pointer items-center gap-2 rounded-md border bg-background/70 px-2.5 py-2 text-sm transition-colors hover:bg-background touch:min-h-11 touch:gap-3', picked.includes(c.label) && 'border-primary/60')}>
               <Checkbox checked={picked.includes(c.label)} onCheckedChange={(v) => setPicked((x) => (v ? [...x, c.label] : x.filter((y) => y !== c.label)))} />
               {c.label}
               {c.recommended && <span className="ml-auto text-[11px] text-muted-foreground">{t('empfohlen')}</span>}
@@ -112,7 +114,7 @@ function Clarify({ sessionId, p }: { sessionId: string; p: P }) {
         />
         <Button size="sm" variant="secondary" disabled={busy || !text.trim()} onClick={() => send({ answer: text.trim() })}>{t('Senden')}</Button>
       </div>
-      <button className="mt-2 text-xs text-muted-foreground hover:text-foreground" disabled={busy} onClick={() => send({ answer: '' })}>{t('Überspringen')}</button>
+      <button className="touch-hitbox mt-2 text-xs text-muted-foreground hover:text-foreground touch:text-[13px]" disabled={busy} onClick={() => send({ answer: '' })}>{t('Überspringen')}</button>
     </Shell>
   )
 }

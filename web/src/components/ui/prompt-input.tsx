@@ -107,12 +107,15 @@ function PromptInput({
 
 export type PromptInputTextareaProps = {
   disableAutosize?: boolean
+  /** Enter sends (Shift+Enter = new line). Off on phones, whose keyboards have no Shift+Enter. */
+  submitOnEnter?: boolean
 } & React.ComponentProps<typeof Textarea>
 
 function PromptInputTextarea({
   className,
   onKeyDown,
   disableAutosize = false,
+  submitOnEnter = true,
   ...props
 }: PromptInputTextareaProps) {
   const { value, setValue, maxHeight, onSubmit, disabled, textareaRef } =
@@ -155,7 +158,7 @@ function PromptInputTextarea({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (submitOnEnter && e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       onSubmit?.()
     }

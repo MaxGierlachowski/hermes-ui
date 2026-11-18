@@ -51,7 +51,7 @@ export function BottomTabBar() {
         >
           <span className="relative">
             <Icon className="size-5" strokeWidth={tab === id ? 2.2 : 1.8} />
-            {id === 'inbox' && <CountBadge className="absolute -right-3 -top-1.5" />}
+            {id === 'inbox' && <CountBadge className="absolute -right-3 -top-1.5 h-[18px] min-w-[18px] text-[11px]" />}
           </span>
           {label}
         </button>

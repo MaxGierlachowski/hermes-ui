@@ -11,6 +11,7 @@ import { relTime } from '@/lib/format'
 import { kindLabel, loadInbox, markRead, openThread, respondPaseo, useBoard } from '@/lib/store'
 import type { InboxItem, OpenItem } from '@/lib/types'
 import { t } from '@/lib/i18n'
+import { haptic } from '@/lib/haptics'
 
 type KindFilter = 'all' | 'requests' | 'done' | 'error'
 const REQUESTS = new Set(['approval', 'clarify', 'permission'])
@@ -51,14 +52,14 @@ export function Inbox({ onSettings }: { onSettings: () => void }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
-        <ToggleGroup type="single" size="sm" variant="outline" value={kind} onValueChange={(v) => v && setKind(v as KindFilter)} className="text-xs">
-          <ToggleGroupItem value="all" className="px-2.5 text-xs">{t('Alle')}</ToggleGroupItem>
-          <ToggleGroupItem value="requests" className="px-2.5 text-xs">{t('Freigaben')}</ToggleGroupItem>
-          <ToggleGroupItem value="done" className="px-2.5 text-xs">{t('Fertig')}</ToggleGroupItem>
-          <ToggleGroupItem value="error" className="px-2.5 text-xs">{t('Fehler')}</ToggleGroupItem>
+        <ToggleGroup type="single" size="sm" variant="outline" value={kind} onValueChange={(v) => v && setKind(v as KindFilter)} className="text-xs max-md:w-full">
+          <ToggleGroupItem value="all" className="px-2.5 text-xs max-md:flex-1 touch:text-[13px]">{t('Alle')}</ToggleGroupItem>
+          <ToggleGroupItem value="requests" className="px-2.5 text-xs max-md:flex-1 touch:text-[13px]">{t('Freigaben')}</ToggleGroupItem>
+          <ToggleGroupItem value="done" className="px-2.5 text-xs max-md:flex-1 touch:text-[13px]">{t('Fertig')}</ToggleGroupItem>
+          <ToggleGroupItem value="error" className="px-2.5 text-xs max-md:flex-1 touch:text-[13px]">{t('Fehler')}</ToggleGroupItem>
         </ToggleGroup>
         <Select value={source} onValueChange={setSource}>
-          <SelectTrigger size="sm" className="h-8 w-[112px] text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger size="sm" className="h-8 w-[112px] text-xs touch:w-auto touch:text-[13px]" aria-label={t('Quelle')}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t('Alle Quellen')}</SelectItem>
             <SelectItem value="hermes">Hermes</SelectItem>
@@ -66,7 +67,7 @@ export function Inbox({ onSettings }: { onSettings: () => void }) {
           </SelectContent>
         </Select>
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-8 text-xs" disabled={!inbox.unread} onClick={() => markRead('all')}>
+          <Button variant="ghost" size="sm" className="h-8 text-xs" disabled={!inbox.unread} onClick={() => markRead('all')} aria-label={t('Alle gelesen')}>
             <CheckCheck className="size-3.5" /><span className="hidden sm:inline">{t('Alle gelesen')}</span>
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={onSettings} aria-label={t('Benachrichtigungen')} title={t('Benachrichtigungen')}><BellRing className="size-4" /></Button>
@@ -121,7 +122,7 @@ function OpenHeader({ source, title, sub, at, sessionId }: { source: 'hermes' | 
       </div>
       <span className="shrink-0 tabular-nums text-muted-foreground">{relTime(at)}</span>
       {sessionId && (
-        <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-xs" onClick={() => openThread(sessionId)}>
+        <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-xs" onClick={() => openThread(sessionId)} aria-label={t('Im Thread öffnen')}>
           <MessageSquareShare className="size-3.5" /><span className="hidden sm:inline">{t('Im Thread öffnen')}</span>
         </Button>
       )}
@@ -158,6 +159,7 @@ function PaseoPermission({ item }: { item: Extract<OpenItem, { source: 'paseo' }
   const [reason, setReason] = useState('')
   const p = item.permission
   const go = async (decision: 'allow' | 'deny') => {
+    haptic()
     setBusy(decision)
     const ok = await respondPaseo(item.agent.id, p.id, decision, decision === 'deny' ? reason.trim() || t('Abgelehnt in Hermes UI') : undefined)
     if (!ok) setBusy(null)

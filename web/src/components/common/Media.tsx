@@ -50,7 +50,7 @@ export function MediaImage({ url, alt = '', className }: { url: string; alt?: st
         <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={cn('block h-auto max-w-full rounded-lg ring-1 ring-border', className)} />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="grid max-h-[94dvh] w-auto max-w-[96vw] place-items-center border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-[94vw]">
+        <DialogContent className="grid max-h-[94dvh] w-auto max-w-[96vw] place-items-center border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-[94vw] max-md:[&>[data-slot=dialog-close]]:fixed max-md:[&>[data-slot=dialog-close]]:top-[max(0.5rem,env(safe-area-inset-top))] max-md:[&>[data-slot=dialog-close]]:right-2 max-md:[&>[data-slot=dialog-close]]:rounded-full max-md:[&>[data-slot=dialog-close]]:bg-black/55 max-md:[&>[data-slot=dialog-close]]:text-white">
           <DialogTitle className="sr-only">{alt || t('Bild')}</DialogTitle>
           <img src={src} alt={alt} className="max-h-[90dvh] max-w-[94vw] rounded-lg object-contain" onClick={() => setOpen(false)} />
         </DialogContent>

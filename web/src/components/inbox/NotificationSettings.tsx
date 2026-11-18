@@ -15,7 +15,7 @@ const errText = (err: unknown) => (err instanceof Error ? err.message : String(e
 
 function Row({ id, label, hint, checked, onChange, disabled }: { id: string; label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-3 touch:min-h-11 touch:items-center">
       <div className="min-w-0 flex-1">
         <Label htmlFor={id} className="text-sm font-normal">{label}</Label>
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
@@ -42,7 +42,7 @@ export function NotificationSettings({ open, onOpenChange }: { open: boolean; on
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="grid-cols-1 sm:max-w-md [&>*]:min-w-0">
+      <DialogContent mobileSheet className="grid-cols-1 sm:max-w-md [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>{t('Benachrichtigungen')}</DialogTitle>
           <DialogDescription>{t('Push-Benachrichtigungen auf diesem Gerät, wenn eine Freigabe nötig ist oder ein Chat fertig wird. Sie enthalten nur den Chat-Titel und die Art, keine Inhalte.')}</DialogDescription>

@@ -3,6 +3,7 @@ import { Archive, BellRing, Bot, CornerDownLeft, Inbox, Languages, LayoutGrid, M
 import { useTheme } from 'next-themes'
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/components/ui/command'
 import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
 import { Loader } from '@/components/ui/loader'
 import { openThread, searchChats, setFilter, setTab, useBoard, type SearchHit } from '@/lib/store'
 import { relTime } from '@/lib/format'
@@ -66,14 +67,18 @@ export function CommandMenu({ open, onOpenChange, onNew, onRemote, onNotificatio
       onOpenChange={onOpenChange}
       title={t('Suche')}
       description={t('Chats und Inhalte durchsuchen oder Befehl ausführen')}
-      className="top-[max(0.5rem,env(safe-area-inset-top))] w-[calc(100%-1rem)] max-w-2xl translate-y-0 sm:top-[14vh] sm:max-w-2xl"
-      commandProps={{ shouldFilter: false, loop: true, className: 'rounded-xl! p-0' }}
+      className="top-[max(0.5rem,env(safe-area-inset-top))] w-[calc(100%-1rem)] max-w-2xl translate-y-0 sm:top-[14vh] sm:max-w-2xl max-md:inset-0 max-md:top-0 max-md:left-0 max-md:flex max-md:h-(--visual-height) max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:flex-col max-md:rounded-none! max-md:pt-[env(safe-area-inset-top)] max-md:ring-0 max-md:data-open:zoom-in-100 max-md:data-closed:zoom-out-100"
+      commandProps={{ shouldFilter: false, loop: true, className: 'rounded-xl! p-0 max-md:rounded-none! max-md:min-h-0 max-md:flex-1' }}
     >
-      <div className="relative">
-        <CommandInput value={q} onValueChange={setQ} placeholder={t('Chats, Inhalte oder Befehle suchen …')} className="h-10 text-[15px]" />
-        {busy && <Loader variant="circular" size="sm" className="absolute right-4 top-1/2 size-4 -translate-y-1/2" />}
+      {/* Phones: full-screen search, with "Abbrechen" next to the field like the iOS search bar. */}
+      <div className="flex items-center max-md:gap-1 max-md:pr-1">
+        <div className="relative min-w-0 flex-1">
+          <CommandInput value={q} onValueChange={setQ} placeholder={t('Chats, Inhalte oder Befehle suchen …')} className="h-10 text-[15px] touch:h-11 touch:text-base" />
+          {busy && <Loader variant="circular" size="sm" className="absolute right-4 top-1/2 size-4 -translate-y-1/2" />}
+        </div>
+        <Button variant="ghost" size="sm" className="shrink-0 text-[15px] text-primary md:hidden" onClick={() => onOpenChange(false)}>{t('Abbrechen')}</Button>
       </div>
-      <CommandList className="max-h-[min(62dvh,34rem)] px-1 pb-1 max-sm:max-h-[48dvh]">
+      <CommandList className="max-h-[min(62dvh,34rem)] px-1 pb-1 max-md:max-h-none max-md:flex-1 max-md:overscroll-contain">
         {nothing && <CommandEmpty>{t('Nichts gefunden für „{q}“.', { q: query })}</CommandEmpty>}
 
         {!query && recent.length > 0 && (
@@ -106,9 +111,9 @@ export function CommandMenu({ open, onOpenChange, onNew, onRemote, onNotificatio
           </>
         )}
       </CommandList>
-      <div className="flex items-center gap-3 border-t px-3 py-2 text-[11px] text-muted-foreground">
-        <label className="flex items-center gap-1.5">
-          <Switch checked={archived} onCheckedChange={setArchived} className="scale-75" />
+      <div className="flex items-center gap-3 border-t px-3 py-2 text-[11px] text-muted-foreground max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))] max-md:text-[13px] [.keyboard-open_&]:pb-2">
+        <label className="flex items-center gap-1.5 max-md:min-h-11 max-md:gap-2.5">
+          <Switch checked={archived} onCheckedChange={setArchived} className="scale-75 touch:scale-100" />
           <Archive className="size-3" />{t('Archivierte einbeziehen')}
         </label>
         <span className="ml-auto hidden items-center gap-3 sm:flex">

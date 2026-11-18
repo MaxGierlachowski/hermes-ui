@@ -45,20 +45,65 @@ function SheetOverlay({
   )
 }
 
+/**
+ * Bottom sheets: drag down to close, from the grabber or any element marked data-sheet-drag (e.g. a
+ * header). Interactive elements inside such a region keep their taps. Past 96 px, or a quick flick, the
+ * sheet closes; otherwise it springs back.
+ */
+function useSwipeToClose(enabled: boolean) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const closeRef = React.useRef<HTMLButtonElement>(null)
+  const drag = React.useRef<{ id: number; y: number; t: number; dy: number } | null>(null)
+  const set = (dy: number, animate: boolean) => {
+    const el = ref.current
+    if (!el) return
+    el.style.transition = animate ? "transform 180ms ease-out" : "none"
+    el.style.transform = dy ? `translateY(${dy}px)` : ""
+  }
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!enabled || e.pointerType === "mouse") return
+    const target = e.target as HTMLElement
+    if (!target.closest("[data-sheet-drag]") || target.closest("button, a, input, textarea, select, [role=combobox]")) return
+    drag.current = { id: e.pointerId, y: e.clientY, t: performance.now(), dy: 0 }
+    ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
+  }
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current
+    if (!d || d.id !== e.pointerId) return
+    d.dy = Math.max(0, e.clientY - d.y)
+    set(d.dy, false)
+  }
+  const onPointerEnd = (e: React.PointerEvent) => {
+    const d = drag.current
+    if (!d || d.id !== e.pointerId) return
+    drag.current = null
+    const velocity = d.dy / Math.max(1, performance.now() - d.t)
+    if (d.dy > 96 || (d.dy > 24 && velocity > 0.6)) closeRef.current?.click()
+    else set(0, true)
+  }
+  return { ref, closeRef, handlers: enabled ? { onPointerDown, onPointerMove, onPointerUp: onPointerEnd, onPointerCancel: onPointerEnd } : {} }
+}
+
 function SheetContent({
   className,
   children,
   side = "right",
   showCloseButton = true,
+  swipeToClose = false,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
+  /** Bottom sheets only: grabber on top, drag down to close. */
+  swipeToClose?: boolean
 }) {
+  const { ref, closeRef, handlers } = useSwipeToClose(swipeToClose && side === "bottom")
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
+        ref={ref}
+        {...handlers}
         data-slot="sheet-content"
         data-side={side}
         className={cn(
@@ -67,6 +112,14 @@ function SheetContent({
         )}
         {...props}
       >
+        {swipeToClose && side === "bottom" && (
+          <>
+            <div data-sheet-drag aria-hidden className="flex h-5 shrink-0 touch-none items-end justify-center">
+              <span className="h-1.5 w-10 rounded-full bg-muted-foreground/30" />
+            </div>
+            <SheetPrimitive.Close ref={closeRef} tabIndex={-1} aria-hidden className="hidden" />
+          </>
+        )}
         {children}
         {showCloseButton && (
           <SheetPrimitive.Close data-slot="sheet-close" asChild>

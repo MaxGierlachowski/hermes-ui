@@ -12,7 +12,7 @@ export function NewChatDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const [draft, setDraft] = useState(false)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-3 sm:max-w-xl">
+      <DialogContent mobileSheet className="gap-3 sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{t('Neuer Chat')}</DialogTitle>
           <DialogDescription>{t('Text, Bilder oder eine Sprachnachricht an Hermes.')}</DialogDescription>

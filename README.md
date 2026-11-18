@@ -154,6 +154,9 @@ launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
 - **Push notifications (Web Push, see below).**
 - **Search (⌘K, `/` or the search field):** full text over the titles and content of all chats, using Hermes' own FTS5 index (`messages_fts`, read-only; user and Hermes messages, no tool output). Results show title, source, column, last activity, message and Paseo-agent counts and a snippet with the hit marked; Enter opens the thread at the matching message. Archived chats on request. Also: new chat (N), theme, language, cron/system filter, remote access.
 - **Light and dark mode**, English and German, a mobile layout, and installable as a PWA.
+- **Phones and tablets:** every control is at least 44 × 44 px to hit (Apple HIG; checked by a test), fields use 16 px text so iOS does not zoom in, and nothing changes for a mouse.
+  - The thread opens as a bottom sheet: drag it down to close. The composer is one row (attach · text · one round button that is the mic, send, or stop), Enter makes a new line, and it stays above the keyboard on iOS too.
+  - Board: column tabs, swipe sideways to switch columns, long-press a card to move it. Column choice, new chat, notifications and remote access open as bottom sheets; search is full screen.
 
 ## Push notifications
 
@@ -178,7 +181,18 @@ Standard Web Push with VAPID. The backend generates its key pair on first start 
 npm start                 # terminal 1: backend (+ built UI)
 npm run dev               # terminal 2: Vite dev server for web/ on :5173, proxies /api to :8787
 npm run check             # syntax check of the backend
+npm test                  # backend unit tests
+npm run test:ui           # build the UI, then the Playwright UI tests (web/e2e)
 ```
+
+The UI tests run the built bundle with every `/api` request answered from synthetic fixtures (`web/e2e/fixtures.ts`), so they need no backend and never touch Hermes. They cover three phones (390 × 844, 375 × 667, 412 × 915, touch) and a desktop:
+
+- `touch-targets`: every interactive element on every screen must be hittable over 44 × 44 px (measured by hit-testing, so an enlarged hit area counts and an overlapping neighbour fails), and no field may be below 16 px.
+- `mobile-behaviour`: sheet swipe-to-close, long-press, column swipe, Enter in the composer, and the keyboard inset.
+- `desktop-regression`: pixel comparison at 1440 × 900, light and dark, against `web/e2e/__screenshots__/`. Touch styles live behind `pointer: coarse` (Tailwind variant `touch:`) or `max-md:`, so a desktop with a mouse must not change by a single pixel. After an intended desktop change, update the images with `npx playwright test desktop --update-snapshots` (in `web/`) and review them. The images are rendered on macOS; other systems render fonts differently.
+- `SHOTS_DIR=<dir> npx playwright test screenshots` writes one screenshot per screen, phone and theme.
+
+Once per machine: `npx playwright install chromium` in `web/`.
 
 Layout:
 

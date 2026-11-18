@@ -5,6 +5,9 @@
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
+/* Touch screens (phones, tablets): bigger targets and 16 px fields. A mouse never matches, so the desktop
+   stays exactly as it is. Layout changes for phones use max-md: (< 768 px) instead. */
+@custom-variant touch (@media (pointer: coarse));
 
 @theme inline {
     --font-heading: var(--font-sans);
@@ -136,6 +139,21 @@
   html, body, #root { height: 100%; }
   body { -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
+}
+
+/* Touch tokens: minimum hit area (Apple HIG 44 pt, WCAG 2.5.5) and the keyboard height that useKeyboardInset()
+   measures on iOS, where the on-screen keyboard covers the page instead of resizing it. */
+:root { --touch-target: 44px; --keyboard-inset: 0px; --visual-height: 100dvh; }
+
+/* Grows the hit area of a small control to --touch-target on touch screens without changing how it looks.
+   In the base layer, so an .absolute/.fixed utility on the same element still wins over position: relative. */
+@layer base {
+  @media (pointer: coarse) {
+    .touch-hitbox { position: relative; }
+    .touch-hitbox::after { content: ""; position: absolute; inset: min(0px, calc((100% - var(--touch-target)) / 2)); }
+    html { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    body { overscroll-behavior-y: none; }
+  }
 }
 
 /* Scrollbars: overlay thumbs where OverlayScroll is used, thin and quiet everywhere else. */

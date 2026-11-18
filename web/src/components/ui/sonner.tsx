@@ -38,6 +38,8 @@ const Toaster = ({ style, ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast: "cn-toast",
+          // Touch: the toast's action button reaches 44 px (it is 24 px high otherwise).
+          actionButton: "touch-hitbox touch:h-9! touch:px-3! touch:text-[13px]!",
         },
       }}
       {...props}

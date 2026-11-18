@@ -23,7 +23,7 @@ export function ConfirmApproval() {
   }
   return (
     <Dialog open={!!confirm} onOpenChange={(o) => !o && clearConfirm()}>
-      <DialogContent className="grid-cols-1 sm:max-w-md [&>*]:min-w-0">
+      <DialogContent mobileSheet className="grid-cols-1 sm:max-w-md [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>{deny ? t('Freigabe ablehnen?') : t('Freigabe erteilen?')}</DialogTitle>
           <DialogDescription>{item ? item.title : t('Diese Anfrage ist nicht mehr offen.')}</DialogDescription>
