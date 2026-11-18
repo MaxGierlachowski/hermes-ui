@@ -39,12 +39,14 @@ function CommandDialog({
   children,
   className,
   showCloseButton = false,
+  commandProps,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string
   description?: string
   className?: string
   showCloseButton?: boolean
+  commandProps?: React.ComponentProps<typeof CommandPrimitive>
 }) {
   return (
     <Dialog {...props}>
@@ -59,7 +61,8 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
-        {children}
+        {/* cmdk items need their <Command> store; without it opening the dialog crashed the whole app. */}
+        <Command {...commandProps}>{children}</Command>
       </DialogContent>
     </Dialog>
   )

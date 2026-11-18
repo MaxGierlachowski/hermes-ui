@@ -10,12 +10,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { clock } from '@/lib/format'
 import { COLUMNS, type Column, type ThreadMessage } from '@/lib/types'
-import { getState, interrupt, openThread, sendMessage, setColumn, useBoard } from '@/lib/store'
+import { clearHighlight, getState, interrupt, openThread, sendMessage, setColumn, useBoard } from '@/lib/store'
+import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { SourceIcon, StatusDot } from '@/components/board/status'
 import { Composer } from './Composer'
 import { PendingPrompt } from './PendingPrompt'
 import { MediaAudio, MediaImage } from '@/components/common/Media'
 import { PaseoPanel } from '@/components/paseo/PaseoPanel'
+import { OverlayScroll } from '@/components/common/OverlayScroll'
 import { Bot, MessagesSquare } from 'lucide-react'
 import { t } from '@/lib/i18n'
 
@@ -34,22 +36,57 @@ function ToolChip({ m }: { m: ThreadMessage }) {
         {m.summary && <span className="truncate opacity-80">· {m.summary}</span>}
         {m.text && <ChevronRight className={cn('size-3 shrink-0 transition-transform', open && 'rotate-90')} />}
       </button>
-      {open && <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/60 p-2 font-mono text-[11.5px] ring-1 ring-border">{m.text}</pre>}
+      {open && <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md bg-muted/60 p-2 font-mono text-[11.5px] ring-1 ring-border">{m.text}</pre>}
     </div>
   )
 }
 
+/** Search hit: stop following the bottom, scroll the message into view and mark it briefly. */
+function JumpToHighlight() {
+  const highlight = useBoard((s) => s.highlight)
+  const count = useBoard((s) => s.messages.length)
+  const { stopScroll } = useStickToBottomContext()
+  useEffect(() => {
+    if (highlight == null || !count) return
+    const el = document.getElementById(`msg-${highlight}`)
+    if (!el) return
+    stopScroll()
+    // Long messages: aim at the first matching word, not the middle of the message.
+    const terms = getState().highlightQuery.toLowerCase().split(/\s+/).filter(Boolean)
+    let target: Element = el
+    if (terms.length) {
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        if (terms.some((w) => n!.textContent?.toLowerCase().includes(w))) { target = n.parentElement || el; break }
+      }
+    }
+    requestAnimationFrame(() => target.scrollIntoView({ block: 'center' }))
+    const timer = setTimeout(clearHighlight, 4000)
+    return () => clearTimeout(timer)
+  }, [highlight, count, stopScroll])
+  return null
+}
+
 function MessageRow({ m }: { m: ThreadMessage }) {
+  const highlighted = useBoard((s) => m.id != null && s.highlight === m.id)
+  return (
+    <div id={m.id != null ? `msg-${m.id}` : undefined} className={cn('-mx-2 rounded-xl px-2 transition-[background-color,box-shadow] duration-700', highlighted && 'bg-amber-400/10 ring-1 ring-amber-500/40')}>
+      <MessageBody m={m} />
+    </div>
+  )
+}
+
+function MessageBody({ m }: { m: ThreadMessage }) {
   if (m.role === 'tool') return <ToolChip m={m} />
   const atts = m.attachments || []
   if (m.role === 'user') {
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-muted px-3.5 py-2 text-sm text-foreground ring-1 ring-border/60">
-          {m.text && <div className="whitespace-pre-wrap break-words">{m.text}</div>}
+          {m.text && <div className="whitespace-pre-wrap [overflow-wrap:anywhere]">{m.text}</div>}
           {atts.map((a) => (a.kind === 'audio'
             ? <MediaAudio key={a.url} url={a.url} className="mt-2 h-9 w-64 max-w-full" />
-            : <MediaImage key={a.url} url={a.url} className="mt-2 max-h-64 rounded-lg ring-1 ring-border" />))}
+            : <div key={a.url} className="mt-2"><MediaImage url={a.url} className="max-h-64" /></div>))}
           {m.ts && <div className="mt-1 text-right text-[10.5px] text-muted-foreground">{clock(m.ts)}</div>}
         </div>
       </div>
@@ -120,9 +157,9 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
       )}
 
       {tab === 'paseo' ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <OverlayScroll className="flex-1">
           <PaseoPanel sessionId={session.id} version={(session.paseo || []).map((a) => a.id + a.state).join()} />
-        </div>
+        </OverlayScroll>
       ) : (<>
       {session.running && session.activity && !session.pending?.length && (
         <div className="flex items-center gap-2 border-b bg-muted/30 px-4 py-1.5 text-xs text-muted-foreground">
@@ -142,6 +179,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
             <Loader variant="typing" size="sm" />
           )}
           {session.pending?.map((p) => <PendingPrompt key={p.promptId} sessionId={session.id} prompt={p} />)}
+          <JumpToHighlight />
           <ChatContainerScrollAnchor />
         </ChatContainerContent>
         <div className="absolute bottom-3 right-4"><ScrollButton className="shadow-sm" /></div>
@@ -164,7 +202,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className={cn('inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground', active && 'bg-muted text-foreground')}>
+    <button onClick={onClick} className={cn('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground', active && 'bg-muted text-foreground')}>
       {children}
     </button>
   )

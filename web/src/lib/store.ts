@@ -24,6 +24,8 @@ type State = {
   streaming: { id: string; text: string } | null
   pendingFirst: { id: string; text: string; ts: number } | null
   flash: string | null
+  highlight: number | null // message id to scroll to and mark (search hit)
+  highlightQuery: string
 }
 
 let state: State = {
@@ -44,6 +46,8 @@ let state: State = {
   streaming: null,
   pendingFirst: null,
   flash: null,
+  highlight: null,
+  highlightQuery: '',
 }
 const listeners = new Set<() => void>()
 const set = (patch: Partial<State> | ((s: State) => Partial<State>)) => {
@@ -107,11 +111,20 @@ function withPending(id: string, messages: ThreadMessage[]) {
   return [{ role: 'user' as const, text: p.text, ts: p.ts }, ...messages]
 }
 
-export async function openThread(id: string | null) {
-  set({ openId: id, messages: [], loadingThread: !!id, streaming: state.streaming?.id === id ? state.streaming : null })
+export async function openThread(id: string | null, opts: { highlight?: number; query?: string; session?: Session } = {}) {
+  // A search hit can be older than the board's window: show its card until the next reload.
+  if (id && opts.session && !state.sessions[id]) upsert(opts.session)
+  set({ openId: id, messages: [], loadingThread: !!id, highlight: opts.highlight ?? null, highlightQuery: opts.query || '', streaming: state.streaming?.id === id ? state.streaming : null })
   if (id) history.replaceState(null, '', `#${encodeURIComponent(id)}`)
   else history.replaceState(null, '', location.pathname)
   if (id) await refreshThread(id)
+}
+
+export const clearHighlight = () => set({ highlight: null })
+
+export type SearchHit = { session: Session & { archived?: boolean }; hit?: { msgId: number; role: string; ts: number; snippet: string; hits: number }; alsoTitle?: boolean }
+export async function searchChats(q: string, archived: boolean, signal?: AbortSignal) {
+  return api<{ q: string; title: SearchHit[]; content: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}${archived ? '&archived=1' : ''}`, { signal })
 }
 
 export async function refreshThread(id: string) {
@@ -134,8 +147,12 @@ export async function setColumn(id: string, column: Column | 'auto') {
   } catch (err) { handle(err); loadSessions() }
 }
 
+// Automated E2E runs mark their chats as "TEST · …" without any visible switch: they set
+// localStorage hk_e2e_test=1 in their own browser profile (or POST test: true to the API directly).
+const e2eTest = () => { try { return localStorage.getItem('hk_e2e_test') === '1' } catch { return false } }
+
 export async function createChat(msg: OutgoingMessage) {
-  const { session } = await api<{ session: Session }>('/api/sessions', { method: 'POST', json: msg })
+  const { session } = await api<{ session: Session }>('/api/sessions', { method: 'POST', json: e2eTest() ? { ...msg, test: true } : msg })
   upsert(session, true)
   if (!msg.draft) {
     set({ pendingFirst: { id: session.id, text: msg.text || (msg.audio ? '🎙 Sprachnachricht …' : ''), ts: Date.now() / 1000 } })

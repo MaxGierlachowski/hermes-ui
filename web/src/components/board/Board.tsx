@@ -6,6 +6,7 @@ import { openThread, setColumn, useBoard } from '@/lib/store'
 import { SessionCard } from './SessionCard'
 import { COLUMN_COLOR } from './status'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { OverlayScroll } from '@/components/common/OverlayScroll'
 import { t } from '@/lib/i18n'
 
 type Cols = Record<Column, Session[]>
@@ -68,7 +69,7 @@ function DesktopBoard({ cols }: { cols: Cols }) {
         {COLUMNS.map(({ id, label }) => (
           <KanbanColumn key={id} value={id} className="flex min-h-0 flex-col rounded-xl bg-muted/40 p-2 ring-1 ring-border/60 data-[dragging]:ring-primary/30">
             <ColumnHeader id={id} label={label} count={value[id].length} />
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:thin]">
+            <OverlayScroll className="flex-1">
               <div className="flex flex-col gap-2 pb-2">
                 {value[id].map((s) => (
                   <KanbanItem key={s.id} value={s.id} asHandle className="cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => openThread(s.id)}>
@@ -77,7 +78,7 @@ function DesktopBoard({ cols }: { cols: Cols }) {
                 ))}
                 {!value[id].length && <div className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground/70">{t('Keine Karten')}</div>}
               </div>
-            </div>
+            </OverlayScroll>
           </KanbanColumn>
         ))}
       </KanbanBoard>
@@ -108,7 +109,7 @@ function MobileBoard({ cols }: { cols: Cols }) {
           </button>
         ))}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-24">
+      <OverlayScroll className="flex-1" viewportClassName="px-3 py-3 pb-24">
         <div className="flex flex-col gap-2">
           {cols[tab].map((s) => (
             <button key={s.id} className="text-left" onClick={() => openThread(s.id)}>
@@ -117,7 +118,7 @@ function MobileBoard({ cols }: { cols: Cols }) {
           ))}
           {!cols[tab].length && <div className="py-10 text-center text-sm text-muted-foreground">{t('Keine Karten')}</div>}
         </div>
-      </div>
+      </OverlayScroll>
     </div>
   )
 }

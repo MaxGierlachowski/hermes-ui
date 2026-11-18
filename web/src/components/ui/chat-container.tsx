@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils"
-import { StickToBottom } from "use-stick-to-bottom"
+import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom"
+import { OverlayScrollbar } from "@/components/common/OverlayScroll"
 
 export type ChatContainerRootProps = {
   children: React.ReactNode
@@ -23,7 +24,7 @@ function ChatContainerRoot({
 }: ChatContainerRootProps) {
   return (
     <StickToBottom
-      className={cn("flex overflow-y-auto", className)}
+      className={cn("relative flex overflow-hidden", className)}
       resize="smooth"
       initial="instant"
       role="log"
@@ -40,13 +41,22 @@ function ChatContainerContent({
   ...props
 }: ChatContainerContentProps) {
   return (
-    <StickToBottom.Content
-      className={cn("flex w-full flex-col", className)}
-      {...props}
-    >
-      {children}
-    </StickToBottom.Content>
+    <>
+      <StickToBottom.Content
+        className={cn("flex w-full flex-col", className)}
+        scrollClassName="scrollbar-none overscroll-contain"
+        {...props}
+      >
+        {children}
+      </StickToBottom.Content>
+      <ContentScrollbar />
+    </>
   )
+}
+
+function ContentScrollbar() {
+  const { scrollRef } = useStickToBottomContext()
+  return <OverlayScrollbar scrollRef={scrollRef} />
 }
 
 function ChatContainerScrollAnchor({

@@ -93,6 +93,49 @@ export class Store {
       ORDER BY id`).all(sinceId);
   }
 
+  // Full-text search over chat content with Hermes' own FTS5 index (messages_fts, kept current by
+  // Hermes), plus a title match. Only user and assistant text; tool output and tool calls are left out.
+  // Returns the best hit per session, ranked by bm25; snippets mark hits with \u0002 … \u0003.
+  search(query, { includeArchived = false, limit = 30 } = {}) {
+    const tokens = String(query || '').normalize('NFC').split(/\s+/).map((t) => t.replace(/["*]/g, '')).filter(Boolean).slice(0, 8);
+    if (!tokens.length) return { title: [], content: [] };
+    const visible = `s.hidden = 0 AND s.parent_session_id IS NULL${includeArchived ? '' : ' AND s.archived = 0'}`;
+
+    const like = tokens.map(() => `s.title LIKE ? ESCAPE '\\'`).join(' AND ');
+    const esc = (t) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const title = this.db.prepare(`
+      SELECT s.id FROM sessions s WHERE ${visible} AND ${like}
+      ORDER BY COALESCE(s.last_activity_at, s.started_at) DESC LIMIT ?`).all(...tokens.map(esc), limit).map((r) => r.id);
+
+    // Every token as a quoted prefix term (FTS syntax characters are neutralised by the quotes).
+    // Prefix matching from 3 characters on; shorter prefixes match half the index and get slow.
+    const match = `content : (${tokens.map((t) => `"${t}"${t.length >= 3 ? '*' : ''}`).join(' AND ')})`;
+    let content = [];
+    if (tokens.join('').length >= 2) try {
+      // 1) rank hits, best one per session; 2) snippets only for those (snippet() is the expensive part).
+      const rows = this.db.prepare(`
+        SELECT m.session_id AS id, m.id AS msg_id, m.role, m.timestamp AS ts, h.score
+        FROM (SELECT rowid, bm25(messages_fts) AS score FROM messages_fts WHERE messages_fts MATCH ? ORDER BY score LIMIT 800) h
+        JOIN messages m ON m.id = h.rowid
+        JOIN sessions s ON s.id = m.session_id
+        WHERE m.role IN ('user','assistant') AND m.compacted = 0 AND ${visible}
+        ORDER BY h.score`).all(match);
+      const best = new Map();
+      for (const r of rows) {
+        const b = best.get(r.id);
+        if (b) b.hits++; else best.set(r.id, { ...r, hits: 1 });
+      }
+      content = [...best.values()].slice(0, limit);
+      if (content.length) {
+        const snips = new Map(this.db.prepare(`
+          SELECT rowid AS id, snippet(messages_fts, 0, char(2), char(3), '…', 16) AS snip FROM messages_fts
+          WHERE messages_fts MATCH ? AND rowid IN (${content.map(() => '?').join(',')})`).all(match, ...content.map((c) => c.msg_id)).map((r) => [r.id, r.snip]));
+        for (const c of content) c.snip = snips.get(c.msg_id) || '';
+      }
+    } catch { /* FTS unavailable or rebuilding: title hits only */ }
+    return { title, content };
+  }
+
   maxIds() {
     return this.db.prepare(`SELECT (SELECT COALESCE(max(id),0) FROM messages) AS msg,
       (SELECT COALESCE(max(COALESCE(last_activity_at, started_at)),0) FROM sessions) AS act`).get();

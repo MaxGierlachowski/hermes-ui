@@ -9,6 +9,7 @@ import { clock } from '@/lib/format'
 import type { PaseoAgent, PaseoItem } from '@/lib/types'
 import { AGENT_STATE, AgentStateDot } from './AgentChip'
 import { t } from '@/lib/i18n'
+import { MediaImage } from '@/components/common/Media'
 
 const REL_LABEL = { created: t('gestartet'), steers: t('gesteuert'), watches: t('beobachtet') } as const
 
@@ -134,7 +135,7 @@ function Transcript({ agentId, onBack }: { agentId: string; onBack: () => void }
 
 function Images({ urls }: { urls?: string[] }) {
   if (!urls?.length) return null
-  return <div className="mt-2 flex flex-wrap gap-2">{urls.map((u) => <img key={u.slice(0, 80)} src={u} alt="" className="max-h-56 rounded-md ring-1 ring-border" />)}</div>
+  return <div className="mt-2 flex flex-wrap gap-2">{urls.map((u) => <MediaImage key={u.slice(0, 120)} url={u} className="max-h-56" />)}</div>
 }
 
 function Item({ it }: { it: PaseoItem }) {
@@ -143,7 +144,7 @@ function Item({ it }: { it: PaseoItem }) {
     return (
       <div className="flex justify-end">
         <div className="max-w-[88%] rounded-2xl rounded-br-md bg-muted px-3 py-2 text-sm ring-1 ring-border/60">
-          <div className="whitespace-pre-wrap break-words">{it.text}</div>
+          <div className="whitespace-pre-wrap [overflow-wrap:anywhere]">{it.text}</div>
           <Images urls={it.images} />
           <div className="mt-1 text-right text-[10.5px] text-muted-foreground">{clock(it.ts)}</div>
         </div>
@@ -167,7 +168,7 @@ function Item({ it }: { it: PaseoItem }) {
           {it.summary && <span className="truncate opacity-80">· {it.summary}</span>}
           <ChevronRight className={cn('size-3 shrink-0 transition-transform', open && 'rotate-90')} />
         </button>
-        {open && it.text && <pre className="mt-1.5 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-muted/60 p-2 font-mono text-[11.5px] ring-1 ring-border">{it.text}</pre>}
+        {open && it.text && <pre className="mt-1.5 max-h-72 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md bg-muted/60 p-2 font-mono text-[11.5px] ring-1 ring-border">{it.text}</pre>}
         <Images urls={it.images} />
       </div>
     )

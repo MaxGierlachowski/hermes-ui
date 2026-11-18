@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
-import { ThemeProvider } from 'next-themes'
+import { ThemeProvider, useTheme } from 'next-themes'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -16,6 +16,23 @@ import { Login } from '@/components/app/Login'
 import { bootstrap, connectEvents, loadRemote, loadSessions, openThread, useBoard } from '@/lib/store'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { t } from '@/lib/i18n'
+
+// Page background per theme (index.css --background). The installed PWA paints the status bar and the
+// home-indicator area with theme-color, so it has to follow the app's theme, not only the system's.
+const THEME_BG = { light: '#fafafa', dark: '#09090b' } as const
+
+function ThemeColorSync() {
+  const { resolvedTheme } = useTheme()
+  useEffect(() => {
+    if (resolvedTheme !== 'light' && resolvedTheme !== 'dark') return
+    for (const m of Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'))) {
+      m.removeAttribute('media')
+      m.content = THEME_BG[resolvedTheme]
+    }
+    document.documentElement.style.colorScheme = resolvedTheme
+  }, [resolvedTheme])
+  return null
+}
 
 function Shell() {
   const auth = useBoard((s) => s.auth)
@@ -48,7 +65,10 @@ function Shell() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setCmdOpen((o) => !o) }
       const typing = /input|textarea|select/i.test((e.target as HTMLElement)?.tagName) || (e.target as HTMLElement)?.isContentEditable
       if (!typing && !e.metaKey && !e.ctrlKey && e.key === 'n') { e.preventDefault(); setNewOpen(true) }
-      if (!typing && e.key === 'Escape' && openId) openThread(null)
+      if (!typing && !e.metaKey && !e.ctrlKey && e.key === '/') { e.preventDefault(); setCmdOpen(true) }
+      // Escape in a dialog (lightbox, search) closes only that dialog, not the thread behind it:
+      // Radix marks the Escape it handled with preventDefault().
+      if (!typing && !e.defaultPrevented && e.key === 'Escape' && openId) openThread(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -102,6 +122,7 @@ function Shell() {
 export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="hk_theme_v2" disableTransitionOnChange>
+      <ThemeColorSync />
       <TooltipProvider delayDuration={300}>
         <Shell />
         <Toaster position="bottom-center" />

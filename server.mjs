@@ -18,6 +18,7 @@ import { HermesGateway } from './src/hermes-ws.mjs';
 import { Remote } from './src/remote.mjs';
 import { Devices } from './src/devices.mjs';
 import { Paseo } from './src/paseo.mjs';
+import { createImageResolver } from './src/local-files.mjs';
 import QRCode from 'qrcode';
 
 const cfg = loadConfig(process.argv.slice(2));
@@ -26,6 +27,10 @@ const TOKEN = cfg.token;
 const PORT = cfg.port;
 const HOST = cfg.host;
 const HERMES_HOME = cfg.hermesHome;
+const resolveImage = createImageResolver({
+  roots: [path.join(HERMES_HOME, 'cache'), cfg.paseoHome, ...cfg.imageRoots],
+  tempPrefixes: ['paseo-attachments-'],
+});
 const SYSTEM_SOURCES = new Set(['cron', 'tool', 'subagent', 'oneshot', 'webhook', 'kanban', 'api_server']);
 
 const WEB_DIST = cfg.uiDir;
@@ -679,15 +684,29 @@ const server = http.createServer(async (req, res) => {
       return fs.createReadStream(file).pipe(res);
     }
 
-    if (p === '/api/hermes-file') {
-      // Read-only access to images Hermes cached for chats, nothing else under ~/.hermes.
-      const file = path.resolve(url.searchParams.get('path') || '');
-      const allowed = path.join(HERMES_HOME, 'cache') + path.sep;
-      if (!file.startsWith(allowed) || !/^image\//.test(MEDIA[path.extname(file).toLowerCase()] || '') || !fs.existsSync(file)) return send(res, 404, { error: 'not found' });
-      res.writeHead(200, { 'Content-Type': MEDIA[path.extname(file).toLowerCase()], 'Cache-Control': 'private, max-age=3600' });
-      return fs.createReadStream(file).pipe(res);
+    if (p === '/api/file' || p === '/api/hermes-file') {
+      // Images referenced by local path in transcripts; see src/local-files.mjs for the allowed roots.
+      const img = resolveImage(url.searchParams.get('path'));
+      if (!img) return send(res, 404, { error: 'not found' });
+      res.writeHead(200, { 'Content-Type': img.type, 'Content-Length': img.size, 'Cache-Control': 'private, max-age=3600', 'Content-Security-Policy': "default-src 'none'; sandbox", ...SECURITY_HEADERS });
+      return fs.createReadStream(img.file).pipe(res);
     }
 
+    if (p === '/api/search' && req.method === 'GET') {
+      const q = (url.searchParams.get('q') || '').slice(0, 200);
+      const { title, content } = store.search(q, { includeArchived: url.searchParams.get('archived') === '1', limit: 30 });
+      const card = (id) => {
+        const row = store.getSession(id);
+        return row && !isEmptyShell(row) ? { ...toCard(row), archived: !!row.archived, messageCount: row.message_count || 0 } : null;
+      };
+      const byTitle = title.map((id) => { const c = card(id); return c && { session: c }; }).filter(Boolean);
+      const titled = new Set(title);
+      const byContent = content.map((h) => {
+        const c = card(h.id);
+        return c && { session: c, hit: { msgId: h.msg_id, role: h.role, ts: h.ts, snippet: h.snip, hits: h.hits }, alsoTitle: titled.has(h.id) };
+      }).filter(Boolean);
+      return send(res, 200, { q, title: byTitle, content: byContent });
+    }
     if (p === '/api/sessions' && req.method === 'GET') {
       const days = Math.min(Number(url.searchParams.get('days') || 3), 90);
       const system = url.searchParams.get('system') === '1';

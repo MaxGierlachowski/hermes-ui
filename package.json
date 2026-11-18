@@ -13,7 +13,7 @@
     "start": "node bin/hermes-ui.mjs serve",
     "serve": "node bin/hermes-ui.mjs serve",
     "dev": "npm --prefix web run dev",
-    "check": "node --check server.mjs && node --check src/store.mjs && node --check src/board.mjs && node --check src/hermes-ws.mjs && node --check src/remote.mjs && node --check src/devices.mjs && node --check src/config.mjs && node --check src/iroh.mjs && node --check src/paseo.mjs && node --check src/paseo-mcp-source.mjs && node --check bin/hermes-ui.mjs",
+    "check": "node --check server.mjs && node --check src/store.mjs && node --check src/board.mjs && node --check src/hermes-ws.mjs && node --check src/remote.mjs && node --check src/devices.mjs && node --check src/config.mjs && node --check src/iroh.mjs && node --check src/paseo.mjs && node --check src/paseo-mcp-source.mjs && node --check src/local-files.mjs && node --check bin/hermes-ui.mjs",
     "pair": "node bin/hermes-ui.mjs pair"
   },
   "dependencies": {

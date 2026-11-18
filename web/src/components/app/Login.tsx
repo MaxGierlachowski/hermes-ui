@@ -9,7 +9,7 @@ import { t } from '@/lib/i18n'
 
 function Frame({ subtitle, children }: { subtitle: string; children: React.ReactNode }) {
   return (
-    <div className="grid h-full place-items-center bg-background p-6">
+    <div className="grid h-full place-items-center bg-background p-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-sm space-y-4">
         <div className="flex items-center gap-2">
           <div className="grid size-8 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">H</div>
@@ -84,7 +84,7 @@ export function Login() {
     return (
       <Frame subtitle={t('Nicht verbunden')}>
         <p className="text-sm text-muted-foreground">
-          {t('Diese Oberfläche enthält keine Daten. Sie verbindet sich per iroh mit deinem Hermes-Kanban-Backend. Starte dort {cmd} (oder Fernzugriff → Gerät koppeln) und scanne den QR-Code – oder füge den Link hier ein.', { cmd: '`hermes-ui pair`' })}
+          {t('Diese Oberfläche enthält keine Daten. Sie verbindet sich per iroh mit deinem Hermes-UI-Backend. Starte dort {cmd} (oder Fernzugriff → Gerät koppeln) und scanne den QR-Code – oder füge den Link hier ein.', { cmd: '`hermes-ui pair`' })}
         </p>
         <PairingLinkForm />
       </Frame>

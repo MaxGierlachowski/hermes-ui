@@ -75,6 +75,10 @@ export function loadConfig(argv = []) {
     dataDir,
     hermesHome,
     lang: get('HERMES_UI_LANG', 'lang', 'en'),
+    // Extra directories whose images transcripts may show (path-delimiter separated, e.g. "~/Pictures:~/notes").
+    // Always allowed: Hermes' image cache, the Paseo home and Paseo's attachment temp dirs.
+    imageRoots: (get('HERMES_UI_IMAGE_ROOTS', 'image-roots', '') || '').split(path.delimiter).map((x) => expand(x.trim())).filter(Boolean),
+    paseoHome: expand(get('PASEO_HOME', 'paseo-home', path.join(os.homedir(), '.paseo'))),
     // UI: serve the built UI from this backend ("on") or run headless ("off").
     ui: get('HERMES_UI_SERVE_UI', 'ui', 'on') !== 'off',
     uiDir: expand(get('HERMES_UI_DIR', 'ui-dir', path.join(ROOT, 'web', 'dist'))),

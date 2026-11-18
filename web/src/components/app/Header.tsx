@@ -27,7 +27,7 @@ export function Header({ onNew, onCommand, onRemote }: { onNew: () => void; onCo
     <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-4">
       <div className="flex items-center gap-2">
         <div className="grid size-6 place-items-center rounded-md bg-primary text-[11px] font-bold text-primary-foreground">H</div>
-        <span className="text-sm font-semibold tracking-tight">Hermes</span>
+        <span className="text-sm font-semibold tracking-tight">Hermes UI</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <span className={cn('size-1.5 rounded-full', ok ? 'bg-emerald-500' : gateway ? 'bg-amber-500' : 'bg-red-500')} aria-label={t('Verbindungsstatus')} />

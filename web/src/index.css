@@ -137,3 +137,28 @@
   body { -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
 }
+
+/* Scrollbars: overlay thumbs where OverlayScroll is used, thin and quiet everywhere else. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  scrollbar-gutter: auto !important; /* use-stick-to-bottom sets "stable both-edges" inline */
+  &::-webkit-scrollbar { display: none; }
+}
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
+}
+@layer base {
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent; }
+  /* Edge to edge in the installed PWA: the page background fills the status bar and home-indicator areas. */
+  html { background-color: var(--background); }
+}
+
+/* Markdown: nothing may push the thread wider than the screen (long URLs, Notion links, paths). */
+.prose :where(p, li, td, th, blockquote, a, code) { overflow-wrap: anywhere; }
+.prose :where(table) { width: max-content; min-width: 100%; }
+
+/* Shiki renders light and dark colors as variables (themes + defaultColor: false). */
+.shiki, .shiki span { color: var(--shiki-light); background-color: var(--shiki-light-bg); }
+.dark .shiki, .dark .shiki span { color: var(--shiki-dark); background-color: var(--shiki-dark-bg); }
+.shiki span { background-color: transparent !important; }

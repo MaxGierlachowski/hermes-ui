@@ -32,7 +32,7 @@ export type CodeBlockCodeProps = {
 function CodeBlockCode({
   code,
   language = "tsx",
-  theme = "github-light",
+  theme,
   className,
   ...props
 }: CodeBlockCodeProps) {
@@ -45,14 +45,19 @@ function CodeBlockCode({
         return
       }
 
-      const html = await codeToHtml(code, { lang: language, theme })
-      setHighlightedHtml(html)
+      // Both themes at once; index.css picks the variables for light or dark (`.dark .shiki`).
+      const opts = theme ? { theme } : { themes: { light: "github-light", dark: "github-dark" }, defaultColor: false as const }
+      try {
+        setHighlightedHtml(await codeToHtml(code, { lang: language, ...opts }))
+      } catch {
+        setHighlightedHtml(await codeToHtml(code, { lang: "text", ...opts }))
+      }
     }
     highlight()
   }, [code, language, theme])
 
   const classNames = cn(
-    "w-full overflow-x-auto text-[13px] [&>pre]:px-4 [&>pre]:py-4",
+    "scrollbar-thin w-full overflow-x-auto text-[13px] [&>pre]:px-4 [&>pre]:py-4 [&>pre]:whitespace-pre-wrap [&>pre]:[overflow-wrap:anywhere]",
     className
   )
 

@@ -13,6 +13,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { createPaseoClient } from '@getpaseo/client';
 import { McpSource } from './paseo-mcp-source.mjs';
+import { localImageUrl } from './local-files.mjs';
 
 const quiet = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -228,10 +229,11 @@ export class Paseo extends EventEmitter {
 function imagesOf(x) {
   const list = [...(x?.images || []), ...(x?.attachments || [])];
   return list.map((i) => {
-    if (typeof i === 'string') return i.startsWith('data:') || i.startsWith('http') ? i : null;
+    if (typeof i === 'string') return /^(https?:|data:)/.test(i) ? i : localImageUrl(i);
     if (i?.data && i?.mimeType) return `data:${i.mimeType};base64,${i.data}`;
     if (i?.dataUrl) return i.dataUrl;
-    if (i?.url && /^(https?:|data:)/.test(i.url)) return i.url;
+    if (i?.url) return /^(https?:|data:)/.test(i.url) ? i.url : localImageUrl(i.url);
+    if (i?.path) return localImageUrl(i.path);
     return null;
   }).filter(Boolean).slice(0, 6);
 }

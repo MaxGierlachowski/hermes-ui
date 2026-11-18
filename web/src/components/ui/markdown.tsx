@@ -1,10 +1,11 @@
 import { cn } from "@/lib/utils"
 import { marked } from "marked"
 import { memo, useId, useMemo } from "react"
-import ReactMarkdown, { type Components } from "react-markdown"
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown"
 import remarkBreaks from "remark-breaks"
 import remarkGfm from "remark-gfm"
 import { CodeBlock, CodeBlockCode } from "./code-block"
+import { MediaImage } from "@/components/common/Media"
 
 export type MarkdownProps = {
   children: string
@@ -34,7 +35,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
       return (
         <span
           className={cn(
-            "bg-primary-foreground rounded-sm px-1 font-mono text-sm",
+            "bg-muted text-foreground rounded-sm px-1 py-px font-mono text-[0.9em] [overflow-wrap:anywhere] ring-1 ring-border/60",
             className
           )}
           {...props}
@@ -55,7 +56,21 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   pre: function PreComponent({ children }) {
     return <>{children}</>
   },
+  // Agents reference screenshots by local path; MediaImage routes them through the backend.
+  img: function ImageComponent({ src, alt }) {
+    return typeof src === "string" && src ? <MediaImage url={src} alt={alt || ""} className="max-h-[28rem]" /> : null
+  },
+  a: function LinkComponent({ href, children }) {
+    return <a href={href} target="_blank" rel="noreferrer noopener">{children}</a>
+  },
+  table: function TableComponent({ children }) {
+    return <div className="scrollbar-thin my-3 max-w-full overflow-x-auto"><table className="my-0">{children}</table></div>
+  },
 }
+
+// react-markdown drops file: URLs as unsafe; keep them for images, which MediaImage maps to the backend.
+const urlTransform = (url: string, key: string) =>
+  key === "src" && /^file:/i.test(url) ? url : defaultUrlTransform(url)
 
 const MemoizedMarkdownBlock = memo(
   function MarkdownBlock({
@@ -69,6 +84,7 @@ const MemoizedMarkdownBlock = memo(
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={components}
+        urlTransform={urlTransform}
       >
         {content}
       </ReactMarkdown>
