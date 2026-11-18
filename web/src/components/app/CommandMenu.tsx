@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Archive, Bot, CornerDownLeft, Languages, MessagesSquare, Moon, Plus, Smartphone, Sun, Workflow } from 'lucide-react'
+import { Archive, BellRing, Bot, CornerDownLeft, Inbox, Languages, LayoutGrid, MessagesSquare, Moon, Plus, Smartphone, Sun, Workflow } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/components/ui/command'
 import { Switch } from '@/components/ui/switch'
 import { Loader } from '@/components/ui/loader'
-import { openThread, searchChats, setFilter, useBoard, type SearchHit } from '@/lib/store'
+import { openThread, searchChats, setFilter, setTab, useBoard, type SearchHit } from '@/lib/store'
 import { relTime } from '@/lib/format'
 import { COLUMNS, type Session } from '@/lib/types'
 import { COLUMN_COLOR, SourceIcon, StatusDot } from '@/components/board/status'
@@ -14,7 +14,7 @@ import { t, lang, setLang } from '@/lib/i18n'
 type Action = { id: string; label: string; icon: ReactNode; run: () => void; shortcut?: string; keep?: boolean }
 
 /** Floating search: chats by title and content (Hermes' full-text index), plus the app's actions. */
-export function CommandMenu({ open, onOpenChange, onNew, onRemote }: { open: boolean; onOpenChange: (o: boolean) => void; onNew: () => void; onRemote: () => void }) {
+export function CommandMenu({ open, onOpenChange, onNew, onRemote, onNotifications }: { open: boolean; onOpenChange: (o: boolean) => void; onNew: () => void; onRemote: () => void; onNotifications: () => void }) {
   const sessions = useBoard((s) => s.sessions)
   const system = useBoard((s) => s.system)
   const { resolvedTheme, setTheme } = useTheme()
@@ -41,6 +41,9 @@ export function CommandMenu({ open, onOpenChange, onNew, onRemote }: { open: boo
   const close = (fn: () => void) => { onOpenChange(false); fn() }
   const actions: Action[] = [
     { id: 'new', label: t('Neuer Chat'), icon: <Plus />, run: onNew, shortcut: 'N' },
+    { id: 'board', label: t('Zum Board'), icon: <LayoutGrid />, run: () => setTab('board'), shortcut: 'G B' },
+    { id: 'inbox', label: t('Zur Inbox'), icon: <Inbox />, run: () => setTab('inbox'), shortcut: 'G I' },
+    { id: 'notify', label: t('Benachrichtigungen …'), icon: <BellRing />, run: onNotifications },
     { id: 'sys', label: system ? t('Cron/System ausblenden') : t('Cron/System einblenden'), icon: <Workflow />, run: () => setFilter({ system: !system }) },
     { id: 'theme', label: t('Theme wechseln'), icon: resolvedTheme === 'dark' ? <Sun /> : <Moon />, run: () => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark') },
     { id: 'lang', label: lang === 'de' ? t('Sprache: English') : t('Sprache: Deutsch'), icon: <Languages />, run: () => setLang(lang === 'de' ? 'en' : 'de'), keep: true },

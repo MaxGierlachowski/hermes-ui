@@ -1,7 +1,8 @@
 // Paseo agent state via paseo-mcp (>= 0.4.0) instead of a direct daemon connection.
 // Two transports, same protocol:
 //   stdio  PASEO_MCP_COMMAND, e.g. "paseo-mcp" or "node /path/to/paseo-mcp/dist/index.js". Started with
-//          PASEO_MCP_READONLY=1, so this process cannot start, steer or archive agents.
+//          PASEO_MCP_READONLY=1, so this process cannot start, steer or archive agents. Only an answer to a
+//          permission from the inbox opens a second, short-lived client without that flag.
 //   http   PASEO_MCP_URL + PASEO_MCP_TOKEN: the Paseo plugin's Streamable HTTP endpoint. Use a token with
 //          the `read` scope.
 // It subscribes to the resource paseo://agents; on notifications/resources/updated it reads the resource
@@ -26,7 +27,7 @@ export function fromSummary(s) {
     status: s.status,
     requiresAttention: !!s.needsAttention,
     attentionReason: s.attentionReason ?? null,
-    pendingPermissions: (s.pendingPermissions || []).map((p) => ({ id: p.requestId, kind: p.kind, name: p.name, title: p.title ?? null })),
+    pendingPermissions: (s.pendingPermissions || []).map((p) => ({ id: p.requestId, kind: p.kind, name: p.name, title: p.title ?? null, ...(p.description ? { description: p.description } : {}), ...(p.actions ? { actions: p.actions } : {}) })),
     lastError: s.lastError ?? null,
     labels: { ...(s.labels || {}), ...(s.account && !s.labels?.account ? { account: s.account } : {}) },
     model: s.model ?? null,
@@ -40,23 +41,29 @@ const textOf = (res) => (res?.content || []).filter((c) => c.type === 'text').ma
 const jsonOf = (text) => { const i = text.indexOf('{'); return i >= 0 ? JSON.parse(text.slice(i)) : null; };
 
 export class McpSource extends EventEmitter {
-  constructor({ command, url, token, version = '0' }) {
+  constructor({ command, url, token, writeToken, version = '0', readOnly = true }) {
     super();
     this.command = command;
     this.url = url;
-    this.token = token;
+    this.readOnly = readOnly;
+    // Over HTTP the token's scope decides; answering permissions needs one with write access.
+    this.token = readOnly ? token : writeToken || token;
     this.version = version;
     this.connected = false;
   }
 
   get label() { return this.url ? `paseo-mcp http ${new URL(this.url).host}` : `paseo-mcp stdio (${splitCommand(this.command)[0]})`; }
 
-  async connect() {
+  /** Connects without subscribing (for a single call). */
+  async open() {
     const transport = this.url
       ? new StreamableHTTPClientTransport(new URL(this.url), { requestInit: { headers: this.token ? { Authorization: `Bearer ${this.token}` } : {} } })
       : (() => {
         const [cmd, ...args] = splitCommand(this.command);
-        return new StdioClientTransport({ command: cmd, args, env: { ...process.env, PASEO_MCP_READONLY: '1' }, stderr: 'ignore' });
+        const env = { ...process.env };
+        if (this.readOnly) env.PASEO_MCP_READONLY = '1';
+        else delete env.PASEO_MCP_READONLY;
+        return new StdioClientTransport({ command: cmd, args, env, stderr: 'ignore' });
       })();
     const client = new Client({ name: 'hermes-ui', version: this.version });
     client.setNotificationHandler(ResourceUpdatedNotificationSchema, () => this.scheduleRefresh());
@@ -64,8 +71,12 @@ export class McpSource extends EventEmitter {
     await client.connect(transport);
     this.client = client;
     transport.onclose = () => { this.connected = false; this.emit('closed'); };
+  }
+
+  async connect() {
+    await this.open();
     await this.refresh();
-    await client.subscribeResource({ uri: AGENTS_URI });
+    await this.client.subscribeResource({ uri: AGENTS_URI });
     this.connected = true;
   }
 
@@ -96,6 +107,15 @@ export class McpSource extends EventEmitter {
     });
     if (res.isError) throw new Error(textOf(res).replace(/^Error:\s*/, ''));
     return parseTranscript(textOf(res));
+  }
+
+  async respondPermission(agentId, requestId, decision, message) {
+    const res = await this.client.callTool({
+      name: 'paseo_respond_permission',
+      arguments: { agent_id: agentId, request_id: requestId, decision, ...(message ? { message } : {}) },
+    });
+    if (res.isError) throw new Error(textOf(res).replace(/^Error:\s*/, ''));
+    return jsonOf(textOf(res));
   }
 
   async close() { try { await this.client?.close(); } catch { /* gone */ } }

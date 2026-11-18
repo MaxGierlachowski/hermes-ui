@@ -66,7 +66,8 @@ export async function connectIroh(cfg: RemoteConfig) {
     iroh.install({ origins: [IROH_ORIGIN] })
     let sw = false
     try {
-      const r = await iroh.serviceWorker({ url: new URL('iroh-sw.js', location.href.replace(/[^/]*$/, '')).pathname, hosts: [new URL(IROH_ORIGIN).host] })
+      // sw.js imports iroh-fetch's worker (iroh-sw.js) and adds push notifications: one worker per scope.
+      const r = await iroh.serviceWorker({ url: new URL('sw.js', location.href.replace(/[^/]*$/, '')).pathname, hosts: [new URL(IROH_ORIGIN).host] })
       sw = r.controlled
     } catch { /* no service worker (private mode, in-app browsers): images fall back to blob URLs */ }
     objectUrl = (u: string) => iroh.objectUrl(u)

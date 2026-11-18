@@ -19,6 +19,8 @@ import { Remote } from './src/remote.mjs';
 import { Devices } from './src/devices.mjs';
 import { Paseo } from './src/paseo.mjs';
 import { createImageResolver } from './src/local-files.mjs';
+import { Inbox } from './src/inbox.mjs';
+import { Push } from './src/push.mjs';
 import QRCode from 'qrcode';
 
 const cfg = loadConfig(process.argv.slice(2));
@@ -37,9 +39,11 @@ const WEB_DIST = cfg.uiDir;
 
 const store = new Store(path.join(HERMES_HOME, 'state.db'));
 // Paseo is optional: HERMES_UI_PASEO=off, or simply no daemon running (it then stays disconnected quietly).
-const paseo = new Paseo({ url: cfg.paseo.url, opsLoopFile: cfg.paseo.opsLoopFile, source: cfg.paseo.source, mcp: cfg.paseo.mcp });
+const paseo = new Paseo({ url: cfg.paseo.url, opsLoopFile: cfg.paseo.opsLoopFile, source: cfg.paseo.source, mcp: cfg.paseo.mcp, respond: cfg.paseo.respond });
 const PASEO_ON = cfg.paseo.mode !== 'off';
 const devices = new Devices(cfg.dataDir);
+const inbox = new Inbox(cfg.dataDir, cfg.inbox);
+const push = cfg.push.enabled ? new Push(cfg.dataDir, { subject: cfg.push.subject || (/^https:/.test(cfg.uiUrl) ? cfg.uiUrl : '') }) : null;
 const remote = cfg.remote === 'iroh'
   ? new IrohGateway({ port: PORT, dataDir: cfg.dataDir, iroh: cfg.iroh })
   : new Remote({ mode: cfg.remote, port: PORT, dataDir: cfg.dataDir, authKey: cfg.tailscale.authKey, hostname: cfg.tailscale.hostname });
@@ -183,10 +187,14 @@ function paseoFor(sessionId) {
   const order = { 'needs-attention': 0, running: 1, error: 2, finished: 3, idle: 4, closed: 5, unknown: 6, archived: 7 };
   return [...out.values()].sort((a, b) => (order[a.state] ?? 5) - (order[b.state] ?? 5) || REL_RANK[b.rel] - REL_RANK[a.rel]);
 }
-paseo.on('agent', (id) => {
+const sessionsOfAgent = (id) => {
   const sessions = new Set([...(agentSessions.get(id) || [])]);
   for (const [ref, set] of agentSessions) if (ref !== id && id.startsWith(ref)) set.forEach((s) => sessions.add(s));
-  for (const sid of sessions) pushCard(sid);
+  return sessions;
+};
+paseo.on('agent', (id) => {
+  for (const sid of sessionsOfAgent(id)) pushCard(sid);
+  observeAgent(id);
 });
 paseo.on('status', (ok) => { console.log(`paseo ${ok ? `connected (${paseo.sourceLabel})` : 'disconnected'}`); for (const sid of sessionAgents.keys()) pushCard(sid); });
 paseo.on('log', (m) => console.log(m));
@@ -297,6 +305,7 @@ function pushCard(id, now = false) {
     pushTimers.delete(id);
     const card = cardById(id);
     if (card) {
+      observeCard(card);
       broadcast('session', card);
       if (card.autoColumn === 'doing' && card.system) timeWatch.set(id, card.column);
     } else if (timeWatch.has(id)) {
@@ -337,19 +346,28 @@ gateway.on('event', (ev) => {
       lv.activity = `✓ ${p.name}${p.summary ? `: ${clip(p.summary, 140)}` : ''}`; break;
     case 'message.complete':
       lv.running = false; lv.activity = p.error ? `⚠️ ${clip(p.error, 160)}` : '';
+      lv.error = p.error ? { at: Date.now(), text: clip(p.error, 300) } : null;
+      for (const k of lv.prompts.keys()) settledElsewhere(k, 'expired');
       lv.prompts.clear(); // a finished turn has no open prompts (late *.settled may never come)
+      pushInbox();
       setTimeout(() => { broadcast('reload', { id, final: true }); pushCard(id, true); }, 300);
       return;
     case 'approval.request':
     case 'clarify.request':
-      if (p.prompt_id) lv.prompts.set(p.prompt_id, { kind: ev.type.split('.')[0], ...p, at: Date.now() });
+      if (p.prompt_id) {
+        const pr = { kind: ev.type.split('.')[0], ...p, at: Date.now() };
+        lv.prompts.set(p.prompt_id, pr);
+        recordRequest(id, pr);
+      }
       broadcast('reload', { id, final: false });
       break;
     case 'approval.settled':
     case 'clarify.settled':
-      lv.prompts.delete(p.prompt_id); break;
+      lv.prompts.delete(p.prompt_id);
+      settledElsewhere(p.prompt_id);
+      break;
     case 'approval.cancelled':
-      for (const [k, v] of lv.prompts) if (v.kind === 'approval') lv.prompts.delete(k);
+      for (const [k, v] of lv.prompts) if (v.kind === 'approval') { lv.prompts.delete(k); settledElsewhere(k, 'cancelled'); }
       break;
     case 'session.title':
     case 'session.info':
@@ -366,6 +384,7 @@ gateway.on('snapshot', (id, snap) => {
   if (snap?.execution_generation != null) lv.generation = snap.execution_generation;
   if (typeof snap?.running === 'boolean') lv.running = snap.running;
   setPrompts(id, snap?.prompts);
+  for (const pr of lv.prompts.values()) recordRequest(id, pr);
   pushCard(id);
 });
 
@@ -520,6 +539,165 @@ async function startDraft(draftId) {
   return id;
 }
 
+// ---------- inbox + notifications (across all chats) ----------
+// Open requests ("needs you") are derived live: Hermes approvals/clarify questions of every followed
+// session, and Paseo agents with a pending permission. The history (data/inbox.json) records what
+// happened: requests and how they were answered, finished turns, errors, Paseo agents done/failed.
+const truncate = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s || '');
+const sessionTitle = (sid) => {
+  const row = sid && store.getSession(sid);
+  return row ? (row.title || clip(cleanPrompt(row.first_prompt), 70) || t('newSession')) : null;
+};
+// The chat an agent belongs to: the one that started it, else one that steers it, else any.
+function chatOfAgent(agentId) {
+  let best = null;
+  for (const sid of sessionsOfAgent(agentId)) {
+    for (const [ref, { rel }] of sessionAgents.get(sid) || []) {
+      if (ref !== agentId && !agentId.startsWith(ref)) continue;
+      if (!best || REL_RANK[rel] > REL_RANK[best.rel]) best = { sid, rel };
+    }
+  }
+  return best?.sid || null;
+}
+
+function openItems() {
+  const out = [];
+  for (const [sid, lv] of live) {
+    if (!lv.prompts?.size) continue;
+    const title = sessionTitle(sid);
+    if (!title) continue;
+    for (const pr of lv.prompts.values()) {
+      out.push({ key: `req:${pr.prompt_id}`, source: 'hermes', kind: pr.kind, sessionId: sid, title, at: (pr.at || Date.now()) / 1000, prompt: promptView(pr) });
+    }
+  }
+  if (paseo.connected) {
+    for (const [id, a] of paseo.agents) {
+      if (a.archivedAt || !(a.pendingPermissions || []).length) continue;
+      const v = paseo.view(id);
+      const sid = chatOfAgent(id);
+      for (const perm of v.pendingPermissions) {
+        if (!perm.id) continue;
+        const seen = inbox.get(`perm:${perm.id}`);
+        out.push({
+          key: `perm:${perm.id}`, source: 'paseo', kind: 'permission', sessionId: sid, title: sid ? sessionTitle(sid) : null,
+          at: seen?.at || Date.parse(a.updatedAt || '') / 1000 || Date.now() / 1000,
+          agent: { id, title: v.title, account: v.account, cwd: v.cwd, deepLink: v.deepLink },
+          permission: perm,
+          canRespond: paseo.canRespond,
+        });
+      }
+    }
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+const badgeCount = () => openItems().length + inbox.unread();
+let inboxTimer = null;
+function pushInbox() {
+  clearTimeout(inboxTimer);
+  inboxTimer = setTimeout(() => broadcast('inbox', { open: openItems(), unread: inbox.unread() }), 150);
+}
+inbox.on('item', (item) => { broadcast('inbox-item', item); pushInbox(); });
+
+// Push to the paired devices' browsers. The payload carries no content: chat title + what happened.
+function notify(ev) {
+  if (!push) return;
+  push.notify({ ...ev, badge: badgeCount() }).catch((err) => console.warn('push', err.message));
+}
+
+function recordRequest(sid, pr) {
+  if (!pr?.prompt_id || inbox.has(`req:${pr.prompt_id}`)) return;
+  const title = sessionTitle(sid) || t('newSession');
+  const v = promptView(pr);
+  const item = inbox.add({
+    id: `req:${pr.prompt_id}`, kind: pr.kind, source: 'hermes', sessionId: sid, title,
+    text: truncate(pr.kind === 'approval' ? [v.description, v.command].filter(Boolean).join(' · ') : v.question, 400),
+  });
+  pushInbox();
+  if (!item) return;
+  notify({
+    category: 'approval', source: 'hermes', title, body: pr.kind === 'approval' ? t('nApproval') : t('nClarify'),
+    tag: `req:${pr.prompt_id}`, url: `#/inbox/${encodeURIComponent(sid)}`, ttl: Math.max(60, Number(pr.timeout_s) || 300),
+    ...(pr.kind === 'approval' && v.choices.includes('deny') ? {
+      actions: [{ action: 'allow', title: t('nAllow') }, { action: 'deny', title: t('nDeny') }],
+      confirm: { promptId: pr.prompt_id, allow: v.choices.find((c) => c !== 'deny') || 'once' },
+    } : {}),
+  });
+}
+// Answered in Slack/the desktop app, cancelled, or timed out. Our own answers are recorded first by
+// /respond; the short delay lets that win when the settled event overtakes the HTTP response.
+function settledElsewhere(promptId, how = 'elsewhere') {
+  if (!promptId) return;
+  setTimeout(() => { inbox.resolve(`req:${promptId}`, { by: how }); pushInbox(); }, 1500);
+}
+
+// T5: a Hermes chat counts as done only when Hermes' turn is over and none of the Paseo agents it
+// started or steers is still running or waiting for a permission (same rule as the board's columns).
+const busyState = new Map(); // sessionId -> boolean
+function observeCard(card) {
+  if (card.system || card.draft) return;
+  const owned = (card.paseo || []).filter((a) => a.rel !== 'watches' && !a.archived);
+  const busy = card.running || card.pending.length > 0 || owned.some((a) => a.state === 'running' || a.state === 'needs-attention');
+  const was = busyState.get(card.id);
+  busyState.set(card.id, busy);
+  if (!was || busy) return;
+  const row = store.getSession(card.id);
+  const lv = live.get(card.id);
+  const failed = lv?.error && Date.now() - lv.error.at < 120000;
+  const item = inbox.add({
+    id: `${failed ? 'error' : 'done'}:${card.id}:${row?.last_msg_id ?? Date.now()}`,
+    kind: failed ? 'error' : 'done', source: 'hermes', sessionId: card.id, title: card.title,
+    text: truncate(failed ? lv.error.text : card.activity.replace(/^💬\s*/, ''), 300),
+  });
+  if (item) notify({ category: failed ? 'error' : 'done', source: 'hermes', title: card.title, body: failed ? t('nError') : t('nDone'), tag: `chat:${card.id}`, url: `#/board/${encodeURIComponent(card.id)}`, ttl: 86400 });
+}
+
+// Paseo agents: permission requested/resolved, turn finished, failed or hit a usage limit.
+const agentPrev = new Map(); // agentId -> { state, perms: Set<requestId> }
+const LIMIT_RE = /limit|quota|rate.?limit|usage|credit|overloaded|429/i;
+function observeAgent(id) {
+  const v = paseo.view(id);
+  if (!v.known) return;
+  const prev = agentPrev.get(id);
+  const perms = new Set((v.pendingPermissions || []).map((p) => p.id).filter(Boolean));
+  agentPrev.set(id, { state: v.state, perms });
+  const sid = chatOfAgent(id);
+  const title = v.title || id.slice(0, 8);
+  const base = { source: 'paseo', agentId: id, agentTitle: title, sessionId: sid, title: sid ? sessionTitle(sid) : title };
+  const url = sid ? `#/inbox/${encodeURIComponent(sid)}` : '#/inbox';
+  let changed = false;
+  if (perms.size && v.pendingPermissions.some((p) => p.id && !p.description && !p.command)) {
+    paseo.permissionDetails(id).then((ok) => {
+      if (!ok) return;
+      for (const p of paseo.view(id).pendingPermissions || []) {
+        const item = p.id && inbox.get(`perm:${p.id}`);
+        const text = truncate([p.title || p.name, p.description, p.command].filter(Boolean).join(' · '), 400);
+        if (item && item.text !== text) inbox.update(item.id, { text });
+      }
+      pushInbox();
+    });
+  }
+  for (const p of v.pendingPermissions || []) {
+    if (!p.id || prev?.perms.has(p.id)) continue;
+    changed = true;
+    const item = inbox.add({ ...base, id: `perm:${p.id}`, kind: 'permission', text: truncate([p.title || p.name, p.description, p.command].filter(Boolean).join(' · '), 400) });
+    if (item) notify({ category: 'approval', source: 'paseo', title, body: t('nPaseoPermission'), tag: `perm:${p.id}`, url, ttl: 3600 });
+  }
+  for (const rid of prev?.perms || []) {
+    if (perms.has(rid)) continue;
+    changed = true;
+    setTimeout(() => { inbox.resolve(`perm:${rid}`, { by: 'elsewhere' }); pushInbox(); }, 1500);
+  }
+  if (prev && prev.state === 'running' && v.state !== 'running' && !v.archived) {
+    const limit = v.state === 'error' && LIMIT_RE.test(v.lastError || '');
+    const kind = v.state === 'error' ? (limit ? 'paseo-limit' : 'paseo-error') : (v.state === 'finished' || v.state === 'idle') ? 'paseo-done' : null;
+    if (kind) {
+      const item = inbox.add({ ...base, id: `${kind}:${id}:${v.updatedAt || Date.now()}`, kind, text: truncate(v.lastError || v.goal || '', 300) });
+      if (item) notify({ category: kind === 'paseo-done' ? 'done' : 'error', source: 'paseo', title, body: t({ 'paseo-done': 'nPaseoDone', 'paseo-error': 'nPaseoError', 'paseo-limit': 'nPaseoLimit' }[kind]), tag: `agent:${id}`, url, ttl: 86400 });
+    }
+  }
+  if (changed) pushInbox();
+}
+
 // ---------- http ----------
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
@@ -628,7 +806,7 @@ const server = http.createServer(async (req, res) => {
     if (!auth) return send(res, 401, { error: 'unauthorized' });
 
     if (p === '/api/logout' && req.method === 'POST') {
-      if (auth.device) devices.revoke(auth.device.id);
+      if (auth.device) { devices.revoke(auth.device.id); push?.removeDevice(auth.device.id); }
       return send(res, 200, { ok: true }, { 'Set-Cookie': deviceCookie(req, '', 0) });
     }
     if (p === '/api/remote' && req.method === 'GET') {
@@ -660,9 +838,59 @@ const server = http.createServer(async (req, res) => {
     }
     if ((m0 = p.match(/^\/api\/devices\/([^/]+)$/)) && req.method === 'DELETE') {
       devices.revoke(decodeURIComponent(m0[1]));
+      push?.removeDevice(decodeURIComponent(m0[1]));
       syncIrohAccess();
       broadcast('devices', devices.list());
       return send(res, 200, { ok: true, devices: devices.list() });
+    }
+
+    // ---- inbox ----
+    if (p === '/api/inbox' && req.method === 'GET') {
+      const before = Number(url.searchParams.get('before')) || Infinity;
+      return send(res, 200, { open: openItems(), items: inbox.list({ before, limit: 300 }), unread: inbox.unread(), paseo: { connected: paseo.connected, canRespond: paseo.canRespond } });
+    }
+    if (p === '/api/inbox/read' && req.method === 'POST') {
+      const { ids } = await readJson(req);
+      const changed = inbox.markRead(ids === 'all' ? 'all' : Array.isArray(ids) ? ids.map(String) : []);
+      broadcast('inbox-read', { ids: ids === 'all' ? 'all' : changed });
+      pushInbox();
+      return send(res, 200, { ok: true, unread: inbox.unread() });
+    }
+    if ((m0 = p.match(/^\/api\/paseo\/agents\/([0-9a-f-]{36})\/permissions\/([^/]+)$/)) && req.method === 'POST') {
+      const [, agentId, rid] = m0.map(decodeURIComponent);
+      const { decision, message } = await readJson(req);
+      if (!['allow', 'deny'].includes(decision)) return send(res, 400, { error: 'decision must be allow or deny' });
+      const a = paseo.agents.get(agentId);
+      if (!a || !(a.pendingPermissions || []).some((x) => x.id === rid)) return send(res, 409, { error: t('promptGone') });
+      if (!inbox.has(`perm:${rid}`)) observeAgent(agentId);
+      const who = auth.device?.name || auth.via;
+      console.log(`paseo permission ${rid} of agent ${agentId}: ${decision} by ${who}`);
+      const result = await paseo.respondPermission(agentId, rid, decision, decision === 'deny' ? String(message || '').slice(0, 500) || undefined : undefined);
+      inbox.resolve(`perm:${rid}`, { by: 'ui', decision, device: who });
+      pushInbox();
+      return send(res, 200, { ok: true, result });
+    }
+
+    // ---- web push ----
+    if (p.startsWith('/api/push')) {
+      if (!push) return send(res, 404, { error: 'push disabled (HERMES_UI_PUSH=off)' });
+      const deviceKey = auth.device?.id || auth.via;
+      const deviceName = auth.device?.name || 'Browser';
+      if (p === '/api/push' && req.method === 'GET') return send(res, 200, { publicKey: push.publicKey, subscriptions: push.forDevice(deviceKey) });
+      const body = await readJson(req);
+      if (p === '/api/push/subscribe' && req.method === 'POST') return send(res, 200, push.subscribe(deviceKey, deviceName, body.subscription, body.settings));
+      if (p === '/api/push/settings' && req.method === 'POST') {
+        const settings = push.updateSettings(deviceKey, body.endpoint, body.settings || {});
+        return settings ? send(res, 200, { settings }) : send(res, 404, { error: 'subscription not found' });
+      }
+      if (p === '/api/push/unsubscribe' && req.method === 'POST') { push.unsubscribe(deviceKey, body.endpoint); return send(res, 200, { ok: true }); }
+      if (p === '/api/push/test' && req.method === 'POST') {
+        if (!push.forDevice(deviceKey).some((x) => x.endpoint === body.endpoint)) return send(res, 404, { error: 'subscription not found' });
+        const sent = await push.notify({ category: 'done', source: 'hermes', title: 'Hermes UI', body: t('nTestBody'), tag: 'test', url: '#/inbox', badge: badgeCount(), ttl: 120 }, { only: body.endpoint });
+        return send(res, sent ? 200 : 502, sent ? { ok: true } : { error: 'push service refused the message' });
+      }
+      if (p === '/api/push/presence' && req.method === 'POST') { push.setPresence(deviceKey, body.visible); return send(res, 200, { ok: true }); }
+      return send(res, 404, { error: 'not found' });
     }
 
     if (p === '/api/events') {
@@ -670,6 +898,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write(`event: gateway\ndata: ${JSON.stringify({ connected: gateway.connected })}\n\n`);
       res.write(`event: remote\ndata: ${JSON.stringify(remoteView())}\n\n`);
+      res.write(`event: inbox\ndata: ${JSON.stringify({ open: openItems(), unread: inbox.unread() })}\n\n`);
       clients.add(res);
       req.on('close', () => clients.delete(res));
       return;
@@ -826,7 +1055,11 @@ const server = http.createServer(async (req, res) => {
       lv.running = true;
       lv.activity = pr.kind === 'approval' ? (choice === 'deny' ? t('denied') : t('approved')) : t('answered');
       lv.at = Date.now();
+      recordRequest(id, pr); // in case it was never recorded (e.g. answered right after a restart)
+      inbox.resolve(`req:${promptId}`, { by: 'ui', device: auth.device?.name || auth.via, ...(pr.kind === 'approval' ? { choice } : { answer: clip(Array.isArray(answers) ? answers.join(', ') : answer ?? '', 200) }) });
+      console.log(`hermes ${pr.kind} ${promptId} in ${id}: ${pr.kind === 'approval' ? choice : 'answered'} by ${auth.device?.name || auth.via}`);
       pushCard(id, true);
+      pushInbox();
       return send(res, 200, { ok: true, result, session: cardById(id) });
     }
 

@@ -92,6 +92,15 @@ export function loadConfig(argv = []) {
       relayToken: get('IROH_RELAY_TOKEN', 'iroh-relay-token', ''),
       adminPort: Number(get('IROH_ADMIN_PORT', 'iroh-admin-port', 0)) || null,
     },
+    // Web Push: VAPID subject (mailto: or https: URL; defaults to the UI URL). Push itself needs no config.
+    push: {
+      enabled: get('HERMES_UI_PUSH', 'push', 'on') !== 'off',
+      subject: get('HERMES_UI_PUSH_SUBJECT', 'push-subject', ''),
+    },
+    inbox: {
+      maxDays: Number(get('HERMES_UI_INBOX_DAYS', 'inbox-days', 30)),
+      maxItems: Number(get('HERMES_UI_INBOX_MAX', 'inbox-max', 1000)),
+    },
     tailscale: { authKey: get('TS_AUTHKEY', 'ts-authkey', ''), hostname: get('TS_HOSTNAME', 'ts-hostname', 'hermes-ui') },
     paseo: {
       mode: get('HERMES_UI_PASEO', 'paseo', 'auto'), // auto | off
@@ -100,7 +109,11 @@ export function loadConfig(argv = []) {
         command: get('PASEO_MCP_COMMAND', 'paseo-mcp-command', ''),
         url: get('PASEO_MCP_URL', 'paseo-mcp-url', ''),
         token: get('PASEO_MCP_TOKEN', 'paseo-mcp-token', ''),
+        // HTTP only: a token with write scope for answering permissions from the inbox (stdio needs none).
+        writeToken: get('PASEO_MCP_WRITE_TOKEN', 'paseo-mcp-write-token', ''),
       },
+      // Answer Paseo permission requests from the inbox via paseo-mcp's paseo_respond_permission.
+      respond: get('HERMES_UI_PASEO_RESPOND', 'paseo-respond', 'on') !== 'off',
       url: paseoUrl || 'ws://127.0.0.1:6767/ws',
       opsLoopFile: expand(get('PASEO_OPS_FILE', 'paseo-ops-file', path.join(hermesHome, 'ops-loop', 'paseo.json'))),
     },
