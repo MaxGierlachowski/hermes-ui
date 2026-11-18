@@ -146,7 +146,7 @@ function ResultItem({ session: s, hit, query, onSelect }: { session: Session & {
         </div>
         {hit?.snippet && (
           <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-            <span className="mr-1 font-medium text-foreground/70">{hit.role === 'user' ? t('Du') : 'Hermes'}:</span>
+            <span className="mr-1 font-medium text-foreground/70">{hit.role === 'user' ? t('Du') : hit.role === 'event' ? t('Event') : 'Hermes'}:</span>
             <Snippet text={hit.snippet} />
           </div>
         )}

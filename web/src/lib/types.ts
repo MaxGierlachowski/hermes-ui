@@ -70,15 +70,25 @@ export type Session = {
 
 export type Attachment = { kind: 'image'; url: string } | { kind: 'audio'; url: string } | { kind: 'file'; name: string }
 
+// Sent while Hermes works, not in the transcript yet: sending → queued (Hermes' FIFO, next turn) → started →
+// gone once it is in the transcript; lost / failed → send again. id null = queued from another client.
+export type OutboxState = { id: string | null; status: 'sending' | 'waiting' | 'queued' | 'started' | 'lost' | 'failed'; mode?: string; error?: string }
+
 export type ThreadMessage = {
   id?: number
-  role: 'user' | 'assistant' | 'tool' | 'system'
+  // event: delivered to the session but not typed by the user (webhook, cron, background notices)
+  role: 'user' | 'assistant' | 'tool' | 'system' | 'event'
   text: string
   ts?: number
   toolName?: string
   summary?: string
   live?: boolean
   attachments?: Attachment[]
+  event?: { source: string; route?: string; title: string }
+  meta?: { kind: 'reply' | 'origin'; text: string }[]
+  steer?: boolean
+  threadContext?: string
+  outbox?: OutboxState
 }
 
 export type RemoteState = {

@@ -280,12 +280,30 @@ export async function createChat(msg: OutgoingMessage) {
 }
 
 export async function sendMessage(id: string, msg: OutgoingMessage) {
-  const res = await api<{ session: Session; message?: ThreadMessage }>(`/api/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', json: msg })
+  let res: { session: Session; messages?: ThreadMessage[] }
+  try {
+    res = await api(`/api/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', json: msg })
+  } catch (err) {
+    // The backend keeps the message as "failed" with "send again" in the thread; nothing is lost.
+    if (err instanceof Unauthorized) throw err
+    toast.error(t('Nachricht nicht zugestellt'), { description: err instanceof Error ? err.message : String(err) })
+    refreshThread(id)
+    return
+  }
   if (res.session && res.session.id !== id) { remove(id); upsert(res.session, true); openThread(res.session.id); return }
   if (res.session) upsert(res.session)
-  const message = res.message
-  if (message && state.openId === id) set((st) => ({ messages: [...st.messages, message] }))
+  if (res.messages && state.openId === id) set({ messages: res.messages })
 }
+
+async function outboxAction(sessionId: string, outboxId: string, retry: boolean) {
+  try {
+    const res = await api<{ session: Session; messages: ThreadMessage[] }>(`/api/outbox/${outboxId}${retry ? '/retry' : ''}`, { method: retry ? 'POST' : 'DELETE' })
+    if (res.session) upsert(res.session)
+    if (state.openId === sessionId) set({ messages: res.messages })
+  } catch (err) { handle(err); refreshThread(sessionId) }
+}
+export const retryOutbox = (sessionId: string, outboxId: string) => outboxAction(sessionId, outboxId, true)
+export const dismissOutbox = (sessionId: string, outboxId: string) => outboxAction(sessionId, outboxId, false)
 
 export async function respond(id: string, body: { promptId: string; choice?: string; answer?: string; answers?: string[] }) {
   try {

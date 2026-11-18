@@ -22,6 +22,8 @@ import { createImageResolver, real } from './src/local-files.mjs';
 import { extractMediaTags, mediaKind } from './src/media-tags.mjs';
 import { Inbox } from './src/inbox.mjs';
 import { Push } from './src/push.mjs';
+import { parseUserMessage, previewOf } from './src/user-markers.mjs';
+import { Outbox, queuedRow } from './src/outbox.mjs';
 import QRCode from 'qrcode';
 
 const cfg = loadConfig(process.argv.slice(2));
@@ -65,6 +67,7 @@ const syncIrohAccess = () => {
 };
 setInterval(syncIrohAccess, 30000);
 const board = new Board(cfg.dataDir);
+const outbox = new Outbox(board);
 const gateway = new HermesGateway({ hermesHome: HERMES_HOME });
 
 // ---------- live state from gateway events ----------
@@ -101,11 +104,19 @@ const clip = (s, n) => {
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
 
+// First prompt as the card shows it: the user's own words, or the title of a delivered event.
 function cleanPrompt(text) {
-  const t = String(text ?? '');
-  const skill = t.match(/^\[IMPORTANT: The user has invoked the "([^"]+)" skill/);
-  if (skill) return `⚡ Skill „${skill[1]}“`;
-  return t.replace(/\n*\[Image attached at: [^\]\n]+\]/g, ' 🖼').replace(/\n*\[screenshot\]/g, '').replace(/^"|"$/g, '').trim();
+  const p = previewOf(text);
+  if (p.event) return p.text;
+  const skill = p.text.match(/^⚡ Skill „[^“]+“/);
+  return (skill ? skill[0] : p.text).replace(/^"|"$/g, '').trim();
+}
+
+// Latest user row is a delivered event (webhook, cron, background notice) newer than the last reply.
+function eventActivity(row) {
+  if (!row.last_user || (row.last_user_id ?? 0) <= (row.last_assistant_id ?? 0)) return '';
+  const p = previewOf(row.last_user, { kind: row.last_user_kind });
+  return p.event ? `🔔 ${p.route ? `${p.route}: ` : ''}${p.text}` : '';
 }
 
 function columnFor(row, lv, src) {
@@ -242,6 +253,7 @@ function toCard(row) {
     activity = p.kind === 'approval' ? t('approvalNeeded', { what: p.description || p.command }) : t('question', { what: p.question });
   } else if (paseoNote && autoColumn === 'waiting') activity = paseoNote;
   else if (autoColumn === 'doing') activity = lv?.activity || row.last_activity_description || (row.message_count ? t('working') : t('starting'));
+  else if (eventActivity(row)) activity = eventActivity(row);
   else if (row.last_assistant) activity = `💬 ${clip(extractMediaTags(row.last_assistant).text, 180)}`;
   else if (row.last_activity_description) activity = row.last_activity_description;
   const prompt = cleanPrompt(row.first_prompt);
@@ -421,6 +433,7 @@ function poll() {
     for (const id of new Set(changed)) {
       const row = store.getSession(id);
       if (row && (row.admitted || row.leased) && !SYSTEM_SOURCES.has(row.source)) follow(id);
+      reconcileOutbox(id);
       pushCard(id);
       broadcast('reload', { id, final: false, sinceMsg: prevMsg });
     }
@@ -440,51 +453,81 @@ setInterval(() => {
 function threadMessages(id) {
   const rows = store.messages(id);
   const media = [...(board.data.media[id] || [])];
+  const queued = new Map(outbox.forSession(id).filter((e) => e.rowId).map((e) => [e.rowId, e]));
   const out = [];
   for (const r of rows) {
+    if (r.display_kind === 'hidden') continue;
     if (r.role === 'tool') {
       out.push({ id: r.id, role: 'tool', toolName: r.tool_name || 'Tool', text: clip(r.content, 4000), ts: r.timestamp });
       continue;
     }
     if (r.role === 'assistant' && !String(r.content || '').trim()) continue;
-    const msg = { id: r.id, role: r.role, text: r.role === 'user' ? cleanUserText(r.content) : r.content, ts: r.timestamp, attachments: [] };
     if (r.role === 'user') {
-      // Images Hermes stored for this turn (desktop, Slack, this board) are referenced by path in the text.
-      const marked = [];
-      msg.text = msg.text.replace(/\n*\[Image attached at: ([^\]\n]+)\]/g, (_, file) => {
-        marked.push({ kind: 'image', url: `/api/hermes-file?path=${encodeURIComponent(file)}` });
-        return '';
-      }).replace(/\n*\[screenshot\]\s*$/, '').trim();
-      msg.attachments.push(...marked);
+      const p = parseUserMessage(r.content, { kind: r.display_kind, meta: r.display_metadata });
+      if (p.type === 'event') {
+        out.push({ id: r.id, role: 'event', text: p.text, ts: r.timestamp, event: p.event });
+        continue;
+      }
+      const msg = { id: r.id, role: 'user', text: p.text, ts: r.timestamp, attachments: [], meta: p.meta };
+      if (p.steer) msg.steer = true;
+      if (p.threadContext) msg.threadContext = clip(p.threadContext, 6000);
+      // Images, audio and documents Hermes stored for this turn are referenced by path in the text.
+      for (const f of p.files) msg.attachments.push(fileAttachment(f));
+      const hasImage = p.files.some((f) => f.kind === 'image');
       for (let i = media.length - 1; i >= 0; i--) {
         if (r.id > media[i].afterMsgId) {
-          if (!(marked.length && media[i].kind === 'image')) msg.attachments.push(media[i]);
+          if (!(hasImage && media[i].kind === 'image')) msg.attachments.push(media[i]);
           media.splice(i, 1);
         }
       }
-    } else if (r.role === 'assistant') {
-      // Files Hermes sends along with a reply (Slack shows them as attachments); only these exact files
-      // become readable through /api/hermes-file, nothing else in their directories.
-      const { text, paths } = extractMediaTags(msg.text);
-      msg.text = text;
-      for (const file of paths) {
-        const kind = mediaKind(file);
-        if (kind === 'file') { msg.attachments.push({ kind, name: path.basename(file) }); continue; }
-        const resolved = real(file);
-        if (resolved) mediaFiles.add(resolved);
-        msg.attachments.push({ kind, url: `/api/hermes-file?path=${encodeURIComponent(file)}` });
+      // Still in Hermes' busy queue (accepted, runs after the current turn).
+      if (queuedRow(r)) {
+        const e = queued.get(r.id);
+        msg.outbox = { id: e?.id || null, status: e?.status === 'lost' ? 'lost' : 'queued', mode: 'queued' };
       }
+      out.push(msg);
+      continue;
     }
+    const msg = { id: r.id, role: r.role, text: r.content, ts: r.timestamp, attachments: [] };
+    // Files Hermes sends along with a reply (Slack shows them as attachments); only these exact files
+    // become readable through /api/hermes-file, nothing else in their directories.
+    const { text, paths } = extractMediaTags(msg.text);
+    msg.text = text;
+    for (const file of paths) msg.attachments.push(fileAttachment({ kind: mediaKind(file), path: file }));
     out.push(msg);
+  }
+  // Sent from the board, not in the transcript yet (see src/outbox.mjs).
+  const entries = outbox.forSession(id);
+  for (const e of entries) {
+    if (e.rowId && rows.some((r) => r.id === e.rowId)) continue;
+    out.push({ role: 'user', text: e.text, ts: e.ts, attachments: e.attachments || [], outbox: { id: e.id, status: e.status, mode: e.mode, error: e.error } });
+  }
+  // Waiting in Hermes' FIFO from another client (Slack, desktop app): shown, not editable here.
+  const mine = new Set(entries.map((e) => e.admissionId).filter(Boolean));
+  for (const a of store.admissions(id)) {
+    if (a.status !== 'queued' || mine.has(a.admission_id) || !a.text) continue;
+    const p = parseUserMessage(a.text);
+    if (p.type === 'event') continue;
+    out.push({ role: 'user', text: p.text, meta: p.meta, attachments: [], outbox: { id: null, status: 'queued' } });
   }
   return out;
 }
-function cleanUserText(text) {
-  const t = String(text ?? '');
-  const skill = t.match(/^\[IMPORTANT: The user has invoked the "([^"]+)" skill/);
-  if (!skill) return t;
-  const userPart = t.split(/\n---\n/).pop();
-  return `⚡ Skill „${skill[1]}“${userPart && userPart.length < 4000 ? `\n\n${userPart}` : ''}`;
+
+// A file referenced by path in a transcript: images through the image resolver, audio only as this
+// exact file (like MEDIA attachments), anything else just by name.
+function fileAttachment(f) {
+  if (f.kind === 'file') return { kind: 'file', name: f.name || path.basename(f.path) };
+  if (f.kind === 'audio') {
+    const resolved = real(f.path);
+    if (!resolved || mediaKind(f.path) !== 'audio') return { kind: 'file', name: f.name || path.basename(f.path) };
+    mediaFiles.add(resolved);
+  } else if (f.kind !== 'image') {
+    return { kind: 'file', name: path.basename(f.path) };
+  } else {
+    const resolved = real(f.path);
+    if (resolved) mediaFiles.add(resolved);
+  }
+  return { kind: f.kind, url: `/api/hermes-file?path=${encodeURIComponent(f.path)}` };
 }
 
 // ---------- sending ----------
@@ -515,16 +558,55 @@ async function sendPrompt(id, { text = '', images = [], audio = null }) {
   }
   board.save();
   const lv = getLive(id);
-  lv.running = true;
-  lv.activity = t('started');
+  // Mid-turn the message waits in Hermes' queue: keep showing what the running turn does.
+  if (!sessionRunning(id, row)) {
+    lv.running = true;
+    lv.activity = t('started');
+  }
   lv.at = Date.now();
   // A new turn always releases a manual column (incl. Done).
   delete board.data.overrides[id];
-  const admission = await gateway.submit(id, { text: body || t('seeAttachment'), attachments, voice: !!audio });
+  const sent = body || t('seeAttachment');
+  // Kept until Hermes writes the message to the transcript (mid-turn messages land there late, or never).
+  const afterSeq = store.admissions(id, 1).at(-1)?.seq || 0;
+  const entry = outbox.add(id, { text: sent, afterMsgId, afterSeq, attachments: media.filter((x) => x.afterMsgId === afterMsgId) });
+  let admission;
+  try {
+    admission = await gateway.submit(id, { text: sent, attachments, voice: !!audio });
+  } catch (err) {
+    outbox.update(entry.id, { status: 'failed', error: err.message });
+    broadcast('reload', { id, final: false });
+    throw err;
+  }
+  // queued (+ admission_id) = after the running turn, in Hermes' FIFO; streaming = started a turn now;
+  // redirected / steered = into the running turn (sessions the desktop backend runs itself).
+  outbox.update(entry.id, { status: 'waiting', mode: admission?.status || null, ...(admission?.admission_id ? { admissionId: admission.admission_id } : {}) });
   if (admission?.execution_generation != null) lv.generation = admission.execution_generation;
+  reconcileOutbox(id);
   pushCard(id, true);
-  return { body, admission };
+  broadcast('reload', { id, final: false });
+  return { body, admission, entry: outbox.get(entry.id) || { ...entry, status: 'delivered' } };
 }
+
+function sessionRunning(id, row = store.getSession(id)) {
+  const lv = live.get(id);
+  return lv?.running === true || (!!(row?.admitted || row?.leased) && lv?.running !== false);
+}
+
+function reconcileOutbox(id) {
+  const open = outbox.forSession(id);
+  if (!open.length) return false;
+  const since = Math.min(...open.map((e) => e.afterMsgId ?? 0));
+  const changed = outbox.reconcile(id, store.userRowsSince(id, since), store.admissions(id), sessionRunning(id));
+  if (changed) broadcast('reload', { id, final: false });
+  return changed;
+}
+// Sessions with open entries are re-checked even when nothing changes in state.db ("lost" after a Stop).
+setInterval(() => {
+  for (const id of new Set(outbox.list.map((e) => e.sessionId))) {
+    try { reconcileOutbox(id); } catch (err) { console.error('outbox', err.message); }
+  }
+}, 5000);
 
 async function startSession({ title, text, images = [], audio = null, test = false }) {
   const stamp = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -948,7 +1030,8 @@ const server = http.createServer(async (req, res) => {
       const titled = new Set(title);
       const byContent = content.map((h) => {
         const c = card(h.id);
-        return c && { session: c, hit: { msgId: h.msg_id, role: h.role, ts: h.ts, snippet: h.snip, hits: h.hits }, alsoTitle: titled.has(h.id) };
+        const role = h.role === 'user' && previewOf(h.head, { kind: h.kind }).event ? 'event' : h.role;
+        return c && { session: c, hit: { msgId: h.msg_id, role, ts: h.ts, snippet: h.snip, hits: h.hits }, alsoTitle: titled.has(h.id) };
       }).filter(Boolean);
       return send(res, 200, { q, title: byTitle, content: byContent });
     }
@@ -993,6 +1076,7 @@ const server = http.createServer(async (req, res) => {
       // Follow the session live on our gateway socket (history comes from state.db).
       openFollow = id;
       follow(id);
+      reconcileOutbox(id); // a message that just landed in the transcript must not show twice
       return send(res, 200, { session: card, messages: threadMessages(id) });
     }
 
@@ -1005,9 +1089,32 @@ const server = http.createServer(async (req, res) => {
         const newId = await startDraft(id);
         return send(res, 200, { session: cardById(newId) });
       }
-      const { body: sent } = await sendPrompt(id, body);
-      const attachments = (board.data.media[id] || []).filter((x) => x.afterMsgId === (store.getSession(id)?.last_msg_id ?? -1));
-      return send(res, 200, { session: cardById(id), message: { role: 'user', text: sent, ts: Date.now() / 1000, attachments } });
+      try {
+        await sendPrompt(id, body);
+      } catch (err) {
+        // The message stays in the thread as failed, with "send again".
+        return send(res, 502, { error: err.message, session: cardById(id), messages: threadMessages(id) });
+      }
+      return send(res, 200, { session: cardById(id), messages: threadMessages(id) });
+    }
+
+    if ((m = p.match(/^\/api\/outbox\/([0-9a-f-]{36})(\/retry)?$/)) && (req.method === 'DELETE' || (m[2] && req.method === 'POST'))) {
+      const e = outbox.get(m[1]);
+      if (!e) return send(res, 404, { error: 'not found' });
+      outbox.remove(e.id);
+      if (m[2]) {
+        // Images go again from the board's own copy (data/media); the text is what was sent before.
+        const images = (e.attachments || []).filter((x) => x.kind === 'image').map((x) => {
+          const file = board.mediaPath(...x.url.split('/').slice(-2).map(decodeURIComponent));
+          return file && fs.existsSync(file) ? { name: path.basename(file), type: MEDIA[path.extname(file)] || 'image/png', data: fs.readFileSync(file).toString('base64') } : null;
+        }).filter(Boolean);
+        const text = images.length && e.text === t('seeAttachment') ? '' : e.text;
+        try { await sendPrompt(e.sessionId, { text, images }); } catch (err) {
+          return send(res, 502, { error: err.message, session: cardById(e.sessionId), messages: threadMessages(e.sessionId) });
+        }
+      }
+      broadcast('reload', { id: e.sessionId, final: false });
+      return send(res, 200, { session: cardById(e.sessionId), messages: threadMessages(e.sessionId) });
     }
 
     if ((m = p.match(/^\/api\/sessions\/([^/]+)\/column$/)) && req.method === 'POST') {

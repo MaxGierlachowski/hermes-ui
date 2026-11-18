@@ -177,6 +177,8 @@ export class HermesGateway extends EventEmitter {
     return this.call('clarify.respond', { session_id: id, execution_generation: generation, prompt_id: promptId, answer });
   }
 
+  // While a gateway turn runs in this session, Hermes forwards the prompt to the owner's FIFO
+  // (session_admissions, answer { status: 'queued', admission_id }): it runs as the next turn.
   async submit(id, { text, attachments = [], voice = false }) {
     if (!this.subscribed.has(id)) await this.resume(id);
     return this.call('prompt.submit', {

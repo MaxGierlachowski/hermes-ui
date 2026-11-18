@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronRight, CircleStop, FileText, FlaskConical, Wrench, X } from 'lucide-react'
+import { AlertTriangle, Bell, ChevronRight, CircleStop, Clock, CornerDownRight, FileText, FlaskConical, RotateCcw, Webhook, Wrench, X, Zap } from 'lucide-react'
 import { ChatContainerContent, ChatContainerRoot, ChatContainerScrollAnchor } from '@/components/ui/chat-container'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -9,9 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { clock } from '@/lib/format'
-import { COLUMNS, type Attachment, type Column, type ThreadMessage } from '@/lib/types'
+import { COLUMNS, type Attachment, type Column, type OutboxState, type ThreadMessage } from '@/lib/types'
 import { stripMediaTags } from '@/lib/media-tags'
-import { clearHighlight, getState, interrupt, openThread, sendMessage, setColumn, useBoard } from '@/lib/store'
+import { clearHighlight, dismissOutbox, getState, interrupt, openThread, retryOutbox, sendMessage, setColumn, useBoard } from '@/lib/store'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { SourceIcon, StatusDot } from '@/components/board/status'
 import { Composer } from './Composer'
@@ -77,19 +77,109 @@ function MessageRow({ m }: { m: ThreadMessage }) {
   )
 }
 
+const EVENT_ICON: Record<string, typeof Bell> = { webhook: Webhook, cron: Clock, scheduled: Clock, process: Zap, delegation: Zap }
+const EVENT_LABEL: Record<string, string> = { webhook: 'Webhook', cron: 'Cron', scheduled: 'Geplanter Lauf', process: 'Hintergrundprozess', delegation: 'Subagent', compaction: 'Kontext verdichtet' }
+
+/** Delivered into the session, not typed by the user: collapsed card with route and title, Markdown on demand. */
+function EventCard({ m }: { m: ThreadMessage }) {
+  const [open, setOpen] = useState(false)
+  const ev = m.event!
+  const Icon = EVENT_ICON[ev.source] || Bell
+  return (
+    <div className="rounded-xl border bg-muted/30 text-sm" data-testid="event-card">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-start gap-2 px-3 py-2 text-left">
+        <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="truncate font-medium">{t(EVENT_LABEL[ev.source] || 'Event')}{ev.route ? ` · ${ev.route}` : ''}</span>
+            {m.ts && <span className="ml-auto shrink-0 text-[10.5px]">{clock(m.ts)}</span>}
+          </span>
+          <span className="mt-0.5 line-clamp-2 font-medium text-foreground/90">{ev.title}</span>
+        </span>
+        <ChevronRight className={cn('mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && m.text && (
+        <div className="border-t px-3 py-2">
+          <Markdown className="prose prose-sm prose-zinc max-w-none break-words text-foreground dark:prose-invert prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none">{m.text}</Markdown>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const OUTBOX_LABEL: Record<OutboxState['status'] | 'steer', string> = {
+  sending: 'wird gesendet …',
+  waiting: 'wartet · läuft nach dem aktuellen Turn',
+  queued: 'wartet · läuft nach dem aktuellen Turn',
+  started: 'wird übernommen …',
+  steer: 'wartet · wird nach dem aktuellen Schritt übernommen',
+  lost: 'nicht übernommen',
+  failed: 'nicht zugestellt',
+}
+
+// Outcomes of an admission in Hermes' FIFO that ended without a turn.
+const OUTCOME: Record<string, string> = { cancelled: 'abgebrochen', interrupted: 'unterbrochen', failed: 'fehlgeschlagen' }
+
+function OutboxBadge({ sessionId, o }: { sessionId: string; o: OutboxState }) {
+  const bad = o.status === 'lost' || o.status === 'failed'
+  const error = o.error && (OUTCOME[o.error] ? t(OUTCOME[o.error]) : o.error)
+  return (
+    <div className="mt-1.5 flex max-w-[85%] flex-col items-end gap-1 text-[11px]" data-testid="outbox-badge">
+    <div className={cn('flex flex-wrap items-center justify-end gap-x-2 gap-y-1', bad ? 'text-destructive' : 'text-muted-foreground')}>
+      {bad ? <AlertTriangle className="size-3" /> : <Loader variant="circular" size="sm" className="size-3" />}
+      <span>{t(OUTBOX_LABEL[o.status === 'waiting' ? (o.mode === 'redirected' || o.mode === 'steered' ? 'steer' : o.mode === 'queued' ? 'queued' : 'sending') : o.status])}{bad && error && OUTCOME[o.error!] ? ` · ${error}` : ''}</span>
+      {bad && o.id && (
+        <>
+          <button onClick={() => retryOutbox(sessionId, o.id!)} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-foreground ring-1 ring-border hover:bg-muted"><RotateCcw className="size-3" />{t('Erneut senden')}</button>
+          <button onClick={() => dismissOutbox(sessionId, o.id!)} className="rounded-md px-1.5 py-0.5 text-muted-foreground hover:text-foreground">{t('Verwerfen')}</button>
+        </>
+      )}
+    </div>
+    {bad && error && !OUTCOME[o.error!] && <div className="text-right text-destructive/80 [overflow-wrap:anywhere]">{error}</div>}
+    </div>
+  )
+}
+
+function UserMeta({ m }: { m: ThreadMessage }) {
+  const [ctx, setCtx] = useState(false)
+  const reply = m.meta?.find((x) => x.kind === 'reply')
+  const origin = m.meta?.find((x) => x.kind === 'origin')
+  if (!reply && !origin && !m.steer && !m.threadContext) return null
+  return (
+    <div className="mb-1 flex flex-col items-end gap-0.5 text-[11px] text-muted-foreground">
+      {reply && <div className="inline-flex max-w-full items-center gap-1"><CornerDownRight className="size-3 shrink-0" /><span className="truncate">{t('Antwort auf „{q}“', { q: reply.text })}</span></div>}
+      {(origin || m.steer || m.threadContext) && (
+        <div className="flex flex-wrap justify-end gap-x-2">
+          {m.steer && <span>{t('während des Turns eingeworfen')}</span>}
+          {origin && <span>{t('via {where}', { where: origin.text })}</span>}
+          {m.threadContext && <button onClick={() => setCtx((c) => !c)} className="underline-offset-2 hover:underline">{ctx ? t('Thread-Kontext ausblenden') : t('Thread-Kontext')}</button>}
+        </div>
+      )}
+      {ctx && m.threadContext && <pre className="mt-1 max-h-56 max-w-full overflow-auto whitespace-pre-wrap rounded-md bg-muted/60 p-2 text-left font-sans text-[11.5px] ring-1 ring-border">{m.threadContext}</pre>}
+    </div>
+  )
+}
+
 function MessageBody({ m }: { m: ThreadMessage }) {
+  const sessionId = useBoard((s) => s.openId)
   if (m.role === 'tool') return <ToolChip m={m} />
+  if (m.role === 'event' && m.event) return <EventCard m={m} />
   const atts = m.attachments || []
   if (m.role === 'user') {
+    const pending = m.outbox && m.outbox.status !== 'lost' && m.outbox.status !== 'failed'
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-muted px-3.5 py-2 text-sm text-foreground ring-1 ring-border/60">
+      <div className="flex flex-col items-end">
+        <UserMeta m={m} />
+        <div className={cn('max-w-[85%] rounded-2xl rounded-br-md bg-muted px-3.5 py-2 text-sm text-foreground ring-1 ring-border/60', pending && 'opacity-60', m.outbox && !pending && 'ring-destructive/50')}>
           {m.text && <div className="whitespace-pre-wrap [overflow-wrap:anywhere]">{m.text}</div>}
           {atts.map((a) => (a.kind === 'audio'
             ? <MediaAudio key={a.url} url={a.url} className="mt-2 h-9 w-64 max-w-full" />
-            : a.kind === 'image' && <div key={a.url} className="mt-2"><MediaImage url={a.url} className="max-h-64" /></div>))}
+            : a.kind === 'image'
+              ? <div key={a.url} className="mt-2"><MediaImage url={a.url} className="max-h-64" /></div>
+              : <span key={a.name} className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background/60 px-2 py-1 text-xs text-muted-foreground" title={a.name}><FileText className="size-3.5 shrink-0" /><span className="truncate">{a.name}</span></span>))}
           {m.ts && <div className="mt-1 text-right text-[10.5px] text-muted-foreground">{clock(m.ts)}</div>}
         </div>
+        {m.outbox && sessionId && <OutboxBadge sessionId={sessionId} o={m.outbox} />}
       </div>
     )
   }
