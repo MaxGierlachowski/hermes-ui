@@ -41,7 +41,7 @@ The backend and its `iroh-gateway` stay unchanged.
 | Hardware back (closes lightbox / sheets first), haptics, edge-to-edge system bars in theme colours | ✅ |
 | Notifications while the app runs; in the background via a keep-alive foreground service (Android) | ✅ |
 | Push with the app closed (FCM) | prepared, needs a Firebase project (below) |
-| iOS | module + XCFramework build; app build in the simulator only, no device / TestFlight build |
+| iOS | Swift module + XCFramework; the app runs in the simulator (pairing, board, threads, direct path 2 ms). No device / TestFlight build (needs an Apple account) |
 
 ## Build (Android)
 
@@ -103,6 +103,9 @@ npm run iroh:ios                  # HermesIrohFFI.xcframework + Swift bindings
 npx expo prebuild --platform ios && (cd ios && pod install)
 npx expo run:ios                  # simulator
 ```
+
+Build for the simulator with a local ad-hoc signature (the default); with `CODE_SIGNING_ALLOWED=NO`
+the keychain refuses `expo-secure-store` ("A required entitlement isn't present").
 
 `build-ios.sh` compiles against a patched copy of `libc` (`scripts/ios-patches.py`): current libc
 hides `net/route.h` constants on iOS that iroh's `netwatch` needs. A device build, TestFlight and push
