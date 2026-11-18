@@ -30,7 +30,7 @@ It has two parts:
 ## Quick start
 
 ```bash
-git clone <repo> hermes-kanban && cd hermes-kanban
+git clone https://github.com/MaxGierlachowski/hermes-kanban.git && cd hermes-kanban
 npm install          # also installs the UI (web/)
 npm start            # builds the UI, starts the backend on http://127.0.0.1:8787
 ```
@@ -45,7 +45,7 @@ Requirements:
 
 ### Use it from a phone or tablet (iroh, recommended)
 
-1. Host the UI somewhere static. `web/dist` (built by `npm run build`) works from any path, for example on GitHub Pages. Set its URL as `KANBAN_UI_URL`.
+1. Use the hosted UI at <https://maxgierlachowski.github.io/hermes-kanban/> (built from this repo by `.github/workflows/pages.yml`), or host `web/dist` yourself on any static host. It works from any path. Set its URL as `KANBAN_UI_URL`.
 2. Start the backend with `--remote iroh` (or `KANBAN_REMOTE=iroh`). On first start it downloads `iroh-gateway` for your platform from the [iroh-bridge releases](https://github.com/irohkit/iroh-bridge/releases) and verifies its SHA-256. Alternatively set `IROH_GATEWAY_BIN`.
 3. Pair the device:
    - Run `hermes-kanban pair`, or open the remote-access dialog (📱) on the host and press "Pair device".
@@ -53,7 +53,7 @@ Requirements:
 4. The browser keeps a stable iroh identity. From then on the gateway only admits paired devices: everyone else is refused at connection time. You can revoke a device in the dialog.
 
 ```bash
-KANBAN_REMOTE=iroh KANBAN_UI_URL=https://<you>.github.io/hermes-kanban npm start
+KANBAN_REMOTE=iroh KANBAN_UI_URL=https://maxgierlachowski.github.io/hermes-kanban npm start
 npx hermes-kanban pair     # or: node bin/hermes-kanban.mjs pair
 ```
 
