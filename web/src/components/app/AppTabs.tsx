@@ -29,7 +29,10 @@ export function HeaderTabs() {
   )
 }
 
-/** Mobile: bottom tab bar, edge to edge in the page colour, above the home indicator. */
+/**
+ * Mobile: bottom tab bar in the page colour (= theme-color, manifest colours, html background), running
+ * through the home-indicator / gesture-bar area (padding = safe-area inset) so there is no seam at the edge.
+ */
 export function BottomTabBar() {
   const tab = useBoard((s) => s.tab)
   const items: { id: Tab; label: string; Icon: typeof Inbox }[] = [
@@ -44,7 +47,7 @@ export function BottomTabBar() {
           role="tab"
           aria-selected={tab === id}
           onClick={() => setTab(id)}
-          className={cn('relative flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-muted-foreground transition-colors', tab === id && 'text-foreground')}
+          className={cn('relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors', tab === id && 'text-foreground')}
         >
           <span className="relative">
             <Icon className="size-5" strokeWidth={tab === id ? 2.2 : 1.8} />

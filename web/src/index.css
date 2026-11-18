@@ -151,7 +151,7 @@
 @layer base {
   * { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent; }
   /* Edge to edge in the installed PWA: the page background fills the status bar and home-indicator areas. */
-  html { background-color: var(--background); }
+  html, body { background-color: var(--background); }
   /* Typed text is always the normal foreground, also for autofill and iOS Safari; only the caret is the accent. */
   :where(input, textarea, select, [contenteditable]) { color: var(--foreground); caret-color: var(--primary); }
   :where(input, textarea):-webkit-autofill { -webkit-text-fill-color: var(--foreground); }
