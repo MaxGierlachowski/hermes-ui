@@ -152,7 +152,7 @@ export class HermesGateway extends EventEmitter {
       cwd: os.homedir(),
       ...(title ? { title } : {}),
       request_id: randomUUID(),
-      client: { name: 'hermes-kanban', version: '0.1.0' },
+      client: { name: 'hermes-ui', version: '0.1.0' },
     });
     const id = snap.session_id || snap.stored_session_id;
     this.subscribed.add(id);

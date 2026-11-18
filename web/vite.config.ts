@@ -20,5 +20,5 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), irohServiceWorker()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   optimizeDeps: { exclude: ['iroh-fetch'] },
-  server: { proxy: { '/api': { target: `http://127.0.0.1:${process.env.KANBAN_PORT || 8787}` } } },
+  server: { proxy: { '/api': { target: `http://127.0.0.1:${process.env.HERMES_UI_PORT || 8787}` } } },
 })

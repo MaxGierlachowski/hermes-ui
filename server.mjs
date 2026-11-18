@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Hermes Kanban: local web UI for Hermes sessions. Binds to 127.0.0.1 only.
+// Hermes UI: local web UI for Hermes sessions. Binds to 127.0.0.1 only.
 //   reads   ~/.hermes/state.db (read-only) for the board and transcripts,
 //   writes  through the gateway WebSocket the Hermes desktop app uses (session.create / prompt.submit),
 //   pushes  live updates to the browser via Server-Sent Events.
@@ -31,7 +31,7 @@ const SYSTEM_SOURCES = new Set(['cron', 'tool', 'subagent', 'oneshot', 'webhook'
 const WEB_DIST = cfg.uiDir;
 
 const store = new Store(path.join(HERMES_HOME, 'state.db'));
-// Paseo is optional: KANBAN_PASEO=off, or simply no daemon running (it then stays disconnected quietly).
+// Paseo is optional: HERMES_UI_PASEO=off, or simply no daemon running (it then stays disconnected quietly).
 const paseo = new Paseo({ url: cfg.paseo.url, opsLoopFile: cfg.paseo.opsLoopFile });
 const PASEO_ON = cfg.paseo.mode !== 'off';
 const devices = new Devices(cfg.dataDir);
@@ -591,7 +591,7 @@ const server = http.createServer(async (req, res) => {
   let m0;
   try {
     if (!p.startsWith('/api/')) {
-      if (!cfg.ui) return send(res, 404, { error: 'headless: UI disabled (KANBAN_UI=off)' });
+      if (!cfg.ui) return send(res, 404, { error: 'headless: UI disabled (HERMES_UI_SERVE_UI=off)' });
       // React build (web/dist); unknown paths fall back to index.html (client-side routes like /pair).
       let file = path.join(WEB_DIST, decodeURIComponent(p));
       if (!file.startsWith(WEB_DIST) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(WEB_DIST, 'index.html');
@@ -827,7 +827,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Hermes Kanban API on http://${HOST}:${PORT}/api${cfg.ui ? ` · UI on http://${HOST}:${PORT}/` : ' (headless)'} · token: KANBAN_TOKEN in ${cfg.envFile}`);
+  console.log(`Hermes UI API on http://${HOST}:${PORT}/api${cfg.ui ? ` · UI on http://${HOST}:${PORT}/` : ' (headless)'} · token: HERMES_UI_TOKEN in ${cfg.envFile}`);
   gateway.connect();
   syncIrohAccess();
   remote.start();

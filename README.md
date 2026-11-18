@@ -1,4 +1,4 @@
-# Hermes Kanban
+# Hermes UI
 
 A Kanban board for [Hermes Agent](https://hermes-agent.nousresearch.com) sessions. Every chat (desktop, Slack, cron, CLI, or one started from the board) is a card. Cards move between **New Task → Doing → Waiting → Done** live.
 
@@ -10,13 +10,13 @@ On the board you can:
 
 It has two parts:
 
-- a **headless backend** (`hermes-kanban serve`), which binds to `127.0.0.1` only;
+- a **headless backend** (`hermes-ui serve`), which binds to `127.0.0.1` only;
 - a **standalone UI**, a static PWA without any data or secrets. The backend can serve the UI itself, or you host it anywhere (GitHub Pages, any static host) and it reaches your backend over **iroh**: end-to-end encrypted, no open port, no account.
 
 ```
  Phone / iPad / any browser                        your machine (behind NAT)
 ┌──────────────────────────┐                     ┌──────────────────────────────────────────────┐
-│ UI (static PWA)          │     iroh relay      │ iroh-gateway ──HTTP──▶ hermes-kanban backend │
+│ UI (static PWA)          │     iroh relay      │ iroh-gateway ──HTTP──▶ hermes-ui backend │
 │  iroh-fetch (WASM): API, │ ◀── E2E QUIC ─────▶ │  (child process,       127.0.0.1:8787        │
 │  SSE, uploads, images    │   (n0 or your own)  │   allow-list of        │  │  │               │
 └──────────────────────────┘                     │   paired devices)      │  │  └─ Paseo daemon  │
@@ -30,12 +30,12 @@ It has two parts:
 ## Quick start
 
 ```bash
-git clone https://github.com/MaxGierlachowski/hermes-kanban.git && cd hermes-kanban
+git clone https://github.com/MaxGierlachowski/hermes-ui.git && cd hermes-ui
 npm install          # also installs the UI (web/)
 npm start            # builds the UI, starts the backend on http://127.0.0.1:8787
 ```
 
-The first start writes `KANBAN_TOKEN` to `.env`. Open <http://127.0.0.1:8787/> and sign in with it once; an HttpOnly cookie keeps you signed in.
+The first start writes `HERMES_UI_TOKEN` to `.env`. Open <http://127.0.0.1:8787/> and sign in with it once; an HttpOnly cookie keeps you signed in.
 
 Requirements:
 
@@ -45,49 +45,49 @@ Requirements:
 
 ### Use it from a phone or tablet (iroh, recommended)
 
-1. Use the hosted UI at <https://maxgierlachowski.github.io/hermes-kanban/> (built from this repo by `.github/workflows/pages.yml`), or host `web/dist` yourself on any static host. It works from any path. Set its URL as `KANBAN_UI_URL`.
-2. Start the backend with `--remote iroh` (or `KANBAN_REMOTE=iroh`). On first start it downloads `iroh-gateway` for your platform from the [iroh-bridge releases](https://github.com/irohkit/iroh-bridge/releases) and verifies its SHA-256. Alternatively set `IROH_GATEWAY_BIN`.
+1. Use the hosted UI at <https://maxgierlachowski.github.io/hermes-ui/> (built from this repo by `.github/workflows/pages.yml`), or host `web/dist` yourself on any static host. It works from any path. Set its URL as `HERMES_UI_URL`.
+2. Start the backend with `--remote iroh` (or `HERMES_UI_REMOTE=iroh`). On first start it downloads `iroh-gateway` for your platform from the [iroh-bridge releases](https://github.com/irohkit/iroh-bridge/releases) and verifies its SHA-256. Alternatively set `IROH_GATEWAY_BIN`.
 3. Pair the device:
-   - Run `hermes-kanban pair`, or open the remote-access dialog (📱) on the host and press "Pair device".
+   - Run `hermes-ui pair`, or open the remote-access dialog (📱) on the host and press "Pair device".
    - Scan the QR code. The link carries the gateway's endpoint id and a one-time code, both in the `#fragment`, which no web server sees.
 4. The browser keeps a stable iroh identity. From then on the gateway only admits paired devices: everyone else is refused at connection time. You can revoke a device in the dialog.
 
 ```bash
-KANBAN_REMOTE=iroh KANBAN_UI_URL=https://maxgierlachowski.github.io/hermes-kanban npm start
-npx hermes-kanban pair     # or: node bin/hermes-kanban.mjs pair
+HERMES_UI_REMOTE=iroh HERMES_UI_URL=https://maxgierlachowski.github.io/hermes-ui npm start
+npx hermes-ui pair     # or: node bin/hermes-ui.mjs pair
 ```
 
 ### CLI
 
 ```
-hermes-kanban serve [options]   start the backend (default)
-hermes-kanban pair              print a pairing link + QR code
-hermes-kanban status            backend, remote and device status
-hermes-kanban help
+hermes-ui serve [options]   start the backend (default)
+hermes-ui pair              print a pairing link + QR code
+hermes-ui status            backend, remote and device status
+hermes-ui help
 ```
 
 ## Configuration
 
-Settings come from CLI flags, then environment variables, then `.env`, then the defaults.
+Settings come from CLI flags, then environment variables, then `.env`, then the defaults. The former `KANBAN_*` names (from when the project was called hermes-kanban) still work as aliases, and `hermes-kanban` is still accepted as the CLI name.
 
 | Env var | Flag | Default | Purpose |
 |---|---|---|---|
-| `KANBAN_PORT` | `--port` | `8787` | Local port. The host is always `127.0.0.1`. |
-| `KANBAN_TOKEN` | `--token` | generated | Login token for local browsers. |
-| `KANBAN_UI` | `--ui` | `on` | `off` = headless, API only. |
-| `KANBAN_UI_DIR` | `--ui-dir` | `web/dist` | Built UI to serve. |
-| `KANBAN_UI_URL` | `--ui-url` | – | Public URL of the static UI, used in iroh pairing links. |
-| `KANBAN_REMOTE` | `--remote` | `off` | `off` \| `iroh` \| `tailscale-funnel` \| `tailscale-serve` \| `cloudflare`. |
-| `KANBAN_LANG` | `--lang` | `en` | Language of server-generated texts (`en`, `de`). The UI follows the browser; change it in ⌘K. |
-| `KANBAN_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state. |
+| `HERMES_UI_PORT` | `--port` | `8787` | Local port. The host is always `127.0.0.1`. |
+| `HERMES_UI_TOKEN` | `--token` | generated | Login token for local browsers. |
+| `HERMES_UI_SERVE_UI` | `--ui` | `on` | `off` = headless, API only. |
+| `HERMES_UI_DIR` | `--ui-dir` | `web/dist` | Built UI to serve. |
+| `HERMES_UI_URL` | `--ui-url` | – | Public URL of the static UI, used in iroh pairing links. |
+| `HERMES_UI_REMOTE` | `--remote` | `off` | `off` \| `iroh` \| `tailscale-funnel` \| `tailscale-serve` \| `cloudflare`. |
+| `HERMES_UI_LANG` | `--lang` | `en` | Language of server-generated texts (`en`, `de`). The UI follows the browser; change it in ⌘K. |
+| `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state. |
 | `HERMES_HOME` | `--hermes-home` | `~/.hermes` | Hermes data dir: `state.db`, `gateway.sock`. |
-| `KANBAN_PASEO` | `--paseo` | `auto` | `off` disables the Paseo integration. |
+| `HERMES_UI_PASEO` | `--paseo` | `auto` | `off` disables the Paseo integration. |
 | `PASEO_DAEMON_URL` | `--paseo-url` | from `PASEO_MCP_CONFIG`, else `ws://127.0.0.1:6767/ws` | Paseo daemon. |
 | `PASEO_MCP_CONFIG` | `--paseo-mcp-config` | `~/.config/paseo-mcp/config.json` | Where the daemon URL is read from. |
 | `PASEO_OPS_FILE` | `--paseo-ops-file` | `$HERMES_HOME/ops-loop/paseo.json` | Optional agent goal / phase file. |
 | `IROH_GATEWAY_BIN` | `--iroh-gateway-bin` | auto-download | Path to an `iroh-gateway` binary. |
 | `IROH_RELAY_URL` / `IROH_RELAY_TOKEN` | `--iroh-relay` | n0 public relays | Your own [iroh-relay](https://github.com/irohkit/iroh-bridge/blob/main/deploy/relay/README.md). |
-| `TS_AUTHKEY`, `TS_HOSTNAME` | `--ts-authkey` | – / `hermes-kanban` | Tailscale modes. |
+| `TS_AUTHKEY`, `TS_HOSTNAME` | `--ts-authkey` | – / `hermes-ui` | Tailscale modes. |
 | `CLOUDFLARED_BIN`, `TAILSCALE_BIN`, `TAILSCALED_BIN` | – | from `PATH` | Tunnel binaries. |
 
 ### Remote modes compared
@@ -108,11 +108,11 @@ In every mode the backend stays on `127.0.0.1`:
 ### Autostart (macOS)
 
 ```bash
-node scripts/launchd-plist.mjs --remote iroh > ~/Library/LaunchAgents/io.github.hermes-kanban.plist
-launchctl load ~/Library/LaunchAgents/io.github.hermes-kanban.plist
+node scripts/launchd-plist.mjs --remote iroh > ~/Library/LaunchAgents/io.github.hermes-ui.plist
+launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
 ```
 
-`examples/io.github.hermes-kanban.plist` shows the shape of the plist.
+`examples/io.github.hermes-ui.plist` shows the shape of the plist.
 
 ## Features
 
@@ -158,7 +158,7 @@ Layout:
 
 ## Licenses
 
-Hermes Kanban is released under the **MIT** license (see `LICENSE`). The components it uses are all free and open source:
+Hermes UI is released under the **MIT** license (see `LICENSE`). The components it uses are all free and open source:
 
 | Component | Use | License |
 |---|---|---|

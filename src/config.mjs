@@ -31,20 +31,35 @@ function parseFlags(argv) {
   return flags;
 }
 
+// Variables are named HERMES_UI_*; the older KANBAN_* names still work as aliases.
+const ALIASES = {
+  HERMES_UI_ENV_FILE: 'KANBAN_ENV_FILE',
+  HERMES_UI_TOKEN: 'KANBAN_TOKEN',
+  HERMES_UI_PORT: 'KANBAN_PORT',
+  HERMES_UI_DATA_DIR: 'KANBAN_DATA_DIR',
+  HERMES_UI_LANG: 'KANBAN_LANG',
+  HERMES_UI_SERVE_UI: 'KANBAN_UI',
+  HERMES_UI_DIR: 'KANBAN_UI_DIR',
+  HERMES_UI_URL: 'KANBAN_UI_URL',
+  HERMES_UI_REMOTE: 'KANBAN_REMOTE',
+  HERMES_UI_PASEO: 'KANBAN_PASEO',
+};
+
 export function loadConfig(argv = []) {
   const flags = parseFlags(argv);
-  const envFile = expand(flags['env-file'] || process.env.KANBAN_ENV_FILE || path.join(ROOT, '.env'));
+  const fromEnv = (src, key) => src[key] ?? (ALIASES[key] ? src[ALIASES[key]] : undefined);
+  const envFile = expand(flags['env-file'] || fromEnv(process.env, 'HERMES_UI_ENV_FILE') || path.join(ROOT, '.env'));
   const fileEnv = readEnvFile(envFile);
-  const get = (key, flag, def) => flags[flag] ?? process.env[key] ?? fileEnv[key] ?? def;
+  const get = (key, flag, def) => flags[flag] ?? fromEnv(process.env, key) ?? fromEnv(fileEnv, key) ?? def;
 
-  let token = get('KANBAN_TOKEN', 'token', '');
+  let token = get('HERMES_UI_TOKEN', 'token', '');
   if (!token) {
     token = crypto.randomBytes(24).toString('base64url');
-    fs.appendFileSync(envFile, `KANBAN_TOKEN=${token}\n`, { mode: 0o600 });
-    console.log(`Generated KANBAN_TOKEN in ${envFile}`);
+    fs.appendFileSync(envFile, `HERMES_UI_TOKEN=${token}\n`, { mode: 0o600 });
+    console.log(`Generated HERMES_UI_TOKEN in ${envFile}`);
   }
 
-  const dataDir = expand(get('KANBAN_DATA_DIR', 'data-dir', path.join(ROOT, 'data')));
+  const dataDir = expand(get('HERMES_UI_DATA_DIR', 'data-dir', path.join(ROOT, 'data')));
   const hermesHome = expand(get('HERMES_HOME', 'hermes-home', path.join(os.homedir(), '.hermes')));
   const paseoMcpConfig = expand(get('PASEO_MCP_CONFIG', 'paseo-mcp-config', path.join(os.homedir(), '.config', 'paseo-mcp', 'config.json')));
   let paseoUrl = get('PASEO_DAEMON_URL', 'paseo-url', '');
@@ -56,16 +71,16 @@ export function loadConfig(argv = []) {
     envFile,
     token,
     host: '127.0.0.1', // never configurable: remote access goes through a tunnel, not an open port
-    port: Number(get('KANBAN_PORT', 'port', 8787)),
+    port: Number(get('HERMES_UI_PORT', 'port', 8787)),
     dataDir,
     hermesHome,
-    lang: get('KANBAN_LANG', 'lang', 'en'),
+    lang: get('HERMES_UI_LANG', 'lang', 'en'),
     // UI: serve the built UI from this backend ("on") or run headless ("off").
-    ui: get('KANBAN_UI', 'ui', 'on') !== 'off',
-    uiDir: expand(get('KANBAN_UI_DIR', 'ui-dir', path.join(ROOT, 'web', 'dist'))),
+    ui: get('HERMES_UI_SERVE_UI', 'ui', 'on') !== 'off',
+    uiDir: expand(get('HERMES_UI_DIR', 'ui-dir', path.join(ROOT, 'web', 'dist'))),
     // Public URL of the static UI (e.g. GitHub Pages) used in iroh pairing links. Empty = local UI only.
-    uiUrl: (get('KANBAN_UI_URL', 'ui-url', '') || '').replace(/\/$/, ''),
-    remote: get('KANBAN_REMOTE', 'remote', 'off'), // off | iroh | tailscale-funnel | tailscale-serve | cloudflare
+    uiUrl: (get('HERMES_UI_URL', 'ui-url', '') || '').replace(/\/$/, ''),
+    remote: get('HERMES_UI_REMOTE', 'remote', 'off'), // off | iroh | tailscale-funnel | tailscale-serve | cloudflare
     iroh: {
       bin: expand(get('IROH_GATEWAY_BIN', 'iroh-gateway-bin', '')),
       version: get('IROH_GATEWAY_VERSION', 'iroh-gateway-version', 'v0.6.3'),
@@ -73,9 +88,9 @@ export function loadConfig(argv = []) {
       relayToken: get('IROH_RELAY_TOKEN', 'iroh-relay-token', ''),
       adminPort: Number(get('IROH_ADMIN_PORT', 'iroh-admin-port', 0)) || null,
     },
-    tailscale: { authKey: get('TS_AUTHKEY', 'ts-authkey', ''), hostname: get('TS_HOSTNAME', 'ts-hostname', 'hermes-kanban') },
+    tailscale: { authKey: get('TS_AUTHKEY', 'ts-authkey', ''), hostname: get('TS_HOSTNAME', 'ts-hostname', 'hermes-ui') },
     paseo: {
-      mode: get('KANBAN_PASEO', 'paseo', 'auto'), // auto | off
+      mode: get('HERMES_UI_PASEO', 'paseo', 'auto'), // auto | off
       url: paseoUrl || 'ws://127.0.0.1:6767/ws',
       opsLoopFile: expand(get('PASEO_OPS_FILE', 'paseo-ops-file', path.join(hermesHome, 'ops-loop', 'paseo.json'))),
     },

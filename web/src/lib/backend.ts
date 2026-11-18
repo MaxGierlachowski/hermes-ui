@@ -11,7 +11,7 @@ export type Connection =
   | { mode: 'iroh'; base: string; status: 'connecting' | 'ready' | 'error'; endpointId: string; error?: string; serviceWorker: boolean }
 
 const STORE_KEY = 'hk_remote'
-export const IROH_ORIGIN = 'https://hermes-kanban.iroh' // virtual origin; only the path reaches the backend
+export const IROH_ORIGIN = 'https://hermes-ui.iroh' // virtual origin; only the path reaches the backend
 
 let conn: Connection = { mode: 'local', base: '', status: 'ready' }
 let pendingPairCode: string | null = null

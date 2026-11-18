@@ -1,4 +1,4 @@
-// Built-in remote access, started together with the server (KANBAN_REMOTE):
+// Built-in remote access, started together with the server (HERMES_UI_REMOTE):
 //   off              local only (127.0.0.1)
 //   iroh             see iroh.mjs (recommended)
 //   cloudflare       Cloudflare quick tunnel (`cloudflared tunnel --url`), no account; URL changes on every start.
@@ -24,7 +24,7 @@ const which = (name) => {
 };
 
 export class Remote extends EventEmitter {
-  constructor({ mode, port, dataDir, hostname = 'hermes-kanban', authKey }) {
+  constructor({ mode, port, dataDir, hostname = 'hermes-ui', authKey }) {
     super();
     this.mode = mode || 'off';
     this.port = port;
@@ -45,7 +45,7 @@ export class Remote extends EventEmitter {
     if (this.mode === 'off') return;
     if (this.mode === 'cloudflare') this.#cloudflare();
     else if (this.mode === 'tailscale-funnel' || this.mode === 'tailscale-serve') this.#tailscale().catch((err) => this.set({ status: 'error', error: err.message }));
-    else this.set({ status: 'error', error: `unknown KANBAN_REMOTE=${this.mode}` });
+    else this.set({ status: 'error', error: `unknown HERMES_UI_REMOTE=${this.mode}` });
   }
 
   stop() {

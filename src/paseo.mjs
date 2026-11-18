@@ -1,5 +1,5 @@
 // Optional adapter: read-only view of a local Paseo daemon (https://paseo.sh), whose coding agents an
-// orchestrator such as Hermes starts via paseo-mcp. Disable with KANBAN_PASEO=off.
+// orchestrator such as Hermes starts via paseo-mcp. Disable with HERMES_UI_PASEO=off.
 // Source today: a direct daemon connection. Once paseo-mcp exposes an event stream, this class is the
 // one place to swap the source; the rest of the server only uses agents/view/timeline/ensure/resolve.
 // Uses only list / ref().refresh() / timeline.refetch and the agent_update stream: nothing here
@@ -36,7 +36,7 @@ export class Paseo extends EventEmitter {
 
   async connect() {
     try {
-      this.client = createPaseoClient({ url: this.url, clientId: 'hermes-kanban', connectTimeoutMs: 8000, reconnect: { enabled: true }, logger: quiet });
+      this.client = createPaseoClient({ url: this.url, clientId: 'hermes-ui', connectTimeoutMs: 8000, reconnect: { enabled: true }, logger: quiet });
       await this.client.connect();
       this.client.agents.subscribe((u) => {
         const id = u?.agent?.id || u?.agentId;

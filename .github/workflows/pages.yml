@@ -1,5 +1,5 @@
 # Builds the static UI (web/) and publishes it to GitHub Pages. The UI holds no data or secrets;
-# it connects to a hermes-kanban backend over iroh after pairing (see README).
+# it connects to a hermes-ui backend over iroh after pairing (see README).
 name: Pages
 
 on:

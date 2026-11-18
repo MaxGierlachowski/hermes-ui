@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 
 const STATUS: Record<string, string> = {
-  off: t('Aus (KANBAN_REMOTE=off)'),
+  off: t('Aus (HERMES_UI_REMOTE=off)'),
   starting: t('Startet …'),
   online: t('Online'),
   reconnecting: t('Verbindet neu …'),
@@ -62,7 +62,7 @@ export function RemoteDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             </div>
           )}
           {remote?.mode === 'iroh' && !remote.uiUrl && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">{t('KANBAN_UI_URL ist nicht gesetzt: Der QR-Code öffnet die UI dieses Rechners. Für Handy/iPad die öffentliche UI-Adresse setzen (z. B. GitHub Pages).')}</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">{t('HERMES_UI_URL ist nicht gesetzt: Der QR-Code öffnet die UI dieses Rechners. Für Handy/iPad die öffentliche UI-Adresse setzen (z. B. GitHub Pages).')}</p>
           )}
           {remote?.loginUrl && (
             <a href={remote.loginUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline">

@@ -1,4 +1,4 @@
-// Server-side texts (card activity lines, notes sent to the agent). KANBAN_LANG=en|de, default en.
+// Server-side texts (card activity lines, notes sent to the agent). HERMES_UI_LANG=en|de, default en.
 const T = {
   en: {
     paseoBlocked: 'Paseo agent "{title}" is waiting for a permission – Hermes or you decide',

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Prints a macOS LaunchAgent plist for the backend with this machine's paths. Nothing is installed:
-//   node scripts/launchd-plist.mjs > ~/Library/LaunchAgents/io.github.hermes-kanban.plist
-//   launchctl load ~/Library/LaunchAgents/io.github.hermes-kanban.plist
-// Extra args are passed to `hermes-kanban serve`, e.g. `--remote iroh`.
+//   node scripts/launchd-plist.mjs > ~/Library/LaunchAgents/io.github.hermes-ui.plist
+//   launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
+// Extra args are passed to `hermes-ui serve`, e.g. `--remote iroh`.
 
 import os from 'node:os';
 import path from 'node:path';
@@ -10,13 +10,13 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-const args = [process.execPath, path.join(root, 'bin', 'hermes-kanban.mjs'), 'serve', ...process.argv.slice(2)];
-const log = path.join(os.homedir(), 'Library', 'Logs', 'hermes-kanban.log');
+const args = [process.execPath, path.join(root, 'bin', 'hermes-ui.mjs'), 'serve', ...process.argv.slice(2)];
+const log = path.join(os.homedir(), 'Library', 'Logs', 'hermes-ui.log');
 process.stdout.write(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>io.github.hermes-kanban</string>
+  <key>Label</key><string>io.github.hermes-ui</string>
   <key>ProgramArguments</key>
   <array>
 ${args.map((a) => `    <string>${esc(a)}</string>`).join('\n')}
