@@ -48,8 +48,7 @@ const remoteView = () => ({ ...remote.state, uiUrl: cfg.uiUrl || null });
 // The iroh gateway admits only paired devices (plus everyone while a pairing code is open).
 const syncIrohAccess = () => {
   if (cfg.remote !== 'iroh') return;
-  remote.setAllowed(devices.irohIds());
-  remote.setPairingOpen(devices.pairingOpen());
+  remote.setAccess(devices.irohIds(), devices.pairingOpen());
 };
 setInterval(syncIrohAccess, 30000);
 const board = new Board(cfg.dataDir);

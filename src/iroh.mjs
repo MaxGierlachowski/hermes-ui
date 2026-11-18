@@ -83,18 +83,19 @@ export class IrohGateway extends EventEmitter {
       'IROH_RATE_LIMIT=30',
       'IROH_RATE_BURST=120',
     ];
-    fs.writeFileSync(this.configFile, `${lines.join('\n')}\n`, { mode: 0o600 });
-    if (this.child && !this.child.killed) this.child.kill('SIGHUP');
+    const text = `${lines.join('\n')}\n`;
+    if (text === this.lastWritten) return;
+    this.lastWritten = text;
+    fs.writeFileSync(this.configFile, text, { mode: 0o600 });
+    // One reload per burst of changes: two SIGHUPs in quick succession can leave the gateway on the first.
+    clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(() => { if (this.child && !this.child.killed) this.child.kill('SIGHUP'); }, 300);
   }
 
-  setAllowed(ids) {
+  /** Paired device ids + whether a pairing code is open, applied in one config write. */
+  setAccess(ids, open) {
     this.allowed = [...new Set(ids)].sort();
-    this.writeAccess();
-  }
-
-  setPairingOpen(open) {
-    if (this.open === open) return;
-    this.open = open;
+    this.open = !!open;
     this.writeAccess();
   }
 
