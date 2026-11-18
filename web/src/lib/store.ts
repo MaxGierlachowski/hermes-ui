@@ -65,7 +65,16 @@ export function useBoard<T>(select: (s: State) => T): T {
   return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l) }, () => select(state))
 }
 
+// Cards moved on the board but not yet confirmed by the backend: live events and reloads keep showing
+// the new column until the move request settles, so a card never flips back mid-flight.
+const movingTo = new Map<string, Column>()
+const withMove = (s: Session): Session => {
+  const column = movingTo.get(s.id)
+  return column && s.column !== column ? { ...s, column } : s
+}
+
 function upsert(s: Session, flash = false) {
+  s = withMove(s)
   set((st) => {
     const prev = st.sessions[s.id]
     return { sessions: { ...st.sessions, [s.id]: s }, flash: flash || (prev && prev.column !== s.column) ? s.id : st.flash }
@@ -90,7 +99,7 @@ const handle = (err: unknown) => {
 export async function loadSessions() {
   try {
     const { sessions, gateway } = await api<{ sessions: Session[]; gateway: boolean }>(`/api/sessions?days=${state.days}&system=${state.system ? 1 : 0}`)
-    set({ auth: 'ok', gateway, sessions: Object.fromEntries(sessions.map((s) => [s.id, s])) })
+    set({ auth: 'ok', gateway, sessions: Object.fromEntries(sessions.map((s) => [s.id, withMove(s)])) })
     return true
   } catch (err) { handle(err); return false }
 }
@@ -233,13 +242,27 @@ function toastFor(item: InboxItem) {
 
 // ---------- actions ----------
 export async function setColumn(id: string, column: Column | 'auto') {
+  // Optimistic: the card moves at once (the board's drop animation lands there), rolled back on error.
+  const before = state.sessions[id]
+  const optimistic = column !== 'auto' && !!before && before.column !== column
+  if (optimistic) {
+    movingTo.set(id, column)
+    upsert({ ...before, column, override: true }, true)
+  }
   try {
     const res = await api<{ session: Session | null; removed?: string; replaced?: string }>(`/api/sessions/${encodeURIComponent(id)}/column`, { method: 'POST', json: { column } })
+    if (movingTo.get(id) === column) movingTo.delete(id)
     if (res.removed || res.replaced) remove((res.removed || res.replaced)!)
-    if (res.session) upsert(res.session, true)
+    if (res.session) upsert(res.session, !optimistic)
     if (res.replaced && res.session && state.openId === null) return
     if (res.replaced && res.session) openThread(res.session.id)
-  } catch (err) { handle(err); loadSessions() }
+  } catch (err) {
+    if (movingTo.get(id) === column) movingTo.delete(id)
+    if (optimistic && state.sessions[id]?.column === column) upsert({ ...state.sessions[id], column: before.column, override: before.override })
+    if (optimistic && !(err instanceof Unauthorized)) toast.error(t('Karte konnte nicht verschoben werden'), { description: err instanceof Error ? err.message : String(err) })
+    else handle(err)
+    loadSessions()
+  }
 }
 
 // Automated E2E runs mark their chats as "TEST · …" without any visible switch: they set
@@ -257,12 +280,30 @@ export async function createChat(msg: OutgoingMessage) {
 }
 
 export async function sendMessage(id: string, msg: OutgoingMessage) {
-  const res = await api<{ session: Session; message?: ThreadMessage }>(`/api/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', json: msg })
+  let res: { session: Session; messages?: ThreadMessage[] }
+  try {
+    res = await api(`/api/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', json: msg })
+  } catch (err) {
+    // The backend keeps the message as "failed" with "send again" in the thread; nothing is lost.
+    if (err instanceof Unauthorized) throw err
+    toast.error(t('Nachricht nicht zugestellt'), { description: err instanceof Error ? err.message : String(err) })
+    refreshThread(id)
+    return
+  }
   if (res.session && res.session.id !== id) { remove(id); upsert(res.session, true); openThread(res.session.id); return }
   if (res.session) upsert(res.session)
-  const message = res.message
-  if (message && state.openId === id) set((st) => ({ messages: [...st.messages, message] }))
+  if (res.messages && state.openId === id) set({ messages: res.messages })
 }
+
+async function outboxAction(sessionId: string, outboxId: string, retry: boolean) {
+  try {
+    const res = await api<{ session: Session; messages: ThreadMessage[] }>(`/api/outbox/${outboxId}${retry ? '/retry' : ''}`, { method: retry ? 'POST' : 'DELETE' })
+    if (res.session) upsert(res.session)
+    if (state.openId === sessionId) set({ messages: res.messages })
+  } catch (err) { handle(err); refreshThread(sessionId) }
+}
+export const retryOutbox = (sessionId: string, outboxId: string) => outboxAction(sessionId, outboxId, true)
+export const dismissOutbox = (sessionId: string, outboxId: string) => outboxAction(sessionId, outboxId, false)
 
 export async function respond(id: string, body: { promptId: string; choice?: string; answer?: string; answers?: string[] }) {
   try {

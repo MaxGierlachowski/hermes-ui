@@ -33,6 +33,7 @@ export function fromSummary(s) {
     model: s.model ?? null,
     cwd: s.cwd ?? null,
     updatedAt: s.updatedAt ?? null,
+    createdAt: s.createdAt ?? null,
     archivedAt: s.archivedAt ?? null,
   };
 }

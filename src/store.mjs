@@ -32,6 +32,9 @@ export class Store {
         (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '' ORDER BY m.id DESC LIMIT 1) AS last_assistant,
         (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id) AS last_msg_id,
         (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') AS last_user_id,
+        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user,
+        (SELECT display_kind FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user_kind,
+        (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '') AS last_assistant_id,
         EXISTS (SELECT 1 FROM session_admissions a WHERE a.target_session_id = s.id AND a.status IN ('queued','started')) AS admitted,
         EXISTS (SELECT 1 FROM session_turn_leases l WHERE l.conversation_id = s.id AND l.expires_at > unixepoch('subsec')) AS leased
       FROM sessions s
@@ -49,16 +52,36 @@ export class Store {
         (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '' ORDER BY m.id DESC LIMIT 1) AS last_assistant,
         (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id) AS last_msg_id,
         (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') AS last_user_id,
+        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user,
+        (SELECT display_kind FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user_kind,
+        (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '') AS last_assistant_id,
         EXISTS (SELECT 1 FROM session_admissions a WHERE a.target_session_id = s.id AND a.status IN ('queued','started')) AS admitted,
         EXISTS (SELECT 1 FROM session_turn_leases l WHERE l.conversation_id = s.id AND l.expires_at > unixepoch('subsec')) AS leased
       FROM sessions s WHERE s.id = ?`).get(id);
   }
 
+  // Only the live transcript: active = 0 rows were taken back (/undo, refused turns) or replaced
+  // (a drained busy-queue row gets re-placed at the end); Hermes' own clients hide them too.
   messages(id) {
     return this.db.prepare(`
-      SELECT id, role, content, tool_calls, tool_name, tool_call_id, timestamp, display_kind
-      FROM messages WHERE session_id = ? AND role IN ('user','assistant','tool') AND compacted = 0
+      SELECT id, role, content, tool_calls, tool_name, tool_call_id, timestamp, display_kind, display_metadata
+      FROM messages WHERE session_id = ? AND role IN ('user','assistant','tool') AND compacted = 0 AND active = 1
       ORDER BY id`).all(id);
+  }
+
+  // Hermes' durable FIFO per session (gateway-owned sessions): a prompt sent while a turn runs waits
+  // here as status 'queued' and is written to messages only when its own turn starts.
+  admissions(id, limit = 40) {
+    return this.db.prepare(`
+      SELECT seq, admission_id, status, outcome, json_extract(payload_json, '$.text') AS text
+      FROM session_admissions WHERE target_session_id = ? ORDER BY seq DESC LIMIT ?`).all(id, limit).reverse();
+  }
+
+  // User rows after a message id, for matching messages the board sent (see outbox.mjs).
+  userRowsSince(id, sinceId) {
+    return this.db.prepare(`
+      SELECT id, content, display_kind, display_metadata, active FROM messages
+      WHERE session_id = ? AND role = 'user' AND id > ? ORDER BY id`).all(id, sinceId);
   }
 
   // Cheap change detector for the poll loop.
@@ -114,7 +137,7 @@ export class Store {
     if (tokens.join('').length >= 2) try {
       // 1) rank hits, best one per session; 2) snippets only for those (snippet() is the expensive part).
       const rows = this.db.prepare(`
-        SELECT m.session_id AS id, m.id AS msg_id, m.role, m.timestamp AS ts, h.score
+        SELECT m.session_id AS id, m.id AS msg_id, m.role, m.timestamp AS ts, h.score, substr(m.content, 1, 400) AS head, m.display_kind AS kind
         FROM (SELECT rowid, bm25(messages_fts) AS score FROM messages_fts WHERE messages_fts MATCH ? ORDER BY score LIMIT 800) h
         JOIN messages m ON m.id = h.rowid
         JOIN sessions s ON s.id = m.session_id

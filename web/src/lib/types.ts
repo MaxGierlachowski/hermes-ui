@@ -21,7 +21,7 @@ export type PendingPrompt = {
 }
 
 export type AgentState = 'running' | 'idle' | 'closed' | 'error' | 'needs-attention' | 'finished' | 'archived' | 'unknown'
-export type PaseoChip = { id: string; title: string | null; state: AgentState; status: string; rel: 'created' | 'steers' | 'watches'; account: string | null; kind: string | null; archived: boolean; pendingCount: number }
+export type PaseoChip = { id: string; title: string | null; state: AgentState; status: string; rel: 'created' | 'steers' | 'watches'; account: string | null; kind: string | null; archived: boolean; pendingCount: number; createdAt?: string | null; updatedAt?: string | null }
 export type PaseoAgent = PaseoChip & {
   known: boolean
   pendingPermissions?: { kind: string; name: string; title: string | null }[]
@@ -70,15 +70,27 @@ export type Session = {
 
 export type Attachment = { kind: 'image'; url: string } | { kind: 'audio'; url: string } | { kind: 'file'; name: string }
 
+// Sent while Hermes works, not in the transcript yet: sending → queued (Hermes' FIFO, next turn) → started →
+// gone once it is in the transcript; lost / failed → send again. id null = queued from another client.
+export type OutboxState = { id: string | null; status: 'sending' | 'waiting' | 'queued' | 'started' | 'lost' | 'failed'; mode?: string; error?: string }
+
 export type ThreadMessage = {
   id?: number
-  role: 'user' | 'assistant' | 'tool' | 'system'
+  // event: delivered to the session but not typed by the user (webhook, cron, background notices)
+  role: 'user' | 'assistant' | 'tool' | 'system' | 'event' | 'paseo'
   text: string
   ts?: number
   toolName?: string
   summary?: string
   live?: boolean
   attachments?: Attachment[]
+  event?: { source: string; route?: string; title: string }
+  meta?: { kind: 'reply' | 'origin'; text: string }[]
+  steer?: boolean
+  threadContext?: string
+  outbox?: OutboxState
+  // Paseo tool call at this point of the chat; live state comes from the session's paseo chips.
+  paseo?: { action: 'create' | 'message' | 'archive' | 'permission'; ref: string; agentId: string | null; title?: string | null; account?: string | null; text?: string }
 }
 
 export type RemoteState = {
