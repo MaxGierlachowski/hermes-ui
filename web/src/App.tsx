@@ -26,17 +26,22 @@ import { t } from '@/lib/i18n'
 // Page background per theme (index.css --background). The installed PWA paints the status bar and the
 // home-indicator area with theme-color, so it has to follow the app's theme, not only the system's.
 const THEME_BG = { light: '#fafafa', dark: '#09090b' } as const
+// The same page colour under the thread sheet's scrim (black 40 % light, 60 % dark), so the status bar
+// matches the dimmed board above an open sheet.
+const THEME_DIMMED = { light: '#969696', dark: '#040404' } as const
 
 function ThemeColorSync() {
   const { resolvedTheme } = useTheme()
+  const isMobile = useIsMobile()
+  const sheetOpen = useBoard((s) => !!s.openId) && isMobile
   useEffect(() => {
     if (resolvedTheme !== 'light' && resolvedTheme !== 'dark') return
     for (const m of Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'))) {
       m.removeAttribute('media')
-      m.content = THEME_BG[resolvedTheme]
+      m.content = (sheetOpen ? THEME_DIMMED : THEME_BG)[resolvedTheme]
     }
     document.documentElement.style.colorScheme = resolvedTheme
-  }, [resolvedTheme])
+  }, [resolvedTheme, sheetOpen])
   return null
 }
 
@@ -110,7 +115,7 @@ function Shell() {
                 swipeToClose
                 showCloseButton={false}
                 onOpenAutoFocus={(e) => e.preventDefault()}
-                className="outline-none data-[side=bottom]:bottom-(--keyboard-inset) h-[min(94dvh,calc(var(--visual-height)-env(safe-area-inset-top)-0.5rem))] max-h-none gap-0 rounded-t-2xl p-0 data-[side=bottom]:h-[min(94dvh,calc(var(--visual-height)-env(safe-area-inset-top)-0.5rem))]"
+                className="overflow-hidden bg-background outline-none data-[side=bottom]:bottom-(--keyboard-inset) h-[min(94dvh,calc(var(--visual-height)-env(safe-area-inset-top)-0.5rem))] max-h-none gap-0 rounded-t-2xl p-0 data-[side=bottom]:h-[min(94dvh,calc(var(--visual-height)-env(safe-area-inset-top)-0.5rem))]"
               >
                 <SheetTitle className="sr-only">Thread</SheetTitle>
                 <div className="min-h-0 flex-1"><ThreadView /></div>

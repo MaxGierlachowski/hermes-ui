@@ -18,8 +18,8 @@ async function touch(page: Page, points: [number, number][], holdMs = 0) {
 const line = (from: [number, number], to: [number, number], steps = 8) =>
   Array.from({ length: steps + 1 }, (_, i) => [from[0] + ((to[0] - from[0]) * i) / steps, from[1] + ((to[1] - from[1]) * i) / steps] as [number, number])
 
-async function openBoard(page: Page, hash = '#/board') {
-  await mockApi(page)
+async function openBoard(page: Page, hash = '#/board', freezeClock = true) {
+  await mockApi(page, { freezeClock })
   await page.goto(`/${hash}`)
   await page.getByText('Landingpage-Build reparieren und deployen').first().waitFor()
 }
@@ -128,4 +128,73 @@ test('unsent text survives closing the thread by accident', async ({ page }) => 
   await expect(page.locator('[data-slot=sheet-content]')).toBeHidden()
   await page.getByText('Wochenbericht für das Team zusammenfassen').first().tap()
   await expect(page.getByPlaceholder('Antworten …')).toHaveValue('Halb fertiger Gedanke')
+})
+
+// ---------- image viewer ----------
+
+async function openViewer(page: Page) {
+  // The zoom animations run on the real clock.
+  await openBoard(page, '#/board/s-approval', false)
+  await page.locator('#msg-1').scrollIntoViewIfNeeded()
+  await page.getByRole('button', { name: 'Bild vergrößern' }).first().tap()
+  await expect(page.getByTestId('image-viewer')).toBeVisible()
+  await page.waitForTimeout(300)
+}
+const imageScale = (page: Page) => page.getByTestId('image-viewer-img').evaluate((img) => {
+  const m = getComputedStyle(img.parentElement!).transform
+  return m === 'none' ? 1 : new DOMMatrix(m).a
+})
+const pageScale = (page: Page) => page.evaluate(() => window.visualViewport?.scale ?? 1)
+
+async function pinch(page: Page, cx: number, cy: number, from: number, to: number) {
+  const cdp = await page.context().newCDPSession(page)
+  const pts = (d: number) => [{ x: cx - d, y: cy, id: 1 }, { x: cx + d, y: cy, id: 2 }]
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pts(from) })
+  for (let i = 1; i <= 10; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pts(from + ((to - from) * i) / 10) })
+    await page.waitForTimeout(16)
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+}
+
+test('image viewer: pinch zooms the image, not the app', async ({ page }) => {
+  await openViewer(page)
+  const vp = page.viewportSize()!
+  await pinch(page, vp.width / 2, vp.height / 2, 30, 140)
+  await expect.poll(() => imageScale(page)).toBeGreaterThan(1.5)
+  expect(await pageScale(page)).toBe(1)
+})
+
+test('image viewer: double tap zooms in and back out', async ({ page }) => {
+  await openViewer(page)
+  const vp = page.viewportSize()!
+  const tapTwice = async () => {
+    await page.touchscreen.tap(vp.width / 2, vp.height / 2)
+    await page.waitForTimeout(60)
+    await page.touchscreen.tap(vp.width / 2, vp.height / 2)
+    await page.waitForTimeout(450)
+  }
+  await tapTwice()
+  await expect.poll(() => imageScale(page)).toBeGreaterThan(1.5)
+  await tapTwice()
+  await expect.poll(() => imageScale(page)).toBeLessThan(1.05)
+  expect(await pageScale(page)).toBe(1)
+})
+
+test('image viewer: swipe down closes it, but not while zoomed', async ({ page }) => {
+  await openViewer(page)
+  const vp = page.viewportSize()!
+  const x = vp.width / 2
+  await pinch(page, x, vp.height / 2, 30, 140)
+  await expect.poll(() => imageScale(page)).toBeGreaterThan(1.5)
+  await touch(page, line([x, 300], [x, 520]))
+  await page.waitForTimeout(300)
+  await expect(page.getByTestId('image-viewer')).toBeVisible()
+  // Back to 1× (double tap), then the same swipe closes the viewer; the thread stays open.
+  await page.touchscreen.tap(x, vp.height / 2); await page.waitForTimeout(60); await page.touchscreen.tap(x, vp.height / 2)
+  await expect.poll(() => imageScale(page)).toBeLessThan(1.05)
+  await page.waitForTimeout(450)
+  await touch(page, line([x, 300], [x, 520]))
+  await expect(page.getByTestId('image-viewer')).toBeHidden()
+  await expect(page.locator('[data-slot=sheet-content]')).toBeVisible()
 })

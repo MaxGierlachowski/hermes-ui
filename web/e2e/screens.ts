@@ -79,6 +79,24 @@ export const SCREENS: Screen[] = [
     },
   },
   {
+    // Phones: the image viewer after a two-finger pinch (no animation, so it works on the frozen clock).
+    name: 'lightbox-zoomed', mobileOnly: true,
+    setup: async (page) => {
+      await openThread(page)
+      await page.locator('#msg-1').scrollIntoViewIfNeeded()
+      await page.getByRole('button', { name: 'Bild vergrößern' }).first().click()
+      await page.getByTestId('image-viewer').waitFor()
+      await settle(page)
+      const { width, height } = page.viewportSize()!
+      const cdp = await page.context().newCDPSession(page)
+      const pts = (d: number) => [{ x: width / 2 - d, y: height / 2, id: 1 }, { x: width / 2 + d, y: height / 2, id: 2 }]
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pts(30) })
+      for (let i = 1; i <= 10; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pts(30 + 9 * i) })
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await settle(page)
+    },
+  },
+  {
     name: 'toast',
     setup: async (page) => { await openThread(page, 's-doing'); await page.getByRole('button', { name: 'Stoppen', exact: true }).click(); await page.getByText('Stopp gesendet').waitFor(); await settle(page) },
   },
