@@ -1,5 +1,6 @@
 // Read-only access to local image files that transcripts reference by path (file:///…, /Users/…).
 // Only image types, only below allowed roots, checked on the real path (symlinks and ".." resolved).
+// Plus exactly the files assistant replies attached with MEDIA:<path> (images and audio, any directory).
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,16 +8,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif' };
+export const AUDIO_TYPES = { '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.flac': 'audio/flac' };
 const MAX_BYTES = 25 * 1024 * 1024;
 
-const real = (p) => { try { return fs.realpathSync(p); } catch { return null; } };
+export const real = (p) => { try { return fs.realpathSync(p); } catch { return null; } };
 
 /**
  * @param {object} o
  * @param {string[]} o.roots        directories whose whole subtree is allowed
  * @param {string[]} o.tempPrefixes directory names directly below the temp dir that are allowed (e.g. "paseo-attachments-")
+ * @param {Set<string>} [o.files]   real paths allowed one by one (MEDIA attachments); images and audio
  */
-export function createImageResolver({ roots = [], tempPrefixes = [] }) {
+export function createImageResolver({ roots = [], tempPrefixes = [], files = new Set() }) {
   const tempDirs = [...new Set([os.tmpdir(), '/tmp'].map(real).filter(Boolean))];
   const allowed = (file) => {
     // Roots are resolved per call: they may appear after start (e.g. a new Paseo temp dir).
@@ -36,8 +39,9 @@ export function createImageResolver({ roots = [], tempPrefixes = [] }) {
     if (!path.isAbsolute(p) || p.includes('\0')) return null;
     const file = real(p);
     if (!file) return null;
-    const type = IMAGE_TYPES[path.extname(file).toLowerCase()];
-    if (!type || !allowed(file)) return null;
+    const ext = path.extname(file).toLowerCase();
+    const type = files.has(file) ? IMAGE_TYPES[ext] || AUDIO_TYPES[ext] : allowed(file) && IMAGE_TYPES[ext];
+    if (!type) return null;
     const st = fs.statSync(file);
     if (!st.isFile() || st.size > MAX_BYTES) return null;
     return { file, type, size: st.size };
