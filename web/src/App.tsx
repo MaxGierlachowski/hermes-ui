@@ -108,7 +108,7 @@ function Shell() {
               </SheetContent>
             </Sheet>
             {!openId && tab === 'board' && (
-              <Button size="lg" className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] right-4 z-40 rounded-full shadow-lg" onClick={() => setNewOpen(true)}>
+              <Button size="lg" className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+1rem)] right-4 z-40 rounded-full shadow-lg" onClick={() => setNewOpen(true)}>
                 <Plus className="size-4" />{t('Neuer Chat')}
               </Button>
             )}
@@ -163,7 +163,7 @@ function AppToaster() {
   return (
     <Toaster
       position={isMobile ? (top ? 'top-center' : 'bottom-center') : 'bottom-left'}
-      mobileOffset={top ? { top: 'calc(0.5rem + env(safe-area-inset-top))' } : { bottom: 'calc(4.5rem + env(safe-area-inset-bottom))' }}
+      mobileOffset={top ? { top: 'calc(0.5rem + env(safe-area-inset-top))' } : { bottom: 'calc(5rem + env(safe-area-inset-bottom))' }}
       style={{ '--width': 'min(356px, calc(40vw - 32px))' } as React.CSSProperties}
     />
   )
