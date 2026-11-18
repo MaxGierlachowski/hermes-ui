@@ -16,14 +16,16 @@ const REL_LABEL = { created: t('gestartet'), steers: t('gesteuert'), watches: t(
 export function PaseoPanel({ sessionId, version }: { sessionId: string; version: string }) {
   const [agents, setAgents] = useState<PaseoAgent[] | null>(null)
   const [connected, setConnected] = useState(true)
+  const [source, setSource] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
 
   const load = useCallback(async () => {
     try {
-      const r = await api<{ connected: boolean; agents: PaseoAgent[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/paseo`)
+      const r = await api<{ connected: boolean; source?: string | null; agents: PaseoAgent[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/paseo`)
       setAgents(r.agents)
       setConnected(r.connected)
+      setSource(r.source ?? null)
     } catch { setAgents([]) }
   }, [sessionId])
   // `version` changes whenever the card's agent states change (pushed live), so the list follows.
@@ -51,7 +53,7 @@ export function PaseoPanel({ sessionId, version }: { sessionId: string; version:
           </CollapsibleContent>
         </Collapsible>
       )}
-      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><Lock className="size-3" />{t('Nur lesen – Agents werden von Hermes gesteuert.')}</p>
+      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><Lock className="size-3" />{t('Nur lesen – Agents werden von Hermes gesteuert.')}{source && <span className="ml-auto font-mono opacity-70">{source}</span>}</p>
     </div>
   )
 }

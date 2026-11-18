@@ -82,6 +82,9 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state. |
 | `HERMES_HOME` | `--hermes-home` | `~/.hermes` | Hermes data dir: `state.db`, `gateway.sock`. |
 | `HERMES_UI_PASEO` | `--paseo` | `auto` | `off` disables the Paseo integration. |
+| `HERMES_UI_PASEO_SOURCE` | `--paseo-source` | `auto` | `mcp` (paseo-mcp ≥ 0.4.0 events), `daemon` (direct connection) or `auto` (mcp when available, otherwise daemon). |
+| `PASEO_MCP_COMMAND` | `--paseo-mcp-command` | `paseo-mcp` if it is on `PATH` | stdio command for paseo-mcp. It is started with `PASEO_MCP_READONLY=1`. |
+| `PASEO_MCP_URL`, `PASEO_MCP_TOKEN` | `--paseo-mcp-url`, `--paseo-mcp-token` | – | Paseo plugin's Streamable HTTP endpoint instead of stdio. Use a token with the `read` scope. |
 | `PASEO_DAEMON_URL` | `--paseo-url` | from `PASEO_MCP_CONFIG`, else `ws://127.0.0.1:6767/ws` | Paseo daemon. |
 | `PASEO_MCP_CONFIG` | `--paseo-mcp-config` | `~/.config/paseo-mcp/config.json` | Where the daemon URL is read from. |
 | `PASEO_OPS_FILE` | `--paseo-ops-file` | `$HERMES_HOME/ops-loop/paseo.json` | Optional agent goal / phase file. |
@@ -130,6 +133,7 @@ launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
   - Clarify: answer with buttons, multi-select or free text, or skip. A countdown shows when Hermes gives a time limit.
 - **Paseo agents (optional, read-only):**
   - The board finds a session's agents from the session's own `paseo_*` tool calls and shows them as chips with their live state.
+  - The live state comes from [paseo-mcp](https://github.com/MaxGierlachowski/paseo-mcp) events (≥ 0.4.0): a subscription to the `paseo://agents` resource, with no polling. A direct daemon connection is the fallback. When the daemon is reachable it also provides richer transcripts and the app deep link.
   - The "Paseo agents" tab lists them; a transcript view shows each one read-only, updating live while the agent runs.
   - A deep link (`paseo://h/<server>/agent/<id>`) opens the agent in the Paseo app.
 - **⌘K palette:** sessions, new chat (N), theme, language, cron/system filter, remote access.
@@ -152,7 +156,7 @@ npm run check             # syntax check of the backend
 Layout:
 
 - `server.mjs`: HTTP API and SSE.
-- `src/`: Hermes gateway client, state.db reader, Paseo adapter, iroh, tunnels, devices, config.
+- `src/`: Hermes gateway client, state.db reader, Paseo adapter (`paseo.mjs`, `paseo-mcp-source.mjs`), iroh, tunnels, devices, config.
 - `bin/`: CLI.
 - `web/`: React + Vite + Tailwind + shadcn/ui.
 
@@ -163,7 +167,8 @@ Hermes UI is released under the **MIT** license (see `LICENSE`). The components 
 | Component | Use | License |
 |---|---|---|
 | iroh-fetch, iroh-gateway ([iroh-bridge](https://github.com/irohkit/iroh-bridge)) | Remote access over iroh | MIT |
-| @getpaseo/client | Read-only Paseo daemon access | Apache-2.0 |
+| @getpaseo/client | Read-only Paseo daemon access (fallback) | Apache-2.0 |
+| @modelcontextprotocol/sdk | paseo-mcp client (events) | MIT |
 | shadcn/ui, Radix UI, Base UI | UI components | MIT |
 | Dice UI Kanban, dnd-kit | Board and drag & drop | MIT |
 | prompt-kit | Chat input and thread | MIT |

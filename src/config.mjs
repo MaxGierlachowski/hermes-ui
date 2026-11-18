@@ -91,6 +91,12 @@ export function loadConfig(argv = []) {
     tailscale: { authKey: get('TS_AUTHKEY', 'ts-authkey', ''), hostname: get('TS_HOSTNAME', 'ts-hostname', 'hermes-ui') },
     paseo: {
       mode: get('HERMES_UI_PASEO', 'paseo', 'auto'), // auto | off
+      source: get('HERMES_UI_PASEO_SOURCE', 'paseo-source', 'auto'), // auto | mcp | daemon
+      mcp: {
+        command: get('PASEO_MCP_COMMAND', 'paseo-mcp-command', ''),
+        url: get('PASEO_MCP_URL', 'paseo-mcp-url', ''),
+        token: get('PASEO_MCP_TOKEN', 'paseo-mcp-token', ''),
+      },
       url: paseoUrl || 'ws://127.0.0.1:6767/ws',
       opsLoopFile: expand(get('PASEO_OPS_FILE', 'paseo-ops-file', path.join(hermesHome, 'ops-loop', 'paseo.json'))),
     },

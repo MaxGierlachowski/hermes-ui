@@ -32,7 +32,7 @@ const WEB_DIST = cfg.uiDir;
 
 const store = new Store(path.join(HERMES_HOME, 'state.db'));
 // Paseo is optional: HERMES_UI_PASEO=off, or simply no daemon running (it then stays disconnected quietly).
-const paseo = new Paseo({ url: cfg.paseo.url, opsLoopFile: cfg.paseo.opsLoopFile });
+const paseo = new Paseo({ url: cfg.paseo.url, opsLoopFile: cfg.paseo.opsLoopFile, source: cfg.paseo.source, mcp: cfg.paseo.mcp });
 const PASEO_ON = cfg.paseo.mode !== 'off';
 const devices = new Devices(cfg.dataDir);
 const remote = cfg.remote === 'iroh'
@@ -183,7 +183,7 @@ paseo.on('agent', (id) => {
   for (const [ref, set] of agentSessions) if (ref !== id && id.startsWith(ref)) set.forEach((s) => sessions.add(s));
   for (const sid of sessions) pushCard(sid);
 });
-paseo.on('status', (ok) => { console.log(`paseo ${ok ? 'connected' : 'disconnected'}`); for (const sid of sessionAgents.keys()) pushCard(sid); });
+paseo.on('status', (ok) => { console.log(`paseo ${ok ? `connected (${paseo.sourceLabel})` : 'disconnected'}`); for (const sid of sessionAgents.keys()) pushCard(sid); });
 paseo.on('log', (m) => console.log(m));
 
 // Cron ticks that never ran an agent leave an empty session row behind; they are noise.
@@ -778,7 +778,7 @@ const server = http.createServer(async (req, res) => {
       const id = decodeURIComponent(m[1]);
       const list = paseoFor(id);
       await Promise.all(list.filter((a) => !a.known).map((a) => paseo.ensure(a.id)));
-      return send(res, 200, { connected: paseo.connected, agents: paseoFor(id) });
+      return send(res, 200, { connected: paseo.connected, source: paseo.sourceLabel, agents: paseoFor(id) });
     }
     if ((m = p.match(/^\/api\/paseo\/agents\/([0-9a-f-]{36})\/timeline$/)) && req.method === 'GET') {
       const id = m[1];
