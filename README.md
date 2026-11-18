@@ -157,6 +157,7 @@ launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
 - **Phones and tablets:** every control is at least 44 × 44 px to hit (Apple HIG; checked by a test), fields use 16 px text so iOS does not zoom in, and nothing changes for a mouse.
   - The thread opens as a bottom sheet: drag it down to close. The composer is one row (attach · text · one round button that is the mic, send, or stop), Enter makes a new line, and it stays above the keyboard on iOS too.
   - Board: column tabs, swipe sideways to switch columns, long-press a card to move it. Column choice, new chat, notifications and remote access open as bottom sheets; search is full screen.
+  - Images (thread, attachments, Paseo transcripts) open full screen: pinch or double-tap to zoom the image only (the app itself never zooms), drag to pan, swipe down to close.
 
 ## Push notifications
 
@@ -188,7 +189,7 @@ npm run test:ui           # build the UI, then the Playwright UI tests (web/e2e)
 The UI tests run the built bundle with every `/api` request answered from synthetic fixtures (`web/e2e/fixtures.ts`), so they need no backend and never touch Hermes. They cover three phones (390 × 844, 375 × 667, 412 × 915, touch) and a desktop:
 
 - `touch-targets`: every interactive element on every screen must be hittable over 44 × 44 px (measured by hit-testing, so an enlarged hit area counts and an overlapping neighbour fails), and no field may be below 16 px.
-- `mobile-behaviour`: sheet swipe-to-close, long-press, column swipe, Enter in the composer, and the keyboard inset.
+- `mobile-behaviour`: sheet swipe-to-close, long-press, column swipe, Enter in the composer, the keyboard inset, and the image viewer (pinch, double tap, swipe down; the page scale must stay 1).
 - `desktop-regression`: pixel comparison at 1440 × 900, light and dark, against `web/e2e/__screenshots__/`. Touch styles live behind `pointer: coarse` (Tailwind variant `touch:`) or `max-md:`, so a desktop with a mouse must not change by a single pixel. After an intended desktop change, update the images with `npx playwright test desktop --update-snapshots` (in `web/`) and review them. The images are rendered on macOS; other systems render fonts differently.
 - `SHOTS_DIR=<dir> npx playwright test screenshots` writes one screenshot per screen, phone and theme.
 
@@ -215,6 +216,7 @@ Hermes UI is released under the **MIT** license (see `LICENSE`). The components 
 | Dice UI Kanban, dnd-kit | Board and drag & drop | MIT |
 | prompt-kit | Chat input and thread | MIT |
 | cmdk, sonner, react-resizable-panels, next-themes | Palette, toasts, panels, theme | MIT |
+| react-zoom-pan-pinch | Pinch and double-tap zoom in the image viewer on touch screens | MIT |
 | lucide-react | Icons | ISC |
 | Tailwind CSS, @tailwindcss/typography, tw-animate-css | Styling | MIT |
 | react-markdown, remark-gfm, marked, use-stick-to-bottom | Chat rendering | MIT |

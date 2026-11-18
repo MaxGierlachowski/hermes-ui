@@ -332,9 +332,9 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
     <div className="flex h-full min-h-0 flex-col bg-background">
       {/* Phones: the header is also a drag handle for the sheet (swipe down closes). */}
       <div data-sheet-drag={isMobile || undefined} className="flex items-start gap-3 border-b px-4 py-3 max-md:gap-2 max-md:px-3 max-md:pb-2 max-md:pt-0">
-        <StatusDot column={session.column} running={session.running} pending={!!session.pending?.length} className="mt-2 max-md:mt-[1.125rem]" />
-        <div className="min-w-0 flex-1 max-md:pt-2.5">
-          <h2 className="line-clamp-2 text-[15px] font-semibold leading-snug max-md:text-base max-md:leading-snug">{session.title}</h2>
+        <StatusDot column={session.column} running={session.running} pending={!!session.pending?.length} className="mt-2 max-md:mt-[0.8125rem]" />
+        <div className="min-w-0 flex-1 max-md:pt-1.5">
+          <h2 className="line-clamp-2 text-[15px] font-semibold leading-snug max-md:text-base max-md:leading-snug max-md:[overflow-wrap:anywhere]">{session.title}</h2>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1"><SourceIcon source={session.source} className="size-3" />{session.source}</span>
             <span>{clock(session.createdAt)}</span>

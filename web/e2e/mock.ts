@@ -5,9 +5,10 @@ import { IMAGE_SVG, INBOX_ITEMS, MESSAGES, NOW, OPEN, PASEO_AGENTS, PASEO_TIMELI
 
 const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
 
-export async function mockApi(page: Page, opts: { auth?: boolean } = {}) {
+export async function mockApi(page: Page, opts: { auth?: boolean; freezeClock?: boolean } = {}) {
   const auth = opts.auth ?? true
-  await page.clock.setFixedTime(NOW * 1000)
+  // Frozen by default so relative times render the same; animations that read the clock need it running.
+  if (opts.freezeClock ?? true) await page.clock.setFixedTime(NOW * 1000)
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url())
     const p = url.pathname.replace(/^.*\/api\//, '/api/')
