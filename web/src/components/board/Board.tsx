@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { SortingStrategy } from '@dnd-kit/sortable'
 import { Kanban, KanbanBoard, KanbanColumn, KanbanItem, KanbanOverlay } from '@/components/ui/kanban'
 import { cn } from '@/lib/utils'
 import { COLUMNS, type Column, type Session } from '@/lib/types'
@@ -10,6 +11,13 @@ import { OverlayScroll } from '@/components/common/OverlayScroll'
 import { t } from '@/lib/i18n'
 
 type Cols = Record<Column, Session[]>
+
+// Order inside a column is automatic: open questions first, then most recent activity.
+const byAttention = (a: Session, b: Session) => (b.pending?.length ? 1 : 0) - (a.pending?.length ? 1 : 0) || b.updatedAt - a.updatedAt
+// Cards never shift to make room inside a column (there is no manual order to keep), so a drop
+// always lands on the slot the card will actually stay in.
+const noShift: SortingStrategy = () => null
+const sameCards = (a: Session[], b: Session[]) => a.length === b.length && a.every((s) => b.some((x) => x.id === s.id))
 
 function useColumns(): Cols {
   const sessions = useBoard((s) => s.sessions)
@@ -23,8 +31,7 @@ function useColumns(): Cols {
       if (q && !`${s.title} ${s.initialPrompt} ${s.activity}`.toLowerCase().includes(q)) continue
       cols[s.column]?.push(s)
     }
-    // Open questions first, then most recent activity.
-    for (const c of Object.values(cols)) c.sort((a, b) => (b.pending?.length ? 1 : 0) - (a.pending?.length ? 1 : 0) || b.updatedAt - a.updatedAt)
+    for (const c of Object.values(cols)) c.sort(byAttention)
     return cols
   }, [sessions, search, source])
 }
@@ -55,12 +62,20 @@ function DesktopBoard({ cols }: { cols: Cols }) {
   return (
     <Kanban<Session>
       value={value}
-      onValueChange={(v) => setDrag(v as Cols)}
+      strategy={noShift}
+      onValueChange={(v) => {
+        // Only a change of column counts; the card shows at its sorted place in the column it is over.
+        const next = v as Cols
+        if (COLUMNS.every(({ id }) => sameCards(next[id], value[id]))) return
+        setDrag(Object.fromEntries(COLUMNS.map(({ id }) => [id, [...next[id]].sort(byAttention)])) as Cols)
+      }}
       getItemValue={(s) => s.id}
       onDragEnd={(e) => {
         const id = String(e.active.id)
         const target = drag && (Object.keys(drag) as Column[]).find((c) => drag[c].some((s) => s.id === id))
         setDrag(null)
+        // Same render as the drop: the store already has the card in its new column, so the
+        // overlay animates there instead of back to where the drag started.
         if (target && byId[id] && byId[id].column !== target) setColumn(id, target)
       }}
       onDragCancel={() => setDrag(null)}

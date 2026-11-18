@@ -68,6 +68,7 @@ const EN: Record<string, string> = {
   'Immer erlauben': 'Always allow',
   'In der Paseo-App öffnen': 'Open in the Paseo app',
   'Keine Karten': 'No cards',
+  'Karte konnte nicht verschoben werden': 'Could not move the card',
   'Keine.': 'None.',
   'Kopieren': 'Copy',
   'Kopplungslink einfügen': 'Paste pairing link',
