@@ -6,7 +6,9 @@
 //   daemon  a direct @getpaseo/client connection: list + agent_update stream.
 // auto = mcp when PASEO_MCP_COMMAND / PASEO_MCP_URL is configured (or `paseo-mcp` is on PATH) and works,
 // otherwise daemon. Even in mcp mode a reachable daemon is used for richer transcripts and the app deep link.
-// Nothing here sends a prompt, answers a permission, archives or changes an agent.
+// Nothing here sends a prompt, archives or changes an agent. The one write path is respondPermission(),
+// used when the user answers a permission in the inbox: it goes through paseo-mcp's own
+// paseo_respond_permission tool (HERMES_UI_PASEO_RESPOND=off disables it).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,8 +36,10 @@ const same = (a, b) => a && b && a.status === b.status && a.title === b.title &&
   && (a.pendingPermissions || []).length === (b.pendingPermissions || []).length && !!a.lastError === !!b.lastError;
 
 export class Paseo extends EventEmitter {
-  constructor({ url, opsLoopFile, source = 'auto', mcp = {} } = {}) {
+  constructor({ url, opsLoopFile, source = 'auto', mcp = {}, respond = true } = {}) {
     super();
+    this.respondEnabled = respond;
+    this.permDetail = new Map(); // requestId -> { description, command } from the daemon (richer than paseo-mcp's summary)
     this.url = url;
     this.opsInfo = makeOpsInfo(opsLoopFile);
     this.source = source;
@@ -185,7 +189,7 @@ export class Paseo extends EventEmitter {
       status: a.status,
       state, // running | idle | closed | error | needs-attention | archived
       archived: !!a.archivedAt,
-      pendingPermissions: (a.pendingPermissions || []).map((p) => ({ kind: p.kind, name: p.name, title: p.title || null })),
+      pendingPermissions: (a.pendingPermissions || []).map((p) => permissionView(p, this.permDetail.get(p.id))),
       attentionReason: a.attentionReason || null,
       lastError: a.lastError ? String(a.lastError.message || a.lastError).slice(0, 300) : null,
       account: a.labels?.account || null,
@@ -199,6 +203,35 @@ export class Paseo extends EventEmitter {
       createdAt: a.createdAt || null,
       deepLink: this.serverId ? `paseo://h/${encodeURIComponent(this.serverId)}/agent/${encodeURIComponent(id)}` : null,
     };
+  }
+
+  /** Fills in what a pending permission is about (description, command) from the daemon, if reachable. */
+  async permissionDetails(id) {
+    const a = this.agents.get(id);
+    const missing = (a?.pendingPermissions || []).filter((p) => p.id && !this.permDetail.has(p.id) && !p.description && !p.input);
+    if (!missing.length || !this.daemonOk) return false;
+    try {
+      const h = this.client.agents.ref(id);
+      await h.refresh();
+      for (const p of h.current()?.pendingPermissions || []) this.permDetail.set(p.id, { description: p.description || null, command: commandOf(p), actions: p.actions || null });
+      if (this.permDetail.size > 500) this.permDetail = new Map([...this.permDetail].slice(-200));
+      return true;
+    } catch { return false; }
+  }
+
+  get canRespond() { return this.respondEnabled && !!(this.mcpConfig.command || this.mcpConfig.url); }
+
+  /**
+   * Answers a pending permission through paseo-mcp's paseo_respond_permission (a separate, short-lived
+   * client that is not read-only; the event subscription stays read-only).
+   */
+  async respondPermission(agentId, requestId, decision, message) {
+    if (!this.canRespond) throw new Error('Answering Paseo permissions is disabled (needs paseo-mcp, HERMES_UI_PASEO_RESPOND=on)');
+    const mcp = new McpSource({ ...this.mcpConfig, readOnly: false });
+    try {
+      await mcp.open();
+      return await mcp.respondPermission(agentId, requestId, decision, message);
+    } finally { mcp.close(); }
   }
 
   // Read-only transcript, projected like the Paseo app shows it. Reasoning is left out.
@@ -224,6 +257,25 @@ export class Paseo extends EventEmitter {
     }
     return { agent: this.view(id), items, hasOlder: !!page.hasOlder, source: 'daemon' };
   }
+}
+
+function commandOf(p) {
+  const i = p.input || {};
+  const d = p.detail || {};
+  const c = i.command || d.command || i.file_path || d.path || i.url || i.pattern || '';
+  return c ? String(c).slice(0, 2000) : null;
+}
+
+function permissionView(p, extra = {}) {
+  return {
+    id: p.id || null,
+    kind: p.kind,
+    name: p.name,
+    title: p.title || null,
+    description: (p.description || extra?.description || null)?.slice?.(0, 600) ?? null,
+    command: commandOf(p) || extra?.command || null,
+    actions: (p.actions || extra?.actions || null)?.map?.(({ id, label, behavior }) => ({ id, label, behavior })) ?? null,
+  };
 }
 
 function imagesOf(x) {

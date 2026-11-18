@@ -79,14 +79,19 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_URL` | `--ui-url` | – | Public URL of the static UI, used in iroh pairing links. |
 | `HERMES_UI_REMOTE` | `--remote` | `off` | `off` \| `iroh` \| `tailscale-funnel` \| `tailscale-serve` \| `cloudflare`. |
 | `HERMES_UI_LANG` | `--lang` | `en` | Language of server-generated texts (`en`, `de`). The UI follows the browser; change it in ⌘K. |
-| `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state. |
+| `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state, inbox history, VAPID keys and push subscriptions. |
 | `HERMES_UI_IMAGE_ROOTS` | `--image-roots` | – | Extra directories (separated by `:`) whose images transcripts may show. Always allowed: Hermes' image cache, `PASEO_HOME` and Paseo's `paseo-attachments-*` temp dirs. |
 | `PASEO_HOME` | `--paseo-home` | `~/.paseo` | Paseo home, allowed as an image root. |
 | `HERMES_HOME` | `--hermes-home` | `~/.hermes` | Hermes data dir: `state.db`, `gateway.sock`. |
 | `HERMES_UI_PASEO` | `--paseo` | `auto` | `off` disables the Paseo integration. |
 | `HERMES_UI_PASEO_SOURCE` | `--paseo-source` | `auto` | `mcp` (paseo-mcp ≥ 0.4.0 events), `daemon` (direct connection) or `auto` (mcp when available, otherwise daemon). |
-| `PASEO_MCP_COMMAND` | `--paseo-mcp-command` | `paseo-mcp` if it is on `PATH` | stdio command for paseo-mcp. It is started with `PASEO_MCP_READONLY=1`. |
+| `PASEO_MCP_COMMAND` | `--paseo-mcp-command` | `paseo-mcp` if it is on `PATH` | stdio command for paseo-mcp. The event subscription runs with `PASEO_MCP_READONLY=1`; only an answer to a permission from the inbox starts a second, short-lived client without it. |
 | `PASEO_MCP_URL`, `PASEO_MCP_TOKEN` | `--paseo-mcp-url`, `--paseo-mcp-token` | – | Paseo plugin's Streamable HTTP endpoint instead of stdio. Use a token with the `read` scope. |
+| `PASEO_MCP_WRITE_TOKEN` | `--paseo-mcp-write-token` | – | HTTP only: a token allowed to call `paseo_respond_permission`. |
+| `HERMES_UI_PASEO_RESPOND` | `--paseo-respond` | `on` | `off` = the inbox shows Paseo permissions but cannot answer them. |
+| `HERMES_UI_PUSH` | `--push` | `on` | `off` disables Web Push. |
+| `HERMES_UI_PUSH_SUBJECT` | `--push-subject` | `HERMES_UI_URL` if https | VAPID subject (`mailto:` or `https:`); Apple rejects anything else. |
+| `HERMES_UI_INBOX_DAYS`, `HERMES_UI_INBOX_MAX` | `--inbox-days`, `--inbox-max` | `30`, `1000` | How long / how many inbox entries are kept. |
 | `PASEO_DAEMON_URL` | `--paseo-url` | from `PASEO_MCP_CONFIG`, else `ws://127.0.0.1:6767/ws` | Paseo daemon. |
 | `PASEO_MCP_CONFIG` | `--paseo-mcp-config` | `~/.config/paseo-mcp/config.json` | Where the daemon URL is read from. |
 | `PASEO_OPS_FILE` | `--paseo-ops-file` | `$HERMES_HOME/ops-loop/paseo.json` | Optional agent goal / phase file. |
@@ -133,21 +138,39 @@ launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
 - **Approvals and questions:** shown on the card and inline in the thread.
   - Approval: approve with the options Hermes offers (once / session / always) or deny.
   - Clarify: answer with buttons, multi-select or free text, or skip. A countdown shows when Hermes gives a time limit.
-- **Paseo agents (optional, read-only):**
+- **Paseo agents (optional; read-only except answering permissions from the inbox):**
   - The board finds a session's agents from the session's own `paseo_*` tool calls and shows them as chips with their live state.
   - The live state comes from [paseo-mcp](https://github.com/MaxGierlachowski/paseo-mcp) events (≥ 0.4.0): a subscription to the `paseo://agents` resource, with no polling. A direct daemon connection is the fallback. When the daemon is reachable it also provides richer transcripts and the app deep link.
   - The "Paseo agents" tab lists them; a transcript view shows each one read-only, updating live while the agent runs.
   - A deep link (`paseo://h/<server>/agent/<id>`) opens the agent in the Paseo app.
   - Images that agents reference by local path (`file:///…`, `/Users/…`) are served read-only by `/api/file`: image types only, only below the allowed roots (see `HERMES_UI_IMAGE_ROOTS`), checked on the real path. Missing files show a placeholder; a click opens a lightbox.
   - Files Hermes attaches to a reply with `MEDIA:<path>` (what Slack shows as attachments) appear under the message: images, audio players, other files by name. Only exactly those referenced files become readable, the tags never show up in the text, not even while streaming.
+- **Tabs:** Board and Inbox, in the header on a desktop and as a bottom tab bar on a phone. The tab is part of the URL (`#/board`, `#/inbox`, `#/inbox/<session>`), so a reload or a link keeps it. `g b` / `g i` switch.
+- **Inbox (across all chats):**
+  - *Needs you:* every open Hermes approval and clarify question of every followed session, answerable in place with the same controls and countdown as in the thread, and every Paseo agent with a pending permission (agent, tool, command or description), answerable with Allow / Deny via paseo-mcp's `paseo_respond_permission`. Each entry names its chat and links to the thread.
+  - *History:* requests and how they were answered (here, elsewhere, expired), finished chats, errors, Paseo agents that finished, failed or hit a usage limit. Read/unread, "mark all read", filters by kind and source, grouped by day. Stored in `<data-dir>/inbox.json` (30 days / 1000 entries by default).
+  - A Hermes chat counts as *done* only when Hermes' turn is over **and** none of the Paseo agents it started or steers is still running or waiting for a permission (the same rule as the columns). A Paseo agent finishing is its own entry.
+- **In-app notifications:** toasts for new requests and finished chats while the app is visible (a click opens the thread or the inbox), a badge on the Inbox tab and on the app icon (Badging API where available).
+- **Push notifications (Web Push, see below).**
 - **Search (⌘K, `/` or the search field):** full text over the titles and content of all chats, using Hermes' own FTS5 index (`messages_fts`, read-only; user and Hermes messages, no tool output). Results show title, source, column, last activity, message and Paseo-agent counts and a snippet with the hit marked; Enter opens the thread at the matching message. Archived chats on request. Also: new chat (N), theme, language, cron/system filter, remote access.
 - **Light and dark mode**, English and German, a mobile layout, and installable as a PWA.
+
+## Push notifications
+
+Standard Web Push with VAPID. The backend generates its key pair on first start (`<data-dir>/vapid.json`, never part of the repo) and sends outgoing HTTPS requests to whatever push service the browser uses (Apple, Google, Mozilla). No server of your own and no inbound port is needed, also not in iroh mode.
+
+- **Enable** in Inbox → bell icon (or ⌘K → Notifications). Browsers only ask for permission after a click.
+- **iPhone / iPad:** push works only in the app added to the Home Screen (iOS / iPadOS 16.4 or later): Safari → Share → *Add to Home Screen*, open it from there, then enable. The settings dialog explains this when it runs in plain Safari.
+- **Per device:** which kinds push (approvals and questions, done, errors and limits, Paseo agents at all), optional quiet hours (in the device's time zone) and "don't push while the app is open and visible" (the UI reports its visibility; then only the in-app toast appears).
+- **Payload:** only the chat title and the kind ("Approval needed", "Done", "Error"). A click opens the thread or the inbox. On browsers with reliable notification actions (not Apple's push service) Hermes approvals get *Allow …* / *Deny …*; these open the app with a confirmation dialog and never answer by themselves.
+- **Lifecycle:** subscriptions belong to a paired device and are deleted when it is unpaired or signs out; subscriptions the push service reports as gone (404/410) are removed.
+- **Service worker:** `web/public/sw.js` is the one worker for the UI's scope. It imports iroh-fetch's `iroh-sw.js` (media over iroh) and adds the `push` and `notificationclick` handlers.
 
 ## How it talks to Hermes
 
 - **Read:** `$HERMES_HOME/state.db`, opened read-only (`node:sqlite`) and polled every 1.5 s, plus the Hermes gateway's event stream.
 - **Write:** like the Hermes desktop app does it. The backend gets a single-use ticket from `gateway.sock`, then uses the gateway WebSocket with JSON-RPC `session.create`, `prompt.submit`, `session.resume`, `session.interrupt`, `approval.respond` and `clarify.respond`. Images go through `/api/chat/image-upload`, voice through `/api/audio/transcribe`.
-- **Never:** it writes nothing under `$HERMES_HOME`, never restarts the Hermes gateway, and sends no commands to the Paseo daemon.
+- **Never:** it writes nothing under `$HERMES_HOME`, never restarts the Hermes gateway, and sends no commands to the Paseo daemon. The one write to Paseo is your own answer to a permission request from the inbox, through paseo-mcp.
 
 ## Development
 
@@ -160,7 +183,7 @@ npm run check             # syntax check of the backend
 Layout:
 
 - `server.mjs`: HTTP API and SSE.
-- `src/`: Hermes gateway client, state.db reader, Paseo adapter (`paseo.mjs`, `paseo-mcp-source.mjs`), iroh, tunnels, devices, config.
+- `src/`: Hermes gateway client, state.db reader, Paseo adapter (`paseo.mjs`, `paseo-mcp-source.mjs`), inbox history (`inbox.mjs`), Web Push (`push.mjs`), iroh, tunnels, devices, config.
 - `bin/`: CLI.
 - `web/`: React + Vite + Tailwind + shadcn/ui.
 
@@ -173,6 +196,7 @@ Hermes UI is released under the **MIT** license (see `LICENSE`). The components 
 | iroh-fetch, iroh-gateway ([iroh-bridge](https://github.com/irohkit/iroh-bridge)) | Remote access over iroh | MIT |
 | @getpaseo/client | Read-only Paseo daemon access (fallback) | Apache-2.0 |
 | @modelcontextprotocol/sdk | paseo-mcp client (events) | MIT |
+| web-push | Web Push (VAPID, payload encryption) | MPL-2.0 |
 | shadcn/ui, Radix UI, Base UI | UI components | MIT |
 | Dice UI Kanban, dnd-kit | Board and drag & drop | MIT |
 | prompt-kit | Chat input and thread | MIT |

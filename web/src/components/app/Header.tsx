@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { setFilter, useBoard } from '@/lib/store'
 import { useMemo } from 'react'
 import { t } from '@/lib/i18n'
+import { HeaderTabs } from './AppTabs'
 
 export function Header({ onNew, onCommand, onRemote }: { onNew: () => void; onCommand: () => void; onRemote: () => void }) {
   const { resolvedTheme, setTheme } = useTheme()
@@ -18,6 +19,7 @@ export function Header({ onNew, onCommand, onRemote }: { onNew: () => void; onCo
   const remote = useBoard((s) => s.remote)
   const days = useBoard((s) => s.days)
   const system = useBoard((s) => s.system)
+  const tab = useBoard((s) => s.tab)
   const source = useBoard((s) => s.source)
   const sessions = useBoard((s) => s.sessions)
   const sources = useMemo(() => [...new Set(Object.values(sessions).map((s) => s.source))].sort(), [sessions])
@@ -35,6 +37,7 @@ export function Header({ onNew, onCommand, onRemote }: { onNew: () => void; onCo
           <TooltipContent>{ok ? 'Live mit dem Hermes-Gateway verbunden' : gateway ? 'Live-Stream unterbrochen' : t('Gateway nicht verbunden (nur Lesen)')}</TooltipContent>
         </Tooltip>
       </div>
+      <HeaderTabs />
 
       <button
         onClick={onCommand}
@@ -44,7 +47,7 @@ export function Header({ onNew, onCommand, onRemote }: { onNew: () => void; onCo
       </button>
 
       <div className="ml-auto flex items-center gap-1.5">
-        <div className="hidden items-center gap-1.5 lg:flex">
+        <div className={cn('hidden items-center gap-1.5', tab === 'board' && 'lg:flex')}>
           <Select value={source || 'all'} onValueChange={(v) => setFilter({ source: v === 'all' ? '' : v })}>
             <SelectTrigger size="sm" className="h-8 w-[130px] text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>

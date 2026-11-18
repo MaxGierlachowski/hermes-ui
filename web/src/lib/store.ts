@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { api, Unauthorized } from './api'
 import { apiUrl, getConnection, connectIroh, consumePairCode, sameOriginBackend, savedRemote, takePairingFragment } from './backend'
-import type { Column, Device, OutgoingMessage, RemoteState, Session, ThreadMessage } from './types'
+import type { Column, Device, InboxItem, OpenItem, OutgoingMessage, RemoteState, Session, Tab, ThreadMessage } from './types'
 
 type State = {
   auth: 'unknown' | 'ok' | 'required' | 'no-backend'
@@ -26,6 +26,9 @@ type State = {
   flash: string | null
   highlight: number | null // message id to scroll to and mark (search hit)
   highlightQuery: string
+  tab: Tab
+  inbox: { open: OpenItem[]; items: InboxItem[]; unread: number; loaded: boolean; paseo: { connected: boolean; canRespond: boolean } }
+  confirm: { sessionId: string; promptId: string; choice: string } | null // approval from a notification action
 }
 
 let state: State = {
@@ -48,6 +51,9 @@ let state: State = {
   flash: null,
   highlight: null,
   highlightQuery: '',
+  tab: localStorage.getItem('hk_tab') === 'inbox' ? 'inbox' : 'board',
+  inbox: { open: [], items: [], unread: 0, loaded: false, paseo: { connected: false, canRespond: false } },
+  confirm: null,
 }
 const listeners = new Set<() => void>()
 const set = (patch: Partial<State> | ((s: State) => Partial<State>)) => {
@@ -115,8 +121,7 @@ export async function openThread(id: string | null, opts: { highlight?: number; 
   // A search hit can be older than the board's window: show its card until the next reload.
   if (id && opts.session && !state.sessions[id]) upsert(opts.session)
   set({ openId: id, messages: [], loadingThread: !!id, highlight: opts.highlight ?? null, highlightQuery: opts.query || '', streaming: state.streaming?.id === id ? state.streaming : null })
-  if (id) history.replaceState(null, '', `#${encodeURIComponent(id)}`)
-  else history.replaceState(null, '', location.pathname)
+  writeHash()
   if (id) await refreshThread(id)
 }
 
@@ -134,6 +139,96 @@ export async function refreshThread(id: string) {
     upsert(session)
     set({ messages: withPending(id, messages), loadingThread: false })
   } catch (err) { set({ loadingThread: false }); handle(err) }
+}
+
+// ---------- routing: #/board, #/board/<session>, #/inbox, #/inbox/<session>[?confirm=<prompt>&choice=<c>] ----------
+// Legacy links (#<session>) open the board. Pairing fragments (#iroh=…) are handled by bootstrap().
+function writeHash() {
+  const h = `#/${state.tab}${state.openId ? `/${encodeURIComponent(state.openId)}` : ''}`
+  if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h)
+}
+export function setTab(tab: Tab) {
+  localStorage.setItem('hk_tab', tab)
+  set({ tab })
+  writeHash()
+  if (tab === 'inbox' && !state.inbox.loaded) loadInbox()
+}
+export function applyHash(hash = location.hash) {
+  const raw = hash.replace(/^#/, '')
+  if (!raw || /(^|&)iroh=/.test(raw)) { writeHash(); return }
+  const [path, query] = raw.split('?')
+  const m = path.match(/^\/(board|inbox)(?:\/(.+))?$/)
+  const tab: Tab = m ? (m[1] as Tab) : 'board'
+  const id = m ? (m[2] ? decodeURIComponent(m[2]) : null) : decodeURIComponent(path)
+  if (tab !== state.tab) setTab(tab)
+  const q = new URLSearchParams(query || '')
+  if (id && q.get('confirm') && q.get('choice')) set({ confirm: { sessionId: id, promptId: q.get('confirm')!, choice: q.get('choice')! } })
+  if (id && id !== state.openId) openThread(id)
+  else if (!id && state.openId && m) openThread(null)
+  else writeHash()
+}
+export const clearConfirm = () => set({ confirm: null })
+
+// ---------- inbox ----------
+export async function loadInbox() {
+  try {
+    const r = await api<{ open: OpenItem[]; items: InboxItem[]; unread: number; paseo: { connected: boolean; canRespond: boolean } }>('/api/inbox')
+    set({ inbox: { ...r, loaded: true } })
+  } catch (err) { handle(err) }
+}
+export async function markRead(ids: string[] | 'all') {
+  if (ids !== 'all' && !ids.length) return
+  set((st) => ({ inbox: { ...st.inbox, items: st.inbox.items.map((x) => (ids === 'all' || ids.includes(x.id) ? { ...x, read: true } : x)) } }))
+  try {
+    const r = await api<{ unread: number }>('/api/inbox/read', { method: 'POST', json: { ids } })
+    set((st) => ({ inbox: { ...st.inbox, unread: r.unread } }))
+  } catch (err) { handle(err) }
+}
+export async function respondPaseo(agentId: string, requestId: string, decision: 'allow' | 'deny', message?: string) {
+  try {
+    await api(`/api/paseo/agents/${agentId}/permissions/${encodeURIComponent(requestId)}`, { method: 'POST', json: { decision, message } })
+    toast.success(decision === 'allow' ? t('Paseo-Freigabe erteilt') : t('Paseo-Freigabe abgelehnt'))
+    return true
+  } catch (err) { handle(err); loadInbox(); return false }
+}
+export const badgeCount = (st = state) => st.inbox.open.length + st.inbox.unread
+
+// App icon badge (Badging API: installed PWAs on iOS 16.4+, Chrome/Edge desktop).
+let lastBadge = -1
+function syncBadge() {
+  const n = badgeCount()
+  if (n === lastBadge) return
+  lastBadge = n
+  const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> }
+  try { (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {}) } catch { /* unsupported */ }
+}
+listeners.add(syncBadge)
+
+const KIND_LABEL: Record<string, string> = {
+  approval: 'Freigabe nötig', clarify: 'Rückfrage von Hermes', permission: 'Paseo-Agent braucht eine Freigabe',
+  done: 'Fertig', error: 'Fehler', 'paseo-done': 'Paseo-Agent fertig', 'paseo-error': 'Paseo-Agent mit Fehler', 'paseo-limit': 'Paseo-Agent hat ein Limit erreicht',
+}
+export const kindLabel = (k: string) => t(KIND_LABEL[k] || k)
+
+/** In-app notification while the app is visible; a click opens the thread (or the inbox). */
+function toastFor(item: InboxItem) {
+  if (document.visibilityState !== 'visible') return
+  // A finished turn of the chat that is open right now needs no toast.
+  if ((item.kind === 'done' || item.kind === 'error') && item.sessionId && item.sessionId === state.openId) return
+  const request = item.kind === 'approval' || item.kind === 'clarify' || item.kind === 'permission'
+  const open = () => {
+    markRead([item.id])
+    if (request || !item.sessionId) setTab('inbox')
+    if (item.sessionId) openThread(item.sessionId)
+  }
+  const title = item.source === 'paseo' && item.agentTitle ? item.agentTitle : item.title || 'Hermes'
+  const fn = item.kind.endsWith('error') || item.kind === 'paseo-limit' ? toast.error : request ? toast.warning : toast.success
+  fn(`${kindLabel(item.kind)} · ${title}`, {
+    id: item.id,
+    description: item.text ? (item.text.length > 90 ? `${item.text.slice(0, 89)}…` : item.text) : undefined,
+    duration: request ? 12000 : 6000,
+    action: { label: request ? t('Ansehen') : t('Öffnen'), onClick: open },
+  })
 }
 
 // ---------- actions ----------
@@ -223,6 +318,13 @@ export function connectEvents() {
   on<{ connected: boolean }>('gateway', ({ connected }) => set({ gateway: connected }))
   on<RemoteState>('remote', (remote) => set({ remote }))
   on<Device[]>('devices', (devices) => set({ devices }))
+  on<{ open: OpenItem[]; unread: number }>('inbox', ({ open, unread }) => set((st) => ({ inbox: { ...st.inbox, open, unread } })))
+  on<InboxItem>('inbox-item', (item) => {
+    const known = state.inbox.items.some((x) => x.id === item.id)
+    set((st) => ({ inbox: { ...st.inbox, items: known ? st.inbox.items.map((x) => (x.id === item.id ? item : x)) : [item, ...st.inbox.items] } }))
+    if (!known) toastFor(item)
+  })
+  on<{ ids: string[] | 'all' }>('inbox-read', ({ ids }) => set((st) => ({ inbox: { ...st.inbox, items: st.inbox.items.map((x) => (ids === 'all' || ids.includes(x.id) ? { ...x, read: true } : x)) } })))
   on<{ id: string; text: string }>('delta', ({ id, text }) => {
     set((st) => ({ streaming: { id, text: (st.streaming?.id === id ? st.streaming.text : '') + text } }))
   })
