@@ -1,0 +1,43 @@
+[package]
+name = "hermes-iroh"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "iroh-fetch for React Native: the iroh-bridge client (iroh-http/1) exposed to Kotlin and Swift through UniFFI"
+publish = false
+
+[lib]
+# cdylib: libhermes_iroh.so for Android (JNA loads it); staticlib: the iOS XCFramework; lib: tests.
+crate-type = ["cdylib", "staticlib", "lib"]
+name = "hermes_iroh"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+# The same client the iroh-fetch WASM build and its Node.js addon use, pinned to the gateway's version,
+# so the wire protocol (ALPN iroh-http/1, framing, WebSocket tunnel) is identical to iroh-gateway v0.6.3.
+client-core = { git = "https://github.com/irohkit/iroh-bridge", tag = "v0.6.3" }
+# Default features (UDP, port mapping, address publishing) as in iroh-bridge's node-client: on a phone
+# the connection hole-punches a direct path and uses the relay only until then.
+iroh = { version = "=1.4.1", default-features = true }
+uniffi = "0.32"
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros", "time"] }
+anyhow = "1"
+serde_json = "1"
+thiserror = "2"
+n0-future = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+opt-level = "s"

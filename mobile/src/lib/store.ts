@@ -1,0 +1,347 @@
+// App state: one small external store fed by the REST API + the /api/events SSE stream, both over
+// iroh. Mirrors web/src/lib/store.ts (same endpoints, same events), without DOM APIs.
+import { useSyncExternalStore } from 'react'
+import { AppState } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import type { Column, InboxItem, OpenItem, OutgoingMessage, PaseoAgent, PaseoItem, Session, ThreadMessage } from '@shared/types'
+import { parsePairingLink } from '@shared/pairing'
+import { api, ApiError, connect, deviceName, forgetGateway, getBackend, rememberGateway, savedGateway, Unauthorized } from './connection'
+import { notifyInboxItem } from './notify'
+import { t } from './i18n'
+
+export type Auth = 'unknown' | 'unpaired' | 'connecting' | 'ok' | 'refused' | 'offline'
+export type Tab = 'board' | 'inbox'
+
+type State = {
+  auth: Auth
+  error: string | null
+  sessions: Record<string, Session>
+  gateway: boolean
+  live: boolean
+  days: number
+  system: boolean
+  tab: Tab
+  column: Column
+  openId: string | null
+  messages: ThreadMessage[]
+  loadingThread: boolean
+  streaming: { id: string; text: string } | null
+  pendingFirst: { id: string; text: string; ts: number } | null
+  inbox: { open: OpenItem[]; items: InboxItem[]; unread: number; loaded: boolean; paseo: { connected: boolean; canRespond: boolean } }
+  toast: { id: number; kind: 'info' | 'error' | 'success'; text: string; sessionId?: string | null } | null
+}
+
+let state: State = {
+  auth: 'unknown',
+  error: null,
+  sessions: {},
+  gateway: false,
+  live: false,
+  days: 3,
+  system: false,
+  tab: 'board',
+  column: 'doing',
+  openId: null,
+  messages: [],
+  loadingThread: false,
+  streaming: null,
+  pendingFirst: null,
+  inbox: { open: [], items: [], unread: 0, loaded: false, paseo: { connected: false, canRespond: false } },
+  toast: null,
+}
+const listeners = new Set<() => void>()
+const set = (patch: Partial<State> | ((s: State) => Partial<State>)) => {
+  state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) }
+  listeners.forEach((l) => l())
+}
+export const getState = () => state
+/** Plain subscription outside React (keep-alive policy). */
+export const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
+export function useStore<T>(select: (s: State) => T): T {
+  return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l) }, () => select(state))
+}
+
+let toastId = 0
+export function toast(text: string, kind: 'info' | 'error' | 'success' = 'info', sessionId?: string | null) {
+  set({ toast: { id: ++toastId, kind, text, sessionId } })
+}
+export const dismissToast = () => set({ toast: null })
+
+const handle = (err: unknown) => {
+  if (err instanceof Unauthorized) { set({ auth: 'refused' }); return }
+  toast(err instanceof Error ? err.message : String(err), 'error')
+}
+
+// ---------- startup and pairing ----------
+export async function bootstrap() {
+  const prefs = JSON.parse((await AsyncStorage.getItem('hk_prefs')) || '{}') as Partial<Pick<State, 'days' | 'system' | 'column'>>
+  set({ ...prefs })
+  columnChosen = !!prefs.column
+  const gw = await savedGateway()
+  if (!gw) { set({ auth: 'unpaired' }); return }
+  set({ auth: 'connecting', error: null })
+  try {
+    await connect(gw)
+    await start()
+  } catch (err) {
+    set({ auth: err instanceof Unauthorized ? 'refused' : 'offline', error: err instanceof Error ? err.message : String(err) })
+  }
+}
+
+/** Pairs with a link (#iroh=…&relay=…&pair=…): connects, redeems the one-time code, remembers the gateway. */
+export async function pair(link: string) {
+  const p = parsePairingLink(link)
+  if (!p) throw new Error(t('Das ist kein Kopplungslink (#iroh=…).'))
+  set({ auth: 'connecting', error: null })
+  const gateway = { endpointId: p.endpointId, relayUrl: p.relayUrl }
+  try {
+    await connect(gateway)
+    if (p.code) await api('/api/pair/redeem', { method: 'POST', json: { code: p.code, name: deviceName() }, timeoutMs: 30_000 })
+    await rememberGateway(gateway)
+    await start()
+    toast(t('Gerät gekoppelt'), 'success')
+  } catch (err) {
+    set({ auth: 'unpaired', error: err instanceof Error ? err.message : String(err) })
+    throw err
+  }
+}
+
+export async function unpair() {
+  stopEvents()
+  await forgetGateway()
+  set({ auth: 'unpaired', sessions: {}, openId: null, messages: [], inbox: { ...state.inbox, open: [], items: [], unread: 0, loaded: false } })
+}
+
+async function start() {
+  const t0 = Date.now()
+  await loadSessions(true)
+  console.log(`[hermes-ui] board loaded in ${Date.now() - t0} ms (${Object.keys(state.sessions).length} sessions)`)
+  set({ auth: 'ok' })
+  connectEvents()
+  loadInbox()
+}
+
+// ---------- loading ----------
+export async function loadSessions(throwing = false) {
+  try {
+    const { sessions, gateway } = await api<{ sessions: Session[]; gateway: boolean }>(`/api/sessions?days=${state.days}&system=${state.system ? 1 : 0}`)
+    set({ gateway, sessions: Object.fromEntries(sessions.map((s) => [s.id, s])) })
+    // Until the user picked a column: start on the first one with cards (Doing, Waiting, New, Done).
+    if (!columnChosen) {
+      const first = (['doing', 'waiting', 'new', 'done'] as Column[]).find((c) => sessions.some((s) => s.column === c))
+      if (first) set({ column: first })
+    }
+    return true
+  } catch (err) {
+    if (throwing) throw err
+    handle(err)
+    return false
+  }
+}
+
+let columnChosen = false
+export async function setPrefs(patch: Partial<Pick<State, 'days' | 'system' | 'column'>>) {
+  if (patch.column) columnChosen = true
+  set(patch)
+  await AsyncStorage.setItem('hk_prefs', JSON.stringify({ days: state.days, system: state.system, column: state.column }))
+  if ('days' in patch || 'system' in patch) loadSessions()
+}
+export const setTab = (tab: Tab) => { set({ tab }); if (tab === 'inbox') loadInbox() }
+
+function upsert(s: Session) { set((st) => ({ sessions: { ...st.sessions, [s.id]: s } })) }
+function remove(id: string) {
+  set((st) => {
+    const sessions = { ...st.sessions }
+    delete sessions[id]
+    return { sessions }
+  })
+}
+
+// ---------- thread ----------
+function withPending(id: string, messages: ThreadMessage[]) {
+  const p = state.pendingFirst
+  if (!p || p.id !== id) return messages
+  if (messages.some((m) => m.role === 'user')) { set({ pendingFirst: null }); return messages }
+  return [{ role: 'user' as const, text: p.text, ts: p.ts }, ...messages]
+}
+
+export async function openThread(id: string | null) {
+  set({ openId: id, messages: id === state.openId ? state.messages : [], loadingThread: !!id, streaming: state.streaming?.id === id ? state.streaming : null })
+  if (id) await refreshThread(id)
+}
+
+export async function refreshThread(id: string) {
+  try {
+    const { session, messages } = await api<{ session: Session; messages: ThreadMessage[] }>(`/api/sessions/${encodeURIComponent(id)}`)
+    upsert(session)
+    if (state.openId !== id) return
+    set({ messages: withPending(id, messages), loadingThread: false })
+  } catch (err) { set({ loadingThread: false }); handle(err) }
+}
+
+// Automated E2E runs mark their chats as "TEST · …" (web: localStorage hk_e2e_test). Dev builds only:
+// start Metro with EXPO_PUBLIC_E2E_TEST=1.
+const e2eTest = __DEV__ && process.env.EXPO_PUBLIC_E2E_TEST === '1'
+
+export async function createChat(msg: OutgoingMessage) {
+  const { session } = await api<{ session: Session }>('/api/sessions', { method: 'POST', json: e2eTest ? { ...msg, test: true } : msg, timeoutMs: 120_000 })
+  upsert(session)
+  if (!msg.draft) set({ pendingFirst: { id: session.id, text: msg.text || (msg.audio ? '🎙 Sprachnachricht …' : ''), ts: Date.now() / 1000 } })
+  return session
+}
+
+export async function sendMessage(id: string, msg: OutgoingMessage) {
+  let res: { session: Session; messages?: ThreadMessage[] }
+  try {
+    res = await api(`/api/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', json: msg, timeoutMs: 120_000 })
+  } catch (err) {
+    if (err instanceof Unauthorized) { handle(err); return null }
+    toast(`${t('Nachricht nicht zugestellt')}: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    refreshThread(id)
+    return null
+  }
+  if (res.session && res.session.id !== id) { remove(id); upsert(res.session); return res.session.id }
+  if (res.session) upsert(res.session)
+  if (res.messages && state.openId === id) set({ messages: res.messages })
+  return id
+}
+
+export async function respond(id: string, body: { promptId: string; choice?: string; answer?: string; answers?: string[] }) {
+  try {
+    const res = await api<{ session: Session }>(`/api/sessions/${encodeURIComponent(id)}/respond`, { method: 'POST', json: body })
+    if (res.session) upsert(res.session)
+    loadInbox()
+    return true
+  } catch (err) { handle(err); refreshThread(id); return false }
+}
+
+export async function interrupt(id: string) {
+  try { await api(`/api/sessions/${encodeURIComponent(id)}/interrupt`, { method: 'POST' }); toast(t('Stopp gesendet')) } catch (err) { handle(err) }
+}
+
+export async function setColumn(id: string, column: Column | 'auto') {
+  try {
+    const res = await api<{ session: Session | null; removed?: string; replaced?: string }>(`/api/sessions/${encodeURIComponent(id)}/column`, { method: 'POST', json: { column } })
+    if (res.removed || res.replaced) remove((res.removed || res.replaced)!)
+    if (res.session) upsert(res.session)
+  } catch (err) { handle(err); loadSessions() }
+}
+
+export async function retryOutbox(sessionId: string, outboxId: string, retry = true) {
+  try {
+    const res = await api<{ session: Session; messages: ThreadMessage[] }>(`/api/outbox/${outboxId}${retry ? '/retry' : ''}`, { method: retry ? 'POST' : 'DELETE' })
+    if (res.session) upsert(res.session)
+    if (state.openId === sessionId) set({ messages: res.messages })
+  } catch (err) { handle(err); refreshThread(sessionId) }
+}
+
+export type SearchHit = { session: Session & { archived?: boolean }; hit?: { msgId: number; role: string; ts: number; snippet: string; hits: number } }
+export const searchChats = (q: string) => api<{ q: string; title: SearchHit[]; content: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`)
+
+export const paseoAgents = (sessionId: string) => api<{ agents: PaseoAgent[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/paseo`)
+export const paseoTimeline = (agentId: string) => api<{ items: PaseoItem[]; agent?: PaseoAgent }>(`/api/paseo/agents/${agentId}/timeline`)
+
+// ---------- inbox ----------
+export async function loadInbox() {
+  try {
+    const r = await api<{ open: OpenItem[]; items: InboxItem[]; unread: number; paseo: { connected: boolean; canRespond: boolean } }>('/api/inbox')
+    set({ inbox: { ...r, loaded: true } })
+  } catch (err) { handle(err) }
+}
+export async function markRead(ids: string[] | 'all') {
+  if (ids !== 'all' && !ids.length) return
+  set((st) => ({ inbox: { ...st.inbox, items: st.inbox.items.map((x) => (ids === 'all' || ids.includes(x.id) ? { ...x, read: true } : x)) } }))
+  try {
+    const r = await api<{ unread: number }>('/api/inbox/read', { method: 'POST', json: { ids } })
+    set((st) => ({ inbox: { ...st.inbox, unread: r.unread } }))
+  } catch (err) { handle(err) }
+}
+export async function respondPaseo(agentId: string, requestId: string, decision: 'allow' | 'deny') {
+  try {
+    await api(`/api/paseo/agents/${agentId}/permissions/${encodeURIComponent(requestId)}`, { method: 'POST', json: { decision } })
+    toast(decision === 'allow' ? t('Paseo-Freigabe erteilt') : t('Paseo-Freigabe abgelehnt'), 'success')
+    loadInbox()
+    return true
+  } catch (err) { handle(err); loadInbox(); return false }
+}
+export const badgeCount = (st = state) => st.inbox.open.length + st.inbox.unread
+
+const KIND_LABEL: Record<string, string> = {
+  approval: 'Freigabe nötig', clarify: 'Rückfrage von Hermes', permission: 'Paseo-Agent braucht eine Freigabe',
+  done: 'Fertig', error: 'Fehler', 'paseo-done': 'Paseo-Agent fertig', 'paseo-error': 'Paseo-Agent mit Fehler', 'paseo-limit': 'Paseo-Agent hat ein Limit erreicht',
+}
+export const kindLabel = (k: string) => t(KIND_LABEL[k] || k)
+
+// ---------- live events ----------
+let stopStream: (() => void) | null = null
+let reloadTimer: ReturnType<typeof setTimeout> | undefined
+
+function stopEvents() { stopStream?.(); stopStream = null; set({ live: false }) }
+
+export function connectEvents() {
+  stopEvents()
+  const b = getBackend()
+  if (!b) return
+  let opened = false
+  stopStream = b.events('/api/events', (name, data) => {
+    let d: any
+    try { d = JSON.parse(data) } catch { return }
+    switch (name) {
+      case 'session':
+        if ((d as Session).system && !state.system && !state.sessions[d.id]) return
+        upsert(d)
+        break
+      case 'removed': remove(d.id); break
+      case 'gateway': set({ gateway: d.connected }); break
+      case 'inbox': set((st) => ({ inbox: { ...st.inbox, open: d.open, unread: d.unread } })); break
+      case 'inbox-item': {
+        const item = d as InboxItem
+        const known = state.inbox.items.some((x) => x.id === item.id)
+        set((st) => ({ inbox: { ...st.inbox, items: known ? st.inbox.items.map((x) => (x.id === item.id ? item : x)) : [item, ...st.inbox.items] } }))
+        if (!known) onNewInboxItem(item)
+        break
+      }
+      case 'inbox-read': {
+        const ids = d.ids as string[] | 'all'
+        set((st) => ({ inbox: { ...st.inbox, items: st.inbox.items.map((x) => (ids === 'all' || ids.includes(x.id) ? { ...x, read: true } : x)) } }))
+        break
+      }
+      case 'delta':
+        set((st) => ({ streaming: { id: d.id, text: (st.streaming && st.streaming.id === d.id ? st.streaming.text : '') + d.text } }))
+        break
+      case 'message':
+        if (d.id !== state.openId) return
+        set((st) => ({ messages: [...st.messages, d.message] }))
+        break
+      case 'reload':
+        if (d.final && state.streaming?.id === d.id) set({ streaming: null })
+        if (d.id !== state.openId) return
+        clearTimeout(reloadTimer)
+        reloadTimer = setTimeout(() => refreshThread(d.id), 250)
+        break
+    }
+  }, (open) => {
+    set({ live: open })
+    // After a reconnect: catch up on what the stream missed.
+    if (open && opened) { loadSessions(); loadInbox(); if (state.openId) refreshThread(state.openId) }
+    if (open) opened = true
+  })
+}
+
+/** In the foreground: an in-app toast; in the background: a local system notification. */
+function onNewInboxItem(item: InboxItem) {
+  const title = item.source === 'paseo' && item.agentTitle ? item.agentTitle : item.title || 'Hermes'
+  if (AppState.currentState !== 'active') { notifyInboxItem(item, kindLabel(item.kind), title); return }
+  if ((item.kind === 'done' || item.kind === 'error') && item.sessionId && item.sessionId === state.openId) return
+  toast(`${kindLabel(item.kind)} · ${title}`, item.kind.endsWith('error') ? 'error' : 'info', item.sessionId)
+}
+
+// Coming back to the foreground: reconnect the stream if it died while the app slept.
+AppState.addEventListener('change', (s) => {
+  if (s !== 'active' || state.auth !== 'ok') return
+  if (!state.live) connectEvents()
+  loadSessions()
+  loadInbox()
+})
+
+export { ApiError }
