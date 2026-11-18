@@ -18,7 +18,8 @@ import { HermesGateway } from './src/hermes-ws.mjs';
 import { Remote } from './src/remote.mjs';
 import { Devices } from './src/devices.mjs';
 import { Paseo } from './src/paseo.mjs';
-import { createImageResolver } from './src/local-files.mjs';
+import { createImageResolver, real } from './src/local-files.mjs';
+import { extractMediaTags, mediaKind } from './src/media-tags.mjs';
 import QRCode from 'qrcode';
 
 const cfg = loadConfig(process.argv.slice(2));
@@ -27,9 +28,12 @@ const TOKEN = cfg.token;
 const PORT = cfg.port;
 const HOST = cfg.host;
 const HERMES_HOME = cfg.hermesHome;
+// Real paths of files that stored assistant replies attached with MEDIA:<path>; filled by threadMessages().
+const mediaFiles = new Set();
 const resolveImage = createImageResolver({
   roots: [path.join(HERMES_HOME, 'cache'), cfg.paseoHome, ...cfg.imageRoots],
   tempPrefixes: ['paseo-attachments-'],
+  files: mediaFiles,
 });
 const SYSTEM_SOURCES = new Set(['cron', 'tool', 'subagent', 'oneshot', 'webhook', 'kanban', 'api_server']);
 
@@ -230,7 +234,7 @@ function toCard(row) {
     activity = p.kind === 'approval' ? t('approvalNeeded', { what: p.description || p.command }) : t('question', { what: p.question });
   } else if (paseoNote && autoColumn === 'waiting') activity = paseoNote;
   else if (autoColumn === 'doing') activity = lv?.activity || row.last_activity_description || (row.message_count ? t('working') : t('starting'));
-  else if (row.last_assistant) activity = `💬 ${clip(row.last_assistant, 180)}`;
+  else if (row.last_assistant) activity = `💬 ${clip(extractMediaTags(row.last_assistant).text, 180)}`;
   else if (row.last_activity_description) activity = row.last_activity_description;
   const prompt = cleanPrompt(row.first_prompt);
   return {
@@ -438,6 +442,18 @@ function threadMessages(id) {
           if (!(marked.length && media[i].kind === 'image')) msg.attachments.push(media[i]);
           media.splice(i, 1);
         }
+      }
+    } else if (r.role === 'assistant') {
+      // Files Hermes sends along with a reply (Slack shows them as attachments); only these exact files
+      // become readable through /api/hermes-file, nothing else in their directories.
+      const { text, paths } = extractMediaTags(msg.text);
+      msg.text = text;
+      for (const file of paths) {
+        const kind = mediaKind(file);
+        if (kind === 'file') { msg.attachments.push({ kind, name: path.basename(file) }); continue; }
+        const resolved = real(file);
+        if (resolved) mediaFiles.add(resolved);
+        msg.attachments.push({ kind, url: `/api/hermes-file?path=${encodeURIComponent(file)}` });
       }
     }
     out.push(msg);
@@ -685,7 +701,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/api/file' || p === '/api/hermes-file') {
-      // Images referenced by local path in transcripts; see src/local-files.mjs for the allowed roots.
+      // Images referenced by local path in transcripts and MEDIA attachments; see src/local-files.mjs.
       const img = resolveImage(url.searchParams.get('path'));
       if (!img) return send(res, 404, { error: 'not found' });
       res.writeHead(200, { 'Content-Type': img.type, 'Content-Length': img.size, 'Cache-Control': 'private, max-age=3600', 'Content-Security-Policy': "default-src 'none'; sandbox", ...SECURITY_HEADERS });
