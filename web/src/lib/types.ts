@@ -68,7 +68,7 @@ export type Session = {
   paseoNote: string
 }
 
-export type Attachment = { kind: 'image' | 'audio'; url: string }
+export type Attachment = { kind: 'image'; url: string } | { kind: 'audio'; url: string } | { kind: 'file'; name: string }
 
 export type ThreadMessage = {
   id?: number

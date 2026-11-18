@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronRight, CircleStop, FlaskConical, Wrench, X } from 'lucide-react'
+import { ChevronRight, CircleStop, FileText, FlaskConical, Wrench, X } from 'lucide-react'
 import { ChatContainerContent, ChatContainerRoot, ChatContainerScrollAnchor } from '@/components/ui/chat-container'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { clock } from '@/lib/format'
-import { COLUMNS, type Column, type ThreadMessage } from '@/lib/types'
+import { COLUMNS, type Attachment, type Column, type ThreadMessage } from '@/lib/types'
+import { stripMediaTags } from '@/lib/media-tags'
 import { clearHighlight, getState, interrupt, openThread, sendMessage, setColumn, useBoard } from '@/lib/store'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { SourceIcon, StatusDot } from '@/components/board/status'
@@ -86,7 +87,7 @@ function MessageBody({ m }: { m: ThreadMessage }) {
           {m.text && <div className="whitespace-pre-wrap [overflow-wrap:anywhere]">{m.text}</div>}
           {atts.map((a) => (a.kind === 'audio'
             ? <MediaAudio key={a.url} url={a.url} className="mt-2 h-9 w-64 max-w-full" />
-            : <div key={a.url} className="mt-2"><MediaImage url={a.url} className="max-h-64" /></div>))}
+            : a.kind === 'image' && <div key={a.url} className="mt-2"><MediaImage url={a.url} className="max-h-64" /></div>))}
           {m.ts && <div className="mt-1 text-right text-[10.5px] text-muted-foreground">{clock(m.ts)}</div>}
         </div>
       </div>
@@ -94,8 +95,31 @@ function MessageBody({ m }: { m: ThreadMessage }) {
   }
   return (
     <div className="group">
-      <Markdown className="prose prose-sm prose-zinc max-w-none break-words text-foreground dark:prose-invert prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none">{m.text}</Markdown>
+      {m.text && <Markdown className="prose prose-sm prose-zinc max-w-none break-words text-foreground dark:prose-invert prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none">{m.text}</Markdown>}
+      {atts.length > 0 && <AssistantAttachments atts={atts} />}
       {m.ts && <div className="mt-1 text-[10.5px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">{clock(m.ts)}</div>}
+    </div>
+  )
+}
+
+/** Files Hermes attached to a reply with MEDIA:<path>: images (lightbox on click), audio, other files by name. */
+function AssistantAttachments({ atts }: { atts: Attachment[] }) {
+  const images = atts.filter((a) => a.kind === 'image')
+  return (
+    <div className="mt-2 flex flex-col items-start gap-2">
+      {images.length === 1 && <MediaImage url={images[0].url} className="max-h-[28rem]" />}
+      {images.length > 1 && (
+        <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3">
+          {images.map((a) => <MediaImage key={a.url} url={a.url} className="aspect-[4/3] w-full object-cover object-top" />)}
+        </div>
+      )}
+      {atts.map((a) => (a.kind === 'audio'
+        ? <MediaAudio key={a.url} url={a.url} className="h-9 w-64 max-w-full" />
+        : a.kind === 'file' && (
+          <span key={a.name} className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 text-xs text-muted-foreground" title={a.name}>
+            <FileText className="size-3.5 shrink-0" /><span className="truncate">{a.name}</span>
+          </span>
+        )))}
     </div>
   )
 }
@@ -173,7 +197,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
           {!loading && !messages.length && !streaming && <div className="py-8 text-center text-sm text-muted-foreground">{t('Noch keine Nachrichten.')}</div>}
           {messages.map((m, i) => <MessageRow key={m.id ?? `l${i}`} m={m} />)}
           {streaming && (
-            <Markdown className="prose prose-sm prose-zinc max-w-none text-foreground dark:prose-invert">{`${streaming}▍`}</Markdown>
+            <Markdown className="prose prose-sm prose-zinc max-w-none text-foreground dark:prose-invert">{`${stripMediaTags(streaming)}▍`}</Markdown>
           )}
           {session.running && !streaming && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
             <Loader variant="typing" size="sm" />
