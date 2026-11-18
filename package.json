@@ -1,0 +1,35 @@
+{
+  "name": "hermes-kanban",
+  "version": "0.2.0",
+  "description": "Kanban board for Hermes Agent sessions: headless backend + standalone UI, remote access over iroh.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "postinstall": "npm --prefix web install --no-audit --no-fund",
+    "build": "npm --prefix web run build",
+    "prestart": "npm run build",
+    "start": "node bin/hermes-kanban.mjs serve",
+    "serve": "node bin/hermes-kanban.mjs serve",
+    "dev": "npm --prefix web run dev",
+    "check": "node --check server.mjs && node --check src/store.mjs && node --check src/board.mjs && node --check src/hermes-ws.mjs && node --check src/remote.mjs && node --check src/devices.mjs && node --check src/config.mjs && node --check src/iroh.mjs && node --check src/paseo.mjs && node --check bin/hermes-kanban.mjs",
+    "pair": "node bin/hermes-kanban.mjs pair"
+  },
+  "dependencies": {
+    "@getpaseo/client": "0.15.0",
+    "qrcode": "^1.5.4"
+  },
+  "license": "MIT",
+  "bin": {
+    "hermes-kanban": "bin/hermes-kanban.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "server.mjs",
+    "web/dist/",
+    "README.md",
+    "LICENSE"
+  ]
+}

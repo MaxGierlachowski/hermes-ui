@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Example LaunchAgent. Generate one with your paths: node scripts/launchd-plist.mjs --remote iroh -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>io.github.hermes-kanban</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/path/to/hermes-kanban/bin/hermes-kanban.mjs</string>
+    <string>serve</string>
+    <string>--remote</string>
+    <string>iroh</string>
+  </array>
+  <key>WorkingDirectory</key><string>/path/to/hermes-kanban</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/hermes-kanban.log</string>
+  <key>StandardErrorPath</key><string>/tmp/hermes-kanban.log</string>
+</dict>
+</plist>
