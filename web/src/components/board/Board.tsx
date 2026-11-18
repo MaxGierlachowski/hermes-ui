@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SortingStrategy } from '@dnd-kit/sortable'
 import { Kanban, KanbanBoard, KanbanColumn, KanbanItem, KanbanOverlay } from '@/components/ui/kanban'
 import { cn } from '@/lib/utils'
@@ -9,6 +9,8 @@ import { COLUMN_COLOR } from './status'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { OverlayScroll } from '@/components/common/OverlayScroll'
 import { t } from '@/lib/i18n'
+import { haptic } from '@/lib/haptics'
+import { ColumnSheet } from './ColumnSheet'
 
 type Cols = Record<Column, Session[]>
 
@@ -106,34 +108,87 @@ function DesktopBoard({ cols }: { cols: Cols }) {
 
 function MobileBoard({ cols }: { cols: Cols }) {
   const [tab, setTab] = useState<Column>('waiting')
+  const [moving, setMoving] = useState<Session | null>(null)
   const openId = useBoard((s) => s.openId)
   // Jump to the column that needs attention first.
   useEffect(() => { if (cols.waiting.some((s) => s.pending?.length)) setTab('waiting') }, [cols.waiting])
+  const go = (id: Column) => { if (id !== tab) { haptic(5); setTab(id) } }
+  // Horizontal swipe on the list switches to the neighbouring column.
+  const swipe = useRef<{ x: number; y: number } | null>(null)
+  const onTouchStart = (e: React.TouchEvent) => { const p = e.touches[0]; swipe.current = { x: p.clientX, y: p.clientY } }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = swipe.current
+    swipe.current = null
+    if (!start || moving) return
+    const p = e.changedTouches[0]
+    const dx = p.clientX - start.x
+    const dy = p.clientY - start.y
+    if (Math.abs(dx) < 64 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+    const i = COLUMNS.findIndex((c) => c.id === tab)
+    const next = COLUMNS[i + (dx < 0 ? 1 : -1)]
+    if (next) go(next.id)
+  }
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="grid grid-cols-4 gap-1 border-b px-2 py-2">
+      <div role="tablist" aria-label={t('Spalten')} className="grid grid-cols-4 gap-1 border-b px-2 py-1.5">
         {COLUMNS.map(({ id, label }) => (
           <button
             key={id}
-            onClick={() => setTab(id)}
-            className={cn('flex items-center justify-center gap-1.5 rounded-md px-1 py-1.5 text-xs font-medium text-muted-foreground transition-colors', tab === id && 'bg-muted text-foreground')}
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => go(id)}
+            className={cn('flex h-11 items-center justify-center gap-1.5 rounded-lg px-1 text-[13px] font-medium text-muted-foreground transition-colors active:bg-muted/60', tab === id && 'bg-muted text-foreground')}
           >
-            <span className={cn('size-1.5 rounded-full', COLUMN_COLOR[id])} />
+            <span className={cn('size-2 rounded-full', COLUMN_COLOR[id])} />
             {label.replace(' Task', '')}
             <span className="tabular-nums opacity-70">{cols[id].length}</span>
           </button>
         ))}
       </div>
-      <OverlayScroll className="flex-1" viewportClassName="px-3 py-3 pb-24">
-        <div className="flex flex-col gap-2">
+      <OverlayScroll className="flex-1" viewportClassName="px-3 py-3 pb-28">
+        <div role="tabpanel" className="flex min-h-full flex-col gap-2" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
           {cols[tab].map((s) => (
-            <button key={s.id} className="text-left" onClick={() => openThread(s.id)}>
-              <SessionCard s={s} selected={s.id === openId} />
-            </button>
+            <MobileCard key={s.id} s={s} selected={s.id === openId} onMove={() => setMoving(s)} />
           ))}
           {!cols[tab].length && <div className="py-10 text-center text-sm text-muted-foreground">{t('Keine Karten')}</div>}
+          {cols[tab].length > 0 && <p className="pt-2 text-center text-[11px] text-muted-foreground/70">{t('Lange drücken zum Verschieben · wischen für andere Spalten')}</p>}
         </div>
       </OverlayScroll>
+      <ColumnSheet
+        open={!!moving}
+        onOpenChange={(o) => !o && setMoving(null)}
+        title={moving?.title}
+        current={moving?.override ? moving.column : 'auto'}
+        onPick={(c) => moving && setColumn(moving.id, c)}
+      />
     </div>
+  )
+}
+
+/** Tap opens the thread; a long press (or the Android context-menu gesture) opens "move to column". */
+function MobileCard({ s, selected, onMove }: { s: Session; selected: boolean; onMove: () => void }) {
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const start = useRef<{ x: number; y: number } | null>(null)
+  const fired = useRef(false)
+  const cancel = () => { clearTimeout(timer.current); start.current = null }
+  const longPress = () => { fired.current = true; haptic(15); onMove() }
+  return (
+    <button
+      className="select-none rounded-lg text-left transition-transform [-webkit-touch-callout:none] active:scale-[0.985] motion-reduce:active:scale-100"
+      onPointerDown={(e) => {
+        if (e.pointerType === 'mouse') return
+        fired.current = false
+        start.current = { x: e.clientX, y: e.clientY }
+        clearTimeout(timer.current)
+        timer.current = setTimeout(longPress, 480)
+      }}
+      onPointerMove={(e) => { if (start.current && Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 8) cancel() }}
+      onPointerUp={cancel}
+      onPointerCancel={cancel}
+      onContextMenu={(e) => { e.preventDefault(); if (!fired.current) longPress() }}
+      onClick={() => { if (fired.current) { fired.current = false; return } openThread(s.id) }}
+    >
+      <SessionCard s={s} selected={selected} />
+    </button>
   )
 }

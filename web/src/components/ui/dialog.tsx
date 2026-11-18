@@ -45,13 +45,21 @@ function DialogOverlay({
   )
 }
 
+// Phones (< 768 px): the dialog becomes a bottom sheet above the keyboard (--keyboard-inset, see
+// useKeyboardInset), reachable with the thumb. Larger screens keep the centred dialog.
+const MOBILE_SHEET =
+  "max-md:top-auto max-md:bottom-(--keyboard-inset) max-md:left-0 max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:max-h-[calc(var(--visual-height)-env(safe-area-inset-top)-0.5rem)] max-md:overflow-y-auto max-md:overscroll-contain max-md:data-open:zoom-in-100 max-md:data-open:slide-in-from-bottom-10 max-md:data-closed:zoom-out-100 max-md:data-closed:slide-out-to-bottom-10"
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  mobileSheet = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  /** On phones, show as a bottom sheet instead of a centred dialog. */
+  mobileSheet?: boolean
 }) {
   return (
     <DialogPortal>
@@ -60,7 +68,8 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          className
+          className,
+          mobileSheet && MOBILE_SHEET
         )}
         {...props}
       >

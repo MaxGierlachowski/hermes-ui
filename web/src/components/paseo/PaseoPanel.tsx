@@ -74,7 +74,7 @@ function AgentRow({ a, onOpen }: { a: PaseoAgent; onOpen: () => void }) {
       <div className="flex items-start gap-2">
         <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1 text-sm font-medium leading-snug">{a.title || a.id}</div>
-        <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+        <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 touch:opacity-100" />
       </div>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-6 text-xs text-muted-foreground">
         <span className={cn('inline-flex items-center gap-1.5', st.text)}><AgentStateDot state={a.state} />{st.label}</span>
@@ -118,11 +118,11 @@ function Transcript({ agentId, onBack, backLabel }: { agentId: string; onBack: (
   return (
     <div className="flex min-h-0 flex-col">
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur">
-        <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" />{backLabel || t('Agents')}</button>
+        <button onClick={onBack} className="touch-hitbox inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground hover:text-foreground touch:-ml-1 touch:h-10 touch:px-1 touch:text-[13px]"><ArrowLeft className="size-3.5" />{backLabel || t('Agents')}</button>
         <div className="min-w-0 flex-1 truncate text-sm font-medium">{a?.title || agentId}</div>
         {st && a && <span className={cn('inline-flex items-center gap-1.5 text-xs', st.text)}><AgentStateDot state={a.state} />{st.label}</span>}
         {a?.deepLink && (
-          <a href={a.deepLink} className="inline-flex items-center gap-1 text-xs text-primary hover:underline" title={t('In der Paseo-App öffnen')}>
+          <a href={a.deepLink} className="touch-hitbox inline-flex shrink-0 items-center gap-1 text-xs text-primary hover:underline touch:h-10 touch:px-1 touch:text-[13px]" title={t('In der Paseo-App öffnen')}>
             Paseo<ExternalLink className="size-3" />
           </a>
         )}
@@ -132,7 +132,7 @@ function Transcript({ agentId, onBack, backLabel }: { agentId: string; onBack: (
         {error && <p className="text-sm text-destructive">{error}</p>}
         {!data && !error && <div className="flex justify-center py-8"><Loader variant="dots" /></div>}
         {data?.hasOlder && (
-          <button className="self-center text-xs text-muted-foreground hover:text-foreground" onClick={() => setLimit((l) => Math.min(400, l + 150))}>{t('Ältere Einträge laden')}</button>
+          <button className="touch-hitbox self-center text-xs text-muted-foreground hover:text-foreground touch:h-10 touch:px-3 touch:text-[13px]" onClick={() => setLimit((l) => Math.min(400, l + 150))}>{t('Ältere Einträge laden')}</button>
         )}
         {data?.items.map((it, i) => <Item key={`${it.ts}-${i}`} it={it} />)}
         <div id="paseo-end" />
@@ -170,7 +170,7 @@ function Item({ it }: { it: PaseoItem }) {
   if (it.role === 'tool') {
     return (
       <div className="text-xs">
-        <button onClick={() => setOpen((o) => !o)} className={cn('inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted/50 px-2 py-1 text-muted-foreground hover:text-foreground', it.status === 'failed' && 'border-red-500/40 text-red-600 dark:text-red-400')}>
+        <button onClick={() => setOpen((o) => !o)} className={cn('touch-hitbox inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted/50 px-2 py-1 text-muted-foreground hover:text-foreground touch:py-1.5', it.status === 'failed' && 'border-red-500/40 text-red-600 dark:text-red-400')}>
           <Wrench className="size-3 shrink-0" />
           <span className="font-mono">{it.toolName}</span>
           {it.summary && <span className="truncate opacity-80">· {it.summary}</span>}

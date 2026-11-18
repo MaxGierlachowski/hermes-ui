@@ -45,7 +45,7 @@ export function SessionCard({ s, selected, flash, overlay }: { s: Session; selec
       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1"><SourceIcon source={s.source} className="size-3" />{s.source}</span>
         {s.test && <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400"><FlaskConical className="size-3" />Test</span>}
-        {s.draft && <span className="rounded border px-1 text-[10px] uppercase tracking-wide">{t('Entwurf')}</span>}
+        {s.draft && <span className="rounded border px-1 text-[10px] uppercase tracking-wide touch:text-[11px]">{t('Entwurf')}</span>}
         {s.override && <Pin className="size-3 text-primary" aria-label={t('Manuell verschoben')} />}
         <span className="ml-auto inline-flex items-center gap-2">
           {s.messageCount > 0 && <span className="inline-flex items-center gap-0.5"><MessageSquare className="size-3" />{s.messageCount}</span>}

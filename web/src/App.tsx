@@ -20,6 +20,7 @@ import { BottomTabBar } from '@/components/app/AppTabs'
 import { applyHash, setTab, bootstrap, connectEvents, loadInbox, loadRemote, loadSessions, openThread, useBoard } from '@/lib/store'
 import { refreshPush, registration, startPresence } from '@/lib/push'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useKeyboardInset } from '@/hooks/use-touch'
 import { t } from '@/lib/i18n'
 
 // Page background per theme (index.css --background). The installed PWA paints the status bar and the
@@ -48,6 +49,7 @@ function Shell() {
   const [newOpen, setNewOpen] = useState(false)
   const [cmdOpen, setCmdOpen] = useState(false)
   const [remoteOpen, setRemoteOpen] = useState(false)
+  useKeyboardInset()
 
   useEffect(() => {
     bootstrap()
@@ -102,14 +104,21 @@ function Shell() {
           <>
             {tab === 'inbox' ? <Inbox onSettings={() => setNotifyOpen(true)} /> : <Board />}
             <Sheet open={!!openId} onOpenChange={(o) => !o && openThread(null)}>
-              <SheetContent side="bottom" showCloseButton={false} className="h-[94dvh] max-h-[94dvh] rounded-t-xl p-0 data-[side=bottom]:h-[94dvh]">
+              {/* Above the keyboard on iOS (--keyboard-inset); no auto-focus, so opening shows no focus ring and no keyboard. */}
+              <SheetContent
+                side="bottom"
+                swipeToClose
+                showCloseButton={false}
+                onOpenAutoFocus={(e) => e.preventDefault()}
+                className="outline-none data-[side=bottom]:bottom-(--keyboard-inset) h-[min(94dvh,calc(var(--visual-height)-env(safe-area-inset-top)-0.5rem))] max-h-none gap-0 rounded-t-2xl p-0 data-[side=bottom]:h-[min(94dvh,calc(var(--visual-height)-env(safe-area-inset-top)-0.5rem))]"
+              >
                 <SheetTitle className="sr-only">Thread</SheetTitle>
-                <ThreadView />
+                <div className="min-h-0 flex-1"><ThreadView /></div>
               </SheetContent>
             </Sheet>
             {!openId && tab === 'board' && (
-              <Button size="lg" className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+1rem)] right-4 z-40 rounded-full shadow-lg" onClick={() => setNewOpen(true)}>
-                <Plus className="size-4" />{t('Neuer Chat')}
+              <Button size="lg" className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+1rem)] right-4 z-40 h-14 gap-2 rounded-full pl-4 pr-5 text-[15px] shadow-lg touch:h-14" onClick={() => setNewOpen(true)}>
+                <Plus className="size-5" />{t('Neuer Chat')}
               </Button>
             )}
           </>

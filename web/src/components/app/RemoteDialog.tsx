@@ -36,7 +36,7 @@ export function RemoteDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="grid-cols-1 sm:max-w-md [&>*]:min-w-0">
+      <DialogContent mobileSheet className="grid-cols-1 sm:max-w-md [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>{t('Fernzugriff')}</DialogTitle>
           <DialogDescription>{t('iPad oder Handy koppeln – ohne LAN-Freigabe, der Tunnel startet mit dem Server.')}</DialogDescription>
