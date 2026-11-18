@@ -13,12 +13,21 @@ import { MediaImage } from '@/components/common/Media'
 
 const REL_LABEL = { created: t('gestartet'), steers: t('gesteuert'), watches: t('beobachtet') } as const
 
-/** "Paseo-Agents" tab of a session: list of linked agents, click opens a read-only transcript. */
-export function PaseoPanel({ sessionId, version }: { sessionId: string; version: string }) {
+/**
+ * "Paseo-Agents" tab of a session: list of linked agents, click opens a read-only transcript.
+ * `open` is controlled by the thread so an inline agent card in the chat can open a transcript directly.
+ */
+export function PaseoPanel({ sessionId, version, open, onOpen, onBack, backLabel }: {
+  sessionId: string
+  version: string
+  open: string | null
+  onOpen: (agentId: string) => void
+  onBack: () => void
+  backLabel?: string
+}) {
   const [agents, setAgents] = useState<PaseoAgent[] | null>(null)
   const [connected, setConnected] = useState(true)
   const [source, setSource] = useState<string | null>(null)
-  const [open, setOpen] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
 
   const load = useCallback(async () => {
@@ -31,9 +40,8 @@ export function PaseoPanel({ sessionId, version }: { sessionId: string; version:
   }, [sessionId])
   // `version` changes whenever the card's agent states change (pushed live), so the list follows.
   useEffect(() => { load() }, [load, version])
-  useEffect(() => { setOpen(null) }, [sessionId])
 
-  if (open) return <Transcript agentId={open} onBack={() => setOpen(null)} />
+  if (open) return <Transcript agentId={open} onBack={onBack} backLabel={backLabel} />
   if (!agents) return <div className="flex justify-center py-8"><Loader variant="dots" /></div>
 
   const active = agents.filter((a) => !a.archived)
@@ -42,7 +50,7 @@ export function PaseoPanel({ sessionId, version }: { sessionId: string; version:
     <div className="flex flex-col gap-3 p-4">
       {!connected && <p className="text-xs text-amber-600">{t('Paseo-Daemon nicht erreichbar – Status kann veraltet sein.')}</p>}
       {!agents.length && <p className="py-6 text-center text-sm text-muted-foreground">{t('Diese Session hat keine Paseo-Agents gestartet oder gesteuert.')}</p>}
-      {active.map((a) => <AgentRow key={a.id} a={a} onOpen={() => setOpen(a.id)} />)}
+      {active.map((a) => <AgentRow key={a.id} a={a} onOpen={() => onOpen(a.id)} />)}
       {archived.length > 0 && (
         <Collapsible open={showArchived} onOpenChange={setShowArchived}>
           <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
@@ -50,7 +58,7 @@ export function PaseoPanel({ sessionId, version }: { sessionId: string; version:
             {archived.length} archiviert
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 flex flex-col gap-2 opacity-60">
-            {archived.map((a) => <AgentRow key={a.id} a={a} onOpen={() => setOpen(a.id)} />)}
+            {archived.map((a) => <AgentRow key={a.id} a={a} onOpen={() => onOpen(a.id)} />)}
           </CollapsibleContent>
         </Collapsible>
       )}
@@ -86,7 +94,7 @@ function AgentRow({ a, onOpen }: { a: PaseoAgent; onOpen: () => void }) {
   )
 }
 
-function Transcript({ agentId, onBack }: { agentId: string; onBack: () => void }) {
+function Transcript({ agentId, onBack, backLabel }: { agentId: string; onBack: () => void; backLabel?: string }) {
   const [data, setData] = useState<{ agent: PaseoAgent; items: PaseoItem[]; hasOlder: boolean } | null>(null)
   const [error, setError] = useState('')
   const [limit, setLimit] = useState(150)
@@ -110,7 +118,7 @@ function Transcript({ agentId, onBack }: { agentId: string; onBack: () => void }
   return (
     <div className="flex min-h-0 flex-col">
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-4 py-2 backdrop-blur">
-        <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" />{t('Agents')}</button>
+        <button onClick={onBack} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="size-3.5" />{backLabel || t('Agents')}</button>
         <div className="min-w-0 flex-1 truncate text-sm font-medium">{a?.title || agentId}</div>
         {st && a && <span className={cn('inline-flex items-center gap-1.5 text-xs', st.text)}><AgentStateDot state={a.state} />{st.label}</span>}
         {a?.deepLink && (

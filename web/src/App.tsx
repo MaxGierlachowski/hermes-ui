@@ -145,9 +145,26 @@ export default function App() {
       <ThemeColorSync />
       <TooltipProvider delayDuration={300}>
         <Shell />
-        {/* Mobile: above the bottom tab bar. */}
-        <Toaster position="bottom-center" mobileOffset={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom))' }} />
+        <AppToaster />
       </TooltipProvider>
     </ThemeProvider>
+  )
+}
+
+/**
+ * In-app notifications never cover a composer. Desktop: bottom left, over the board (it keeps at least
+ * 40 % of the width; the thread panel and its input sit on the right), never wider than that share.
+ * Mobile: above the bottom tab bar, or at the top while a thread sheet (input at the bottom) is open.
+ */
+function AppToaster() {
+  const isMobile = useIsMobile()
+  const threadOpen = useBoard((s) => !!s.openId)
+  const top = isMobile && threadOpen
+  return (
+    <Toaster
+      position={isMobile ? (top ? 'top-center' : 'bottom-center') : 'bottom-left'}
+      mobileOffset={top ? { top: 'calc(0.5rem + env(safe-area-inset-top))' } : { bottom: 'calc(4.5rem + env(safe-area-inset-bottom))' }}
+      style={{ '--width': 'min(356px, calc(40vw - 32px))' } as React.CSSProperties}
+    />
   )
 }

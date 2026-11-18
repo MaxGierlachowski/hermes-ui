@@ -21,7 +21,7 @@ export type PendingPrompt = {
 }
 
 export type AgentState = 'running' | 'idle' | 'closed' | 'error' | 'needs-attention' | 'finished' | 'archived' | 'unknown'
-export type PaseoChip = { id: string; title: string | null; state: AgentState; status: string; rel: 'created' | 'steers' | 'watches'; account: string | null; kind: string | null; archived: boolean; pendingCount: number }
+export type PaseoChip = { id: string; title: string | null; state: AgentState; status: string; rel: 'created' | 'steers' | 'watches'; account: string | null; kind: string | null; archived: boolean; pendingCount: number; createdAt?: string | null; updatedAt?: string | null }
 export type PaseoAgent = PaseoChip & {
   known: boolean
   pendingPermissions?: { kind: string; name: string; title: string | null }[]
@@ -77,7 +77,7 @@ export type OutboxState = { id: string | null; status: 'sending' | 'waiting' | '
 export type ThreadMessage = {
   id?: number
   // event: delivered to the session but not typed by the user (webhook, cron, background notices)
-  role: 'user' | 'assistant' | 'tool' | 'system' | 'event'
+  role: 'user' | 'assistant' | 'tool' | 'system' | 'event' | 'paseo'
   text: string
   ts?: number
   toolName?: string
@@ -89,6 +89,8 @@ export type ThreadMessage = {
   steer?: boolean
   threadContext?: string
   outbox?: OutboxState
+  // Paseo tool call at this point of the chat; live state comes from the session's paseo chips.
+  paseo?: { action: 'create' | 'message' | 'archive' | 'permission'; ref: string; agentId: string | null; title?: string | null; account?: string | null; text?: string }
 }
 
 export type RemoteState = {

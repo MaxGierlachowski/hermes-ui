@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { AlertTriangle, Bell, ChevronRight, CircleStop, Clock, CornerDownRight, FileText, FlaskConical, RotateCcw, Webhook, Wrench, X, Zap } from 'lucide-react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { AlertTriangle, Archive, Bell, ShieldCheck, ChevronRight, CircleStop, Clock, CornerDownRight, FileText, FlaskConical, RotateCcw, Webhook, Wrench, X, Zap } from 'lucide-react'
 import { ChatContainerContent, ChatContainerRoot, ChatContainerScrollAnchor } from '@/components/ui/chat-container'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { clock } from '@/lib/format'
-import { COLUMNS, type Attachment, type Column, type OutboxState, type ThreadMessage } from '@/lib/types'
+import { COLUMNS, type Attachment, type Column, type OutboxState, type PaseoChip, type ThreadMessage } from '@/lib/types'
+import { AGENT_STATE, AgentStateDot } from '@/components/paseo/AgentChip'
 import { stripMediaTags } from '@/lib/media-tags'
 import { clearHighlight, dismissOutbox, getState, interrupt, openThread, retryOutbox, sendMessage, setColumn, useBoard } from '@/lib/store'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
@@ -160,9 +161,91 @@ function UserMeta({ m }: { m: ThreadMessage }) {
   )
 }
 
+// Live Paseo state of the open session + "open this agent's transcript" for inline agent items.
+const PaseoCtx = createContext<{ chips: PaseoChip[]; open: (agentId: string, msgId?: number) => void }>({ chips: [], open: () => {} })
+
+function duration(from?: string | null, to?: number, fallbackStart?: number) {
+  const start = from ? Date.parse(from) : fallbackStart ?? NaN
+  if (!Number.isFinite(start)) return ''
+  const min = Math.max(0, Math.round(((to ?? Date.now()) - start) / 60000))
+  return min < 1 ? '<1 min' : min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${min % 60} min`
+}
+
+/** Hermes started (or messaged / archived) a Paseo agent here: live state, click opens its transcript. */
+function PaseoInline({ m }: { m: ThreadMessage }) {
+  const { chips, open } = useContext(PaseoCtx)
+  const p = m.paseo!
+  const chip = p.agentId ? chips.find((c) => c.id === p.agentId) : undefined
+  const state = chip?.state || 'unknown'
+  const st = AGENT_STATE[state] || AGENT_STATE.unknown
+  const title = chip?.title || p.title || p.ref.slice(0, 8)
+  const running = state === 'running'
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!running) return
+    const timer = setInterval(() => tick((n) => n + 1), 30000)
+    return () => clearInterval(timer)
+  }, [running])
+  const clickable = !!p.agentId && !!chip
+  const go = () => clickable && open(p.agentId!, m.id)
+
+  if (p.action !== 'create') {
+    const Icon = p.action === 'archive' ? Archive : p.action === 'permission' ? ShieldCheck : CornerDownRight
+    const what = p.action === 'archive' ? t('Agent „{title}“ archiviert', { title })
+      : p.action === 'permission' ? t('Freigabe für „{title}“ beantwortet', { title })
+        : t('Nachricht an „{title}“', { title })
+    return (
+      <button onClick={go} disabled={!clickable} className={cn('flex max-w-full items-center gap-1.5 text-left text-xs text-muted-foreground', clickable && 'hover:text-foreground')} data-testid="paseo-line">
+        <Icon className="size-3.5 shrink-0" />
+        <span className="shrink-0">{what}</span>
+        {p.text && <span className="truncate opacity-70">· {p.text}</span>}
+      </button>
+    )
+  }
+  const end = running ? undefined : chip?.updatedAt ? Date.parse(chip.updatedAt) : undefined
+  return (
+    <button
+      onClick={go}
+      disabled={!clickable}
+      data-testid="paseo-card"
+      className={cn('group flex w-full max-w-md items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-left shadow-xs transition-colors', clickable ? 'hover:border-foreground/20' : 'opacity-70', chip?.archived && 'opacity-60')}
+    >
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted ring-1 ring-border/60">
+        {running ? <Loader variant="circular" size="sm" className="size-4" /> : <Bot className="size-4 text-muted-foreground" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-medium leading-snug">{title}</span>
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-muted-foreground">
+          <span className={cn('inline-flex items-center gap-1.5', st.text)}><AgentStateDot state={state} />{chip ? st.label : t('unbekannt / gelöscht')}</span>
+          {(chip?.account || p.account) && <span>Account {chip?.account || p.account}</span>}
+          {chip && <span className="tabular-nums">{duration(chip.createdAt, end, m.ts ? m.ts * 1000 : undefined)}</span>}
+          {!!chip?.pendingCount && <span className="text-amber-700 dark:text-amber-300">{t('{n} Freigabe(n) offen', { n: chip.pendingCount })}</span>}
+        </span>
+      </span>
+      {clickable && <span className="hidden shrink-0 text-[11px] text-muted-foreground group-hover:inline sm:inline">{t('Transkript')}</span>}
+      {clickable && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
+    </button>
+  )
+}
+
+/** Back from a transcript opened in the chat: scroll to the agent card that opened it. */
+function ReturnTo({ msgId, done }: { msgId: number | null; done: () => void }) {
+  const { stopScroll } = useStickToBottomContext()
+  useEffect(() => {
+    if (msgId == null) return
+    stopScroll()
+    const go = () => document.getElementById(`msg-${msgId}`)?.scrollIntoView({ block: 'center' })
+    requestAnimationFrame(go)
+    const timer = setTimeout(() => { go(); done() }, 120)
+    return () => clearTimeout(timer)
+  }, [msgId, stopScroll, done])
+  return null
+}
+
 function MessageBody({ m }: { m: ThreadMessage }) {
   const sessionId = useBoard((s) => s.openId)
   if (m.role === 'tool') return <ToolChip m={m} />
+  if (m.role === 'paseo' && m.paseo) return <PaseoInline m={m} />
   if (m.role === 'event' && m.event) return <EventCard m={m} />
   const atts = m.attachments || []
   if (m.role === 'user') {
@@ -221,9 +304,19 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
   const loading = useBoard((s) => s.loadingThread)
   const streaming = useBoard((s) => (s.streaming && s.streaming.id === s.openId ? s.streaming.text : ''))
   const [tab, setTab] = useState<'chat' | 'paseo'>('chat')
-  useEffect(() => { setTab('chat') }, [id])
+  const [agentOpen, setAgentOpen] = useState<string | null>(null)
+  // Set when a transcript was opened from an inline card: back returns to that spot in the chat.
+  const [fromMsg, setFromMsg] = useState<number | null>(null)
+  const [returnTo, setReturnTo] = useState<number | null>(null)
+  useEffect(() => { setTab('chat'); setAgentOpen(null); setFromMsg(null); setReturnTo(null) }, [id])
+  const clearReturn = useCallback(() => setReturnTo(null), [])
   if (!id || !session) return null
   const agentCount = session.paseo?.length || 0
+  const openAgent = (agentId: string, msgId?: number) => { setFromMsg(msgId ?? null); setAgentOpen(agentId); setTab('paseo') }
+  const backFromAgent = () => {
+    setAgentOpen(null)
+    if (fromMsg != null) { setReturnTo(fromMsg); setFromMsg(null); setTab('chat') }
+  }
   const runningAgents = session.paseo?.filter((a) => a.state === 'running').length || 0
 
   const confirmForeign = () => MESSAGING.has(session.source)
@@ -259,10 +352,10 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
         </div>
       </div>
 
-      {agentCount > 0 && (
+      {(agentCount > 0 || tab === 'paseo') && (
         <div className="flex items-center gap-1 border-b px-3 py-1.5">
-          <TabButton active={tab === 'chat'} onClick={() => setTab('chat')}><MessagesSquare className="size-3.5" />{t('Chat')}</TabButton>
-          <TabButton active={tab === 'paseo'} onClick={() => setTab('paseo')}>
+          <TabButton active={tab === 'chat'} onClick={() => { setTab('chat'); setAgentOpen(null); setFromMsg(null) }}><MessagesSquare className="size-3.5" />{t('Chat')}</TabButton>
+          <TabButton active={tab === 'paseo'} onClick={() => { setTab('paseo'); setAgentOpen(null); setFromMsg(null) }}>
             <Bot className="size-3.5" />{t('Paseo-Agents')} <span className="tabular-nums opacity-70">{agentCount}</span>
             {runningAgents > 0 && <span className="size-1.5 animate-pulse rounded-full bg-indigo-500" />}
           </TabButton>
@@ -272,7 +365,14 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
 
       {tab === 'paseo' ? (
         <OverlayScroll className="flex-1">
-          <PaseoPanel sessionId={session.id} version={(session.paseo || []).map((a) => a.id + a.state).join()} />
+          <PaseoPanel
+            sessionId={session.id}
+            version={(session.paseo || []).map((a) => a.id + a.state).join()}
+            open={agentOpen}
+            onOpen={(agentId) => { setFromMsg(null); setAgentOpen(agentId) }}
+            onBack={backFromAgent}
+            backLabel={fromMsg != null ? t('Zurück zum Chat') : undefined}
+          />
         </OverlayScroll>
       ) : (<>
       {session.running && session.activity && !session.pending?.length && (
@@ -285,7 +385,10 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
         <ChatContainerContent className="flex flex-col gap-4 px-4 py-4">
           {loading && !messages.length && <div className="flex justify-center py-8"><Loader variant="dots" /></div>}
           {!loading && !messages.length && !streaming && <div className="py-8 text-center text-sm text-muted-foreground">{t('Noch keine Nachrichten.')}</div>}
-          {messages.map((m, i) => <MessageRow key={m.id ?? `l${i}`} m={m} />)}
+          <PaseoCtx.Provider value={{ chips: session.paseo || [], open: openAgent }}>
+            {messages.map((m, i) => <MessageRow key={m.id ?? `l${i}`} m={m} />)}
+          </PaseoCtx.Provider>
+          <ReturnTo msgId={returnTo} done={clearReturn} />
           {streaming && (
             <Markdown className="prose prose-sm prose-zinc max-w-none text-foreground dark:prose-invert">{`${stripMediaTags(streaming)}▍`}</Markdown>
           )}

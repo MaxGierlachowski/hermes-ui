@@ -24,6 +24,7 @@ import { Inbox } from './src/inbox.mjs';
 import { Push } from './src/push.mjs';
 import { parseUserMessage, previewOf } from './src/user-markers.mjs';
 import { Outbox, queuedRow } from './src/outbox.mjs';
+import { callsOf, paseoItem, paseoTool } from './src/paseo-calls.mjs';
 import QRCode from 'qrcode';
 
 const cfg = loadConfig(process.argv.slice(2));
@@ -171,13 +172,9 @@ function scanPaseoRefs() {
       if (m) { linkAgent(r.session_id, m[1], 'created', r.timestamp); touched.add(r.session_id); }
       continue;
     }
-    let calls = [];
-    try { calls = JSON.parse(r.tool_calls || '[]'); } catch { /* ignore */ }
-    for (const c of calls) {
-      const name = c?.function?.name || c?.name || '';
-      if (!name.startsWith('mcp__paseo__paseo_')) continue;
-      let args = {};
-      try { args = JSON.parse(c.function?.arguments || '{}'); } catch { /* ignore */ }
+    // Direct calls and calls through Hermes' tool_call wrapper alike.
+    for (const { name, args } of [...callsOf(r.tool_calls).values()].flat()) {
+      if (!paseoTool(name)) continue;
       const ref = String(args.agent_id || '').trim();
       if (!ref) continue;
       const rel = /send_message|respond_permission|archive_agent/.test(name) ? 'steers' : 'watches';
@@ -267,7 +264,7 @@ function toCard(row) {
     override: !!overridden,
     running: autoColumn === 'doing' || (!!paseoNote && column === 'doing'),
     paseoNote,
-    paseo: agents.map(({ id, title, state, status, rel, account, kind, archived, pendingPermissions }) => ({ id, title, state, status, rel, account, kind, archived, pendingCount: pendingPermissions?.length || 0 })),
+    paseo: agents.map(({ id, title, state, status, rel, account, kind, archived, pendingPermissions, createdAt, updatedAt }) => ({ id, title, state, status, rel, account, kind, archived, pendingCount: pendingPermissions?.length || 0, createdAt, updatedAt })),
     activity: clip(activity, 220),
     initialPrompt: clip(prompt, 400),
     createdAt: row.started_at,
@@ -454,9 +451,22 @@ function threadMessages(id) {
   const rows = store.messages(id);
   const media = [...(board.data.media[id] || [])];
   const queued = new Map(outbox.forSession(id).filter((e) => e.rowId).map((e) => [e.rowId, e]));
+  const calls = new Map(); // tool_call_id -> [{ name, args }], for Paseo items
+  const seenCalls = new Map();
   const out = [];
   for (const r of rows) {
     if (r.display_kind === 'hidden') continue;
+    if (r.role === 'assistant' && r.tool_calls) for (const [k, v] of callsOf(r.tool_calls)) calls.set(k, v);
+    if (r.role === 'tool' && PASEO_ON) {
+      // Paseo agent started / messaged / archived here: an inline card with live state (src/paseo-calls.mjs).
+      const item = paseoItem(r, calls, seenCalls);
+      if (item) {
+        const agentId = paseo.resolve(item.ref) || (UUID.test(item.ref) && item.ref.length === 36 ? item.ref : null);
+        if (agentId && !paseo.agents.has(agentId)) paseo.ensure(agentId);
+        out.push({ id: r.id, role: 'paseo', text: '', ts: r.timestamp, paseo: { ...item, agentId } });
+        continue;
+      }
+    }
     if (r.role === 'tool') {
       out.push({ id: r.id, role: 'tool', toolName: r.tool_name || 'Tool', text: clip(r.content, 4000), ts: r.timestamp });
       continue;
