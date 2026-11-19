@@ -14,8 +14,9 @@ Alles Technische steht ausführlich in `docs/` auf dem Branch `hermes/universal-
 | Offene PRs | **#9** `hermes/mobile-app` → `main` (Store-Vorbereitung, Demo-Modus, Monorepo `server/`, Doku, Release-Tooling) · **#10** `hermes/universal-spike` → `hermes/mobile-app` (Universal-App iOS/Android/Web/Desktop mit Tauri 2, `app/`). Beide Draft, **Reihenfolge: erst #9, dann #10**. |
 | `main` | Stand vor #9: alte shadcn-Web-UI in `web/`, Backend im Root, App noch in `mobile-app/` |
 | Web-UI (PWA) live | https://maxgierlachowski.github.io/hermes-ui/ (aus `main`, GitHub Pages) |
-| Releases (GitHub, Pre-Release) | `mobile-app-v0.3.0` (Android APK + AAB, Demo-Modus) · `desktop-spike-1` / `desktop-spike-2` (macOS `.dmg`, unsigniert, Apple Silicon; spike-2 mit Mikro/Kamera/Notification-Permissions, Kartenrahmen- und Toast-Fix) |
-| Doku (englisch) | `docs/` auf `hermes/universal-spike`: `architecture.md`, `development.md`, `app.md`, `desktop-app.md`, `releasing.md`, `secrets-and-state.md`, `security.md`, `self-hosting.md`, `configuration.md`, `design.md`, `mobile-audit.md`, `features.md`, `decisions/0001…0012` |
+| Releases (GitHub, Pre-Release) | `mobile-app-v0.3.0` (Android APK + AAB, Demo-Modus) · **`app-v0.4.0-beta`** (Android, UI-Polish; Update über 0.3.0, gleicher Schlüssel) · `desktop-spike-1` / `desktop-spike-2` / **`desktop-spike-3`** (macOS `.dmg`, unsigniert, Apple Silicon; spike-2 Permissions, spike-3 UI-Polish) |
+| Doku (englisch) | `docs/` auf `hermes/universal-spike`: `architecture.md`, `development.md`, `app.md`, `desktop-app.md`, `releasing.md`, `secrets-and-state.md`, `security.md`, `self-hosting.md`, `configuration.md`, `design.md`, `mobile-audit.md`, `ui-audit.md`, `features.md`, `decisions/0001…0012` |
+| Desktop-App auf diesem Mac | `/Applications/Hermes UI.app` = `desktop-spike-3` (installiert 19.11.); noch **nicht gekoppelt** (siehe Nächste Schritte) |
 | Nur lokal (nicht gepusht, absichtlich) | Branch `archive/pre-publish` (alte Commits mit persönlichen Pfaden) – kann weg |
 
 ## 2. Stand
@@ -28,8 +29,8 @@ Alles Technische steht ausführlich in `docs/` auf dem Branch `hermes/universal-
 ## 3. Nächste Schritte (in dieser Reihenfolge)
 
 1. PR #9 mergen, dann PR #10 mergen. Danach im Checkout mit dem echten Keystore die Umbenennung nachziehen (Abschnitt „After the rename“ in `docs/secrets-and-state.md`: `mobile-app/.secrets` → `app/.secrets`, `storeFile` anpassen, SHA-256 prüfen – muss gleich bleiben).
-2. **UI-Polish der Universal-App** auf shadcn-Niveau (war geplant, wurde wegen der Pause nicht gestartet): Screen-für-Screen-Vergleich `web/` vs. `app/`, Design-Tokens 1:1 aus dem shadcn-Theme, Basis-Komponenten angleichen, Kartentitel 2 Zeilen, einheitliche Button-Größen in der Inbox, Markdown inkl. Syntax-Highlighting.
-3. Lücken für die Ablösung von `web/` schließen (laut Spike): Web Push in der Universal-App, Geräte-Kopplung für Fernzugriff im Web, Syntax-Highlighting, Inbox-Filter, Sprung zum Suchtreffer, Paseo-Deep-Link, PWA, Notification-Klick öffnet Chat. Danach `web/` entfernen.
+2. ~~UI-Polish der Universal-App auf shadcn-Niveau~~ **erledigt 19.11.** (PR #10, `desktop-spike-3`, `app-v0.4.0-beta`; Befunde, bewusste Abweichungen und Messwerte in `docs/ui-audit.md`, keine Performance-Regression). Noch offen: Desktop-App mit dem Backend auf 8787 koppeln (`hermes-ui pair` → Link einfügen, oder "Lokal verbinden" mit `HERMES_UI_TOKEN`); weißer Streifen links im Vollbild-Pairing-Screen prüfen; Inbox öffnet auf Android leicht gescrollt.
+3. Lücken für die Ablösung von `web/` schließen (laut Spike; Syntax-Highlighting und Inbox-Filter sind inzwischen drin): Web Push in der Universal-App, Geräte-Kopplung für Fernzugriff im Web, Desktop-Header-Filter (Quelle, Zeitraum, Cron), Sprung zum Suchtreffer, Paseo-Deep-Link, PWA, Notification-Klick öffnet Chat. Danach `web/` entfernen.
 4. Store (nur wenn gewünscht) – Entscheidungen und Schritte: `docs/releasing.md`. Offen: **App-ID** (endgültig, eigene Domain, z. B. `com.<domain>.<app>`), **Produktname** (eigener Name statt „Hermes …“, „for Hermes Agent“ nur im Untertitel), Foreground-Service `dataSync`, Frankreich vorerst ausschließen, 18+, Store-Build ohne Firebase, Anbieterdaten für Datenschutz/Support-Seite, Accounts (Apple 99 $/Jahr; Google Play 25 $, privat: 12 Tester × 14 Tage).
 5. Idee (nicht begonnen): optionaler **Hub-Server** (Accounts, Push ohne wachen Mac, Offline-Queue, mehrere Rechner), Daten weiter E2E über iroh. Als ADR ausarbeiten.
 
