@@ -7,6 +7,7 @@
 //     wheel direction on the web).
 //   - content-visibility: auto lets the browser skip layout and paint of rows outside the viewport:
 //     a 500-message thread costs about what the visible screen costs.
+//   - A flexible spacer below the newest row keeps a short thread at the top.
 //   - The first OPEN_ROWS rows render at once, older ones in idle chunks right after (DOM order is
 //     newest first, so appending older rows adds them above without moving the view).
 import { useEffect, useState, type ReactElement } from 'react'
@@ -28,6 +29,8 @@ export function ThreadList<R extends { key: string; kind: string }>({ rows, rend
   const shown = rows.length > limit ? rows.slice(0, limit) : rows
   return (
     <div className="hk-thread" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column-reverse', padding: '16px 16px 16px 16px', gap: 12, overscrollBehavior: 'contain' }}>
+      {/* First in DOM = bottom on screen: takes the free space of a short thread, so it starts at the top (like the web UI); 0 once the thread scrolls. */}
+      <div style={{ flex: '1 1 0px', minHeight: 0 }} aria-hidden />
       {shown.map((r) => (
         <div key={r.key} style={r.kind === 'msg' ? { contentVisibility: 'auto', containIntrinsicSize: 'auto 96px', flexShrink: 0 } : { flexShrink: 0 }}>
           {renderRow(r)}

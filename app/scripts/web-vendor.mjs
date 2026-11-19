@@ -1,4 +1,5 @@
-// Copies iroh-fetch (ES modules + WASM) to public/vendor/iroh-fetch for the web and desktop build.
+// Copies iroh-fetch (ES modules + WASM) to public/vendor/iroh-fetch and the Geist font (the web UI's
+// typeface, latin + latin-ext) to public/vendor/fonts for the web and desktop build.
 // The app loads it at runtime as a native ES module (transport.web.ts): Metro cannot bundle its
 // `new URL('…wasm', import.meta.url)`. Run by `npm run web` / `npm run web:export`.
 import fs from 'node:fs'
@@ -17,3 +18,10 @@ fs.copyFileSync(path.join(pkg, 'LICENSE'), path.join(out, 'LICENSE'))
 // eval, so it works under the desktop app's Content-Security-Policy.
 fs.writeFileSync(path.join(out, '..', 'iroh-loader.mjs'), `import * as m from './iroh-fetch/src/browser.js'\nwindow.__irohFetch = m\nwindow.dispatchEvent(new Event('iroh-fetch-ready'))\n`)
 console.log(`iroh-fetch ${JSON.parse(fs.readFileSync(path.join(pkg, 'package.json'), 'utf8')).version} → ${path.relative(process.cwd(), out)}`)
+
+// Geist (OFL-1.1), loaded by PlatformShell.web.tsx. Native builds keep the system font.
+const geist = path.dirname(require.resolve('@fontsource-variable/geist/index.css'))
+const fonts = path.join(out, '..', 'fonts')
+fs.mkdirSync(fonts, { recursive: true })
+for (const f of ['geist-latin-wght-normal.woff2', 'geist-latin-ext-wght-normal.woff2']) fs.copyFileSync(path.join(geist, 'files', f), path.join(fonts, f))
+fs.copyFileSync(path.join(geist, 'LICENSE'), path.join(fonts, 'LICENSE'))

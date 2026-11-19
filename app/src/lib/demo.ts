@@ -86,8 +86,8 @@ function build(): Data {
   messages.set('demo-weekly', [
     { id: 1, role: 'user', ts: T - 2400, text: L('Summarise the week for the team.', 'Fass die Woche für das Team zusammen.') },
     { id: 2, role: 'assistant', ts: T - 1800, text: L(
-      '**Week 47**\n\n- Release 1.3 shipped on Tuesday\n- Build time down from 6 to 2 minutes\n- 2 open bugs, both with a fix in review\n\nNext week: release 1.4.',
-      '**KW 47**\n\n- Release 1.3 am Dienstag ausgeliefert\n- Build-Zeit von 6 auf 2 Minuten gesenkt\n- 2 offene Bugs, beide mit Fix im Review\n\nNächste Woche: Release 1.4.') },
+      '**Week 47**\n\n- Release 1.3 shipped on Tuesday ([release notes](https://example.com/releases/1.3))\n- Build time down from 6 to 2 minutes\n- 2 open bugs, both with a fix in review\n\n| Area | Status |\n|---|---|\n| Release 1.3 | shipped |\n| Build time | 2 min (was 6) |\n| Open bugs | 2, fixes in review |\n\nNext week: release 1.4, see `CHANGELOG.md`.',
+      '**KW 47**\n\n- Release 1.3 am Dienstag ausgeliefert ([Release Notes](https://example.com/releases/1.3))\n- Build-Zeit von 6 auf 2 Minuten gesenkt\n- 2 offene Bugs, beide mit Fix im Review\n\n| Bereich | Stand |\n|---|---|\n| Release 1.3 | ausgeliefert |\n| Build-Zeit | 2 min (vorher 6) |\n| Offene Bugs | 2, Fixes im Review |\n\nNächste Woche: Release 1.4, siehe `CHANGELOG.md`.') },
   ])
 
   const agents: PaseoAgent[] = [

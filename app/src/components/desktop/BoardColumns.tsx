@@ -14,6 +14,7 @@ import { showThread } from '@/lib/nav'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/clipboard'
+import { isWebDesktop as D } from '@/lib/web-input'
 
 export function cardMenu(s: Session, at: { x: number; y: number }) {
   openMenu([
@@ -39,7 +40,7 @@ const Card = memo(function Card({ s, selected, open }: { s: Session; selected: b
     // Selected / open / focus rings are outlines drawn inside the card itself (CSS for data-hk-card in
     // PlatformShell.web.tsx): the column's scroll area clips anything outside, which cut off the top
     // card's ring; on this wrapper they would sit under the card's background.
-    <View ref={ref} {...({ dataSet: { hkCard: selected ? 'selected' : open ? 'open' : '' } } as object)} className="rounded-xl">
+    <View ref={ref} {...({ dataSet: { hkCard: selected ? 'selected' : open ? 'open' : '' } } as object)} className={D ? 'rounded-lg' : 'rounded-xl'}>
       <SessionCard s={s} onPress={() => showThread(s.id)} onLongPress={() => prefetchThread(s.id)} />
     </View>
   )
@@ -51,18 +52,19 @@ const BoardColumn = memo(function BoardColumn({ col, list, width, selected, open
   const meta = COLUMNS.find((c) => c.id === col)!
   return (
     // Fixed width when the columns scroll sideways (tablet); flex-1 would shrink them to nothing there.
-    <View ref={ref} className={cn('rounded-xl border border-border bg-muted/40', !width && 'flex-1', over && 'border-primary bg-primary/5')} style={width ? { width } : undefined}>
-      <View className="h-10 flex-row items-center gap-2 px-3">
+    // The web board's column: a quiet tray (muted/40, hairline border), header text 12.5 px.
+    <View ref={ref} className={cn('rounded-xl border border-border/60 bg-muted/40 web:transition-colors', !width && 'flex-1', over && 'border-primary/40 bg-primary/5')} style={width ? { width } : undefined}>
+      <View className={cn('flex-row items-center gap-2 px-3', D ? 'h-9 pt-0.5' : 'h-10')}>
         <View className={cn('h-2 w-2 rounded-full', COLUMN_COLOR[col])} />
-        <Text className="text-[13px] font-semibold">{meta.label}</Text>
-        <Text className="text-[13px] tabular-nums text-muted-foreground">{list.length}</Text>
+        <Text className={cn('font-medium text-foreground/90', D ? 'text-[12.5px]' : 'text-[13px]')}>{meta.label}</Text>
+        <Text className={cn('font-medium tabular-nums text-muted-foreground', D ? 'text-[12.5px]' : 'text-[13px]')}>{list.length}</Text>
       </View>
       <FlatList
         data={list}
         keyExtractor={(s) => s.id}
-        contentContainerClassName="gap-2 px-2 pb-3"
+        contentContainerClassName="gap-2 px-2 pb-2"
         renderItem={({ item, index }) => <Card s={item} selected={index === selected} open={item.id === openId} />}
-        ListEmptyComponent={<Text className="px-2 py-6 text-center text-xs text-muted-foreground">{t('Keine Chats in dieser Spalte.')}</Text>}
+        ListEmptyComponent={<View className="rounded-lg border border-dashed border-border px-3 py-6"><Text className="text-center text-xs text-muted-foreground/70">{t('Keine Karten')}</Text></View>}
         removeClippedSubviews={false}
       />
     </View>

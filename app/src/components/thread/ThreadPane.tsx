@@ -18,13 +18,13 @@ import { Lightbox } from '@/components/Lightbox'
 import { TransitionReady } from '@/components/Media'
 import { Sheet } from '@/components/Sheet'
 import { SyncBar } from '@/components/SyncBar'
-import { COLUMN_COLOR, StatusDot } from '@/components/status'
+import { COLUMN_COLOR, StatusDot, sourceIcon } from '@/components/status'
 import { ThreadList, type Row } from './ThreadList'
 import { getState, interrupt, openThread, sendMessage, setColumn, useStore } from '@/lib/store'
 import { closeThread, showPaseo, showThread } from '@/lib/nav'
 import { openMenu } from '@/lib/menu'
 import { cn } from '@/lib/utils'
-import { t } from '@/lib/i18n'
+import { clock, t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
 
 function ColumnSheet({ open, onClose, current, onPick }: { open: boolean; onClose: () => void; current: Column; onPick: (c: Column | 'auto') => void }) {
@@ -105,21 +105,38 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
   const agents = session?.paseo?.length || 0
   return (
     <View className="flex-1 bg-background">
-      <View className={cn('flex-row items-center gap-1 border-b border-border px-1 pb-1', embedded && 'h-12 px-2 pb-0')} style={embedded ? undefined : { paddingTop: insets.top + 2 }}>
+      <View className={cn('flex-row gap-1 border-b border-border', embedded ? 'items-start px-2 py-2' : 'items-center px-1 pb-1')} style={embedded ? undefined : { paddingTop: insets.top + 2 }}>
         {!embedded && <Button variant="ghost" size="icon" onPress={closeThread} accessibilityLabel={t('Zurück')}><Icon as={ArrowLeft} /></Button>}
-        <View className={cn('flex-1 flex-row items-center gap-2', embedded && 'pl-2')}>
-          {session && <StatusDot column={session.column} running={session.running} pending={!!session.pending?.length} />}
-          <Text className="flex-1 text-[16px] font-semibold" numberOfLines={1} selectable={embedded}>{session?.title || t('Ohne Titel')}</Text>
-        </View>
+        {embedded ? (
+          // Desktop split: the web UI's thread header (title on up to two lines, source · created · id below).
+          <View className="min-w-0 flex-1 gap-0.5 pl-2 pt-1">
+            <View className="flex-row items-start gap-2">
+              {session && <StatusDot column={session.column} running={session.running} pending={!!session.pending?.length} className="mt-[6px]" />}
+              <Text className="flex-1 text-[15px] font-semibold leading-5" numberOfLines={2} selectable>{session?.title || t('Ohne Titel')}</Text>
+            </View>
+            {session && (
+              <View className="flex-row items-center gap-2 pl-4">
+                <View className="flex-row items-center gap-1"><Icon as={sourceIcon(session.source)} size={12} tone="muted-foreground" /><Text className="text-xs text-muted-foreground">{session.source}</Text></View>
+                <Text className="text-xs tabular-nums text-muted-foreground">{clock(session.createdAt)}</Text>
+                <Text selectable className="shrink font-mono text-[11px] text-muted-foreground" numberOfLines={1}>{session.id}</Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View className="flex-1 flex-row items-center gap-2">
+            {session && <StatusDot column={session.column} running={session.running} pending={!!session.pending?.length} />}
+            <Text className="flex-1 text-[16px] font-semibold" numberOfLines={1}>{session?.title || t('Ohne Titel')}</Text>
+          </View>
+        )}
         {agents > 0 && (
-          <Button variant="ghost" size="sm" onPress={() => showPaseo(sessionId)} accessibilityLabel={t('Paseo-Agents')}>
-            <Icon as={Bot} size={18} /><Text className="text-sm">{agents}</Text>
+          <Button variant="ghost" size="sm" onPress={() => showPaseo(sessionId)} accessibilityLabel={t('Paseo-Agents')} {...({ dataSet: { tip: t('Paseo-Agents') } } as object)}>
+            <Icon as={Bot} size={embedded ? 16 : 18} /><Text className="text-sm tabular-nums">{agents}</Text>
           </Button>
         )}
         <View ref={columnButton} collapsable={false}>
-          <Button variant="ghost" size="icon" onPress={columnMenu} accessibilityLabel={t('Spalte')}><Icon as={Columns3} size={20} /></Button>
+          <Button variant="ghost" size={embedded ? 'icon-sm' : 'icon'} onPress={columnMenu} accessibilityLabel={t('Spalte')}><Icon as={Columns3} size={embedded ? 16 : 20} /></Button>
         </View>
-        {embedded && <Button variant="ghost" size="icon" onPress={closeThread} accessibilityLabel={t('Schließen')}><Icon as={X} size={20} /></Button>}
+        {embedded && <Button variant="ghost" size="icon-sm" onPress={closeThread} accessibilityLabel={`${t('Schließen')}`} {...({ dataSet: { tip: `${t('Schließen')}  Esc` } } as object)}><Icon as={X} size={16} /></Button>}
       </View>
       <SyncBar />
       <KeyboardAvoidingView behavior="padding" className="flex-1" keyboardVerticalOffset={0} enabled={!embedded}>

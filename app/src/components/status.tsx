@@ -5,6 +5,10 @@ import { Bot, Clock, Laptop, LayoutGrid, MessageCircle, Terminal, Webhook, type 
 import type { AgentState, Column } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
+import { isWebDesktop } from '@/lib/web-input'
+
+// 8 px like the web board with a mouse, 10 px on touch screens.
+const DOT = isWebDesktop ? 'h-2 w-2' : 'h-2.5 w-2.5'
 
 export const COLUMN_COLOR: Record<Column, string> = {
   new: 'bg-zinc-400 dark:bg-zinc-500',
@@ -24,9 +28,9 @@ export function StatusDot({ column, running, pending, className }: { column: Col
   const ring = useAnimatedStyle(() => ({ opacity: active ? 0.6 * (1 - pulse.value) : 0, transform: [{ scale: 1 + pulse.value * 1.4 }] }))
   const color = pending ? 'bg-amber-500' : COLUMN_COLOR[column]
   return (
-    <View className={cn('h-2.5 w-2.5 items-center justify-center', className)}>
-      <Animated.View className={cn('absolute h-2.5 w-2.5 rounded-full', color)} style={ring} />
-      <View className={cn('h-2.5 w-2.5 rounded-full', color)} />
+    <View className={cn(DOT, 'items-center justify-center', className)}>
+      <Animated.View className={cn('absolute rounded-full', DOT, color)} style={ring} />
+      <View className={cn('rounded-full', DOT, color)} />
     </View>
   )
 }

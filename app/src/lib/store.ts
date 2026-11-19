@@ -236,10 +236,12 @@ export async function loadSessions(throwing = false) {
   }
 }
 
-// Until the user picked a column: start on the first one with cards (Doing, Waiting, New, Done).
+// Until the user picked a column: Waiting when something there needs an answer (like the web UI),
+// otherwise the first one with cards (Doing, Waiting, New, Done).
 function pickColumn(sessions: Session[]) {
   if (columnChosen) return
-  const first = (['doing', 'waiting', 'new', 'done'] as Column[]).find((c) => sessions.some((s) => s.column === c))
+  const attention = sessions.some((s) => s.column === 'waiting' && s.pending?.length)
+  const first = attention ? 'waiting' : (['doing', 'waiting', 'new', 'done'] as Column[]).find((c) => sessions.some((s) => s.column === c))
   if (first) set({ column: first })
 }
 
@@ -386,9 +388,9 @@ export async function markRead(ids: string[] | 'all') {
     set((st) => ({ inbox: { ...st.inbox, unread: r.unread } }))
   } catch (err) { handle(err) }
 }
-export async function respondPaseo(agentId: string, requestId: string, decision: 'allow' | 'deny') {
+export async function respondPaseo(agentId: string, requestId: string, decision: 'allow' | 'deny', message?: string) {
   try {
-    await api(`/api/paseo/agents/${agentId}/permissions/${encodeURIComponent(requestId)}`, { method: 'POST', json: { decision } })
+    await api(`/api/paseo/agents/${agentId}/permissions/${encodeURIComponent(requestId)}`, { method: 'POST', json: { decision, ...(message ? { message } : {}) } })
     toast(decision === 'allow' ? t('Paseo-Freigabe erteilt') : t('Paseo-Freigabe abgelehnt'), 'success')
     loadInbox()
     return true

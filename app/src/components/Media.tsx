@@ -7,6 +7,10 @@ import { cachedMediaFile, mediaFile } from '@/lib/connection'
 import { Text } from '@/components/ui/text'
 import { Icon } from '@/components/ui/icon'
 import { t } from '@/lib/i18n'
+import { isWebDesktop } from '@/lib/web-input'
+
+// Images in a chat: 360 px wide with a mouse (the web UI's size), 240 on phones.
+const IMG_W = isWebDesktop ? 360 : 240
 
 /**
  * Set by a screen while its open transition runs: downloads wait until it has finished, so the
@@ -37,12 +41,12 @@ export function MediaImage({ url, onOpen }: { url: string; onOpen: (uri: string)
   const [broken, setBroken] = useState(false)
   if (error || broken) return <View className="h-24 w-40 flex-row items-center justify-center gap-2 rounded-lg border border-border"><Icon as={ImageOff} size={16} tone="muted-foreground" /><Text className="text-xs text-muted-foreground">{t('Bild nicht verfügbar')}</Text></View>
   // The placeholder has the size the image will most likely have: no jump when it arrives.
-  if (!uri) return <View className="items-center justify-center rounded-[10px] bg-muted" style={{ width: 240, aspectRatio: ratio }}><ActivityIndicator /></View>
+  if (!uri) return <View className="items-center justify-center rounded-[10px] bg-muted" style={{ width: IMG_W, maxWidth: '100%', aspectRatio: ratio }}><ActivityIndicator /></View>
   return (
-    <Pressable onPress={() => onOpen(uri)} accessibilityLabel={t('Bild vergrößern')}>
+    <Pressable onPress={() => onOpen(uri)} accessibilityLabel={t('Bild vergrößern')} style={{ maxWidth: '100%' }}>
       <Image
         source={{ uri }}
-        style={{ width: 240, aspectRatio: ratio, borderRadius: 10 }}
+        style={{ width: IMG_W, maxWidth: '100%', aspectRatio: ratio, borderRadius: 10 }}
         contentFit="cover"
         onError={(e) => { console.warn(`[hermes-ui] image ${url}: ${e.error}`); setBroken(true) }}
         onLoad={(e) => {

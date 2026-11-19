@@ -12,6 +12,7 @@ import { useKeydown } from '@/lib/web-input'
 import { blobToBase64 } from '@/lib/upload.web'
 import { t } from '@/lib/i18n'
 import type { Picked } from './Composer'
+import { shadow } from '@/lib/shadow'
 
 export function CameraCapture({ open, onClose, onPhoto, onDenied }: { open: boolean; onClose: () => void; onPhoto: (p: Picked) => void; onDenied: () => void }) {
   const video = useRef<HTMLVideoElement>(null)
@@ -53,7 +54,7 @@ export function CameraCapture({ open, onClose, onPhoto, onDenied }: { open: bool
     <Modal visible transparent animationType="none" onRequestClose={onClose}>
     <View className="flex-1 items-center justify-center bg-black/60">
       <Pressable className="absolute inset-0" onPress={onClose} accessibilityRole="none" />
-      <View className="w-[640px] max-w-[92%] overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
+      <View className="w-[640px] max-w-[92%] overflow-hidden rounded-xl border border-foreground/10 bg-popover" style={shadow('lg')}>
         <View className="h-11 flex-row items-center border-b border-border pl-4 pr-1">
           <Text className="flex-1 text-[14px] font-semibold">{t('Foto aufnehmen')}</Text>
           <Button variant="ghost" size="icon" onPress={onClose} accessibilityLabel={t('Schließen')}><Icon as={X} size={18} /></Button>

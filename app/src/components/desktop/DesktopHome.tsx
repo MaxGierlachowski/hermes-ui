@@ -10,6 +10,9 @@ import { COLUMNS } from '@shared/types'
 import { Text } from '@/components/ui/text'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
+import { Kbd } from '@/components/ui/kbd'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { Inbox } from '@/components/Inbox'
 import { OfflineBanner, SyncBar } from '@/components/SyncBar'
 import { SearchPanel } from '@/components/SearchPanel'
@@ -25,11 +28,14 @@ import { useKeydown, useSplitResize } from '@/lib/web-input'
 import { isDesktop, isMac, onShellAction } from '@/lib/desktop'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
+import { shadow } from '@/lib/shadow'
 
 // The macOS window has no title bar (Tauri titleBarStyle "Overlay"): the header is the drag region
 // and leaves room for the traffic lights.
 const TRAFFIC_LIGHTS = isDesktop && isMac ? 88 : 0
 const drag = isDesktop ? ({ dataSet: { tauriDragRegion: '' } } as object) : {}
+// Enter animations (CSS in PlatformShell.web.tsx).
+const anim = (kind: 'overlay' | 'dialog' | 'menu') => ({ dataSet: { hkAnim: kind } }) as object
 
 function Header() {
   const live = useStore((s) => s.live)
@@ -38,18 +44,19 @@ function Header() {
   const demo = useStore((s) => s.demo)
   const badge = useStore((s) => badgeCount(s))
   const Tab = ({ id, icon, label }: { id: 'board' | 'inbox'; icon: typeof LayoutGrid; label: string }) => (
-    <Pressable onPress={() => setTab(id)} className={cn('h-8 flex-row items-center gap-1.5 rounded-md px-2.5 web:hover:bg-background/60', tab === id && 'bg-background shadow-sm')} accessibilityRole="tab" accessibilityState={{ selected: tab === id }}>
-      <Icon as={icon} size={15} tone={tab === id ? 'foreground' : 'muted-foreground'} />
-      <Text className={cn('text-[13px]', tab === id ? 'font-medium' : 'text-muted-foreground')}>{label}</Text>
-      {id === 'inbox' && badge > 0 && <View className="h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1"><Text className="text-[11px] font-semibold text-primary-foreground">{badge > 99 ? '99+' : badge}</Text></View>}
+    <Pressable onPress={() => setTab(id)} className={cn('h-7 flex-row items-center gap-1.5 rounded-md border border-transparent px-2.5 web:transition-colors', tab === id ? 'bg-background dark:border-input dark:bg-input/30' : 'web:hover:bg-background/50')} style={tab === id ? shadow('sm') : undefined} accessibilityRole="tab" accessibilityState={{ selected: tab === id }}>
+      <Icon as={icon} size={14} tone={tab === id ? 'foreground' : 'muted-foreground'} />
+      <Text className={cn('text-[13px] font-medium', tab !== id && 'text-muted-foreground')}>{label}</Text>
+      {id === 'inbox' && badge > 0 && <View className="h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1"><Text className="text-[10px] font-semibold tabular-nums text-primary-foreground">{badge > 99 ? '99+' : badge}</Text></View>}
     </Pressable>
   )
   return (
-    <View {...drag} className="h-[52px] flex-row items-center gap-3 border-b border-border bg-background pr-3" style={{ paddingLeft: TRAFFIC_LIGHTS || 16 }}>
-      <View {...drag} className="flex-row items-center gap-2">
-        <View className="h-6 w-6 items-center justify-center rounded-md bg-primary"><Text className="text-xs font-bold text-primary-foreground">H</Text></View>
-        <Text {...drag} className="text-[15px] font-semibold">Hermes UI</Text>
-        <View className={cn('h-2 w-2 rounded-full', live && gateway ? 'bg-emerald-500' : live ? 'bg-amber-500' : 'bg-zinc-400')} accessibilityLabel={live ? 'live' : 'offline'} />
+    // 48 px like the web UI's header; 52 px in the desktop app, where the traffic lights sit in it.
+    <View {...drag} className={cn('flex-row items-center gap-2 border-b border-border bg-background pr-3', isDesktop ? 'h-[52px]' : 'h-12')} style={{ paddingLeft: TRAFFIC_LIGHTS || 16 }}>
+      <View {...drag} className="mr-1 flex-row items-center gap-2">
+        <View className="h-6 w-6 items-center justify-center rounded-md bg-primary"><Text className="text-[11px] font-bold text-primary-foreground">H</Text></View>
+        <Text {...drag} className="text-sm font-semibold tracking-tight">Hermes UI</Text>
+        <View className={cn('h-1.5 w-1.5 rounded-full', live && gateway ? 'bg-emerald-500' : live ? 'bg-amber-500' : 'bg-zinc-400')} {...({ dataSet: { tip: live && gateway ? t('Live mit dem Hermes-Gateway verbunden') : live ? t('Gateway nicht verbunden (nur Lesen)') : t('Nicht verbunden') } } as object)} accessibilityLabel={live ? 'live' : 'offline'} />
         {demo && (
           <Pressable onPress={async () => { await exitDemo(); router.replace('/pair') }} className="flex-row items-center gap-1 rounded-full bg-primary/15 px-2.5 py-0.5">
             <Text className="text-xs font-medium text-primary">Demo</Text><Icon as={X} size={12} tone="primary" />
@@ -60,35 +67,47 @@ function Header() {
         <Tab id="board" icon={LayoutGrid} label="Board" />
         <Tab id="inbox" icon={InboxIcon} label="Inbox" />
       </View>
-      <Pressable onPress={showSearch} className="h-8 w-72 flex-row items-center gap-2 rounded-md border border-border bg-card px-2.5 web:hover:border-ring/40" accessibilityLabel={t('Suche')}>
-        <Icon as={Search} size={15} tone="muted-foreground" />
-        <Text className="flex-1 text-[13px] text-muted-foreground" numberOfLines={1}>{t('Suchen oder Befehl …')}</Text>
-        <Text className="text-[11px] text-muted-foreground">⌘K</Text>
+      <Pressable onPress={showSearch} className="ml-2 h-8 w-64 flex-row items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 web:transition-colors web:hover:bg-muted" accessibilityLabel={t('Suche')} {...({ dataSet: { tip: 'off' } } as object)}>
+        <Icon as={Search} size={14} tone="muted-foreground" />
+        <Text className="flex-1 text-xs text-muted-foreground" numberOfLines={1}>{t('Suchen oder Befehl …')}</Text>
+        <Kbd>⌘K</Kbd>
       </Pressable>
       <View {...drag} className="flex-1 self-stretch" />
-      <Button variant="ghost" size="icon" onPress={() => router.push('/settings')} accessibilityLabel={t('Einstellungen')}><Icon as={Settings} size={18} /></Button>
-      <Button size="sm" onPress={showNewChat}><Icon as={Plus} size={16} tone="primary-foreground" /><Text>{t('Neuer Chat')}</Text></Button>
+      <Button variant="ghost" size="icon-sm" onPress={() => router.push('/settings')} accessibilityLabel={t('Einstellungen')} {...({ dataSet: { tip: `${t('Einstellungen')}  ⌘,` } } as object)}><Icon as={Settings} size={16} /></Button>
+      <Button className="ml-1" onPress={showNewChat} accessibilityHint="⌘N"><Icon as={Plus} size={16} tone="primary-foreground" /><Text>{t('Neuer Chat')}</Text></Button>
     </View>
   )
 }
 
 function NewChatDialog() {
+  const [title, setTitle] = useState('')
+  const [draft, setDraft] = useState(false)
   return (
-    <View className="w-[640px] max-w-full overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
-      <View className="h-12 flex-row items-center border-b border-border pl-4 pr-2">
-        <Text className="flex-1 text-[15px] font-semibold">{t('Neuer Chat')}</Text>
-        <Button variant="ghost" size="icon" onPress={() => setOverlay(null)} accessibilityLabel={t('Schließen')}><Icon as={X} size={18} /></Button>
+    // The web UI's dialog: popover surface, hairline ring, 16 px padding, title 16 px medium.
+    <View {...anim('dialog')} className="w-[576px] max-w-full overflow-hidden rounded-xl border border-foreground/10 bg-popover" style={shadow('lg')}>
+      <View className="flex-row items-start gap-2 pl-4 pr-2 pt-3">
+        <View className="flex-1 gap-1 pt-1">
+          <Text className="text-base font-medium leading-none">{t('Neuer Chat')}</Text>
+          <Text className="text-sm text-muted-foreground">{t('Hermes startet eine neue Session. Text, Bilder oder eine Sprachnachricht.')}</Text>
+        </View>
+        <Button variant="ghost" size="icon-sm" onPress={() => setOverlay(null)} accessibilityLabel={t('Schließen')}><Icon as={X} size={16} /></Button>
       </View>
-      <Text className="px-4 pt-3 text-sm text-muted-foreground">{t('Hermes startet eine neue Session. Text, Bilder oder eine Sprachnachricht.')}</Text>
+      <View className="px-4 pt-3">
+        <Input value={title} onChangeText={setTitle} placeholder={t('Titel (optional)')} className="min-h-9" />
+      </View>
       <Composer
         autoFocus
         draftKey="new-chat"
         placeholder={t('Worum geht es?')}
         onSend={async (msg) => {
-          const s = await createChat(msg).catch((e) => { toast(e instanceof Error ? e.message : String(e), 'error'); return null })
+          const s = await createChat({ ...msg, title: title.trim() || undefined, draft }).catch((e) => { toast(e instanceof Error ? e.message : String(e), 'error'); return null })
           if (s) showThread(s.id)
         }}
       />
+      <View className="flex-row items-center gap-2 px-4 pb-4 pt-1">
+        <Switch value={draft} onValueChange={setDraft} accessibilityLabel={t('Nur anlegen (New Task, noch nicht starten)')} />
+        <Text className="text-xs text-muted-foreground">{t('Nur anlegen (New Task, noch nicht starten)')}</Text>
+      </View>
     </View>
   )
 }
@@ -97,10 +116,10 @@ function Overlay() {
   const overlay = useNav((n) => n.overlay)
   if (!overlay) return null
   return (
-    <View className="absolute inset-0 z-40 items-center bg-black/30 pt-[12vh]">
-      <Pressable className="absolute inset-0" onPress={() => setOverlay(null)} accessibilityRole="none" />
+    <View className="absolute inset-0 z-40 items-center pt-[12vh]">
+      <Pressable {...anim('overlay')} className="absolute inset-0 bg-black/10 web:backdrop-blur-[2px] dark:bg-black/40" onPress={() => setOverlay(null)} accessibilityRole="none" />
       {overlay === 'search' ? (
-        <View className="w-[620px] max-w-[92%]">
+        <View {...anim('dialog')} className="w-[640px] max-w-[92%]">
           <SearchPanel
             palette
             onClose={() => setOverlay(null)}

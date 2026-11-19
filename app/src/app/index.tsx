@@ -20,6 +20,10 @@ import { BoardColumns } from '@/components/desktop/BoardColumns'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
+import { shadow } from '@/lib/shadow'
+import { COLUMN_COLOR } from '@/components/status'
+import { THEME } from '@/lib/theme'
+import { useColorScheme } from 'nativewind'
 
 function Header() {
   const demo = useStore((s) => s.demo)
@@ -30,7 +34,13 @@ function Header() {
   return (
     <View className="flex-row items-center gap-1 border-b border-border bg-background px-2 pb-1" style={{ paddingTop: insets.top + 4 }}>
       <View className="flex-1 flex-row items-center gap-2 pl-2">
-        <Text className="text-lg font-semibold">{tab === 'inbox' ? 'Inbox' : 'Hermes'}</Text>
+        {/* The web UI's brand: logo tile + name; the inbox tab shows its own title. */}
+        {tab === 'inbox'
+          ? <Text className="text-[17px] font-semibold">Inbox</Text>
+          : <>
+            <View className="h-7 w-7 items-center justify-center rounded-lg bg-primary"><Text className="text-[13px] font-bold text-primary-foreground">H</Text></View>
+            <Text className="text-[17px] font-semibold tracking-tight">Hermes UI</Text>
+          </>}
         <View className={cn('h-2 w-2 rounded-full', live && gateway ? 'bg-emerald-500' : live ? 'bg-amber-500' : 'bg-zinc-400')} accessibilityLabel={live ? 'live' : 'offline'} />
         {demo && (
           <Pressable onPress={async () => { await exitDemo(); router.replace('/pair') }} accessibilityRole="button" accessibilityLabel={t('Demo beenden')} hitSlop={8} className="ml-1 flex-row items-center gap-1 rounded-full bg-primary/15 px-2.5 py-1">
@@ -53,28 +63,26 @@ function Header() {
 function ColumnTabs({ counts, pending, page, progress, onPick }: { counts: Record<Column, number>; pending: Record<Column, boolean>; page: number; progress: Animated.AnimatedInterpolation<number> | Animated.Value; onPick: (i: number) => void }) {
   const [width, setWidth] = useState(0)
   const seg = width / COLUMNS.length
+  const { colorScheme } = useColorScheme()
   return (
-    <View className="border-b border-border" onLayout={(e) => setWidth(e.nativeEvent.layout.width - 16)}>
+    // The web UI's segment: a muted pill behind the current column, here following the finger while swiping.
+    <View className="border-b border-border py-1.5" onLayout={(e) => setWidth(e.nativeEvent.layout.width - 16)}>
+      {seg > 0 && (
+        // Plain styles: NativeWind classes do not reach an Animated.View on the web.
+        <Animated.View style={{ position: 'absolute', left: 8, top: 6, height: 48, borderRadius: 8, backgroundColor: THEME[colorScheme === 'dark' ? 'dark' : 'light'].muted, width: seg, transform: [{ translateX: Animated.multiply(progress, seg) }] }} />
+      )}
       <View className="flex-row px-2">
         {COLUMNS.map((c, i) => {
           const on = i === page
           return (
             <Pressable key={c.id} onPress={() => onPick(i)} className="h-12 flex-1 flex-row items-center justify-center gap-1.5" accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={`${c.label} ${counts[c.id]}`}>
-              <Text className={cn('text-[13.5px]', on ? 'font-semibold text-foreground' : 'text-muted-foreground')} numberOfLines={1}>{c.label}</Text>
-              <View className={cn('h-[18px] min-w-[18px] items-center justify-center rounded-full px-1', on ? 'bg-primary/15' : 'bg-muted')}>
-                <Text className={cn('text-[11px] tabular-nums', on ? 'font-semibold text-primary' : 'text-muted-foreground')}>{counts[c.id]}</Text>
-              </View>
-              {pending[c.id] && <View className="absolute right-1 top-2.5 h-1.5 w-1.5 rounded-full bg-amber-500" />}
+              <View className={cn('h-2 w-2 rounded-full', pending[c.id] ? 'bg-amber-500' : COLUMN_COLOR[c.id])} />
+              <Text className={cn('text-[13.5px] font-medium', on ? 'text-foreground' : 'text-muted-foreground')} numberOfLines={1}>{c.label.replace(' Task', '')}</Text>
+              <Text className={cn('text-[13px] tabular-nums', on ? 'text-foreground/70' : 'text-muted-foreground/80')}>{counts[c.id]}</Text>
             </Pressable>
           )
         })}
       </View>
-      {seg > 0 && (
-        <Animated.View
-          className="absolute bottom-0 left-2 h-[3px] rounded-t-full bg-primary"
-          style={{ width: seg, transform: [{ translateX: Animated.multiply(progress, seg) }] }}
-        />
-      )}
     </View>
   )
 }
@@ -203,6 +211,16 @@ export default function Home() {
   // With a cached board the app shows it at once, also while connecting or offline.
   const content = auth === 'ok' || (hydrated && (auth === 'connecting' || auth === 'offline'))
   if (layout === 'desktop' && content) return <DesktopHome />
+  // Desktop without data yet: the connection state alone, centred (no phone header or tab bar).
+  if (layout === 'desktop') {
+    return (
+      <View className="flex-1 bg-background">
+        {auth === 'connecting'
+          ? <View className="flex-1 items-center justify-center gap-3"><ActivityIndicator size="large" /><Text className="text-sm text-muted-foreground">{t('Verbinde über iroh …')}</Text></View>
+          : <View className="mx-auto w-full max-w-md flex-1"><Offline /></View>}
+      </View>
+    )
+  }
   return (
     <View className="flex-1 bg-background">
       <Header />
@@ -218,7 +236,7 @@ export default function Home() {
         <View className="flex-1 items-center justify-center gap-3"><ActivityIndicator size="large" /><Text className="text-muted-foreground">{t('Verbinde über iroh …')}</Text></View>
       ) : <Offline />}
       {content && tab === 'board' && (
-        <Button size="lg" className="absolute right-4 rounded-full shadow-lg" style={{ bottom: insets.bottom + 72 }} onPress={showNewChat}>
+        <Button size="lg" className="absolute right-4 rounded-full" style={[{ bottom: insets.bottom + 72 }, shadow('lg')]} onPress={showNewChat}>
           <Icon as={Plus} tone="primary-foreground" /><Text>{t('Neuer Chat')}</Text>
         </Button>
       )}

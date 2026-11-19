@@ -13,18 +13,24 @@ import { retryOutbox } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { clock, t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
+import { isWebDesktop as D } from '@/lib/web-input'
+import { shadow } from '@/lib/shadow'
+
+// Desktop: hover reveals an assistant message's time (CSS for data-hk-msg / data-hk-ts in PlatformShell.web.tsx).
+const HOVER_MSG = D ? ({ dataSet: { hkMsg: '' } } as object) : {}
+const HOVER_TS = D ? ({ dataSet: { hkTs: '' } } as object) : {}
 
 function ToolChip({ m }: { m: ThreadMessage }) {
   const [open, setOpen] = useState(false)
   return (
     <View className="items-start">
-      <Pressable onPress={() => { if (m.text) { haptic('select'); setOpen((o) => !o) } }} className="min-h-9 max-w-full flex-row items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2.5 py-1.5">
+      <Pressable onPress={() => { if (m.text) { haptic('select'); setOpen((o) => !o) } }} className={cn('max-w-full flex-row items-center gap-1.5 rounded-md border border-border bg-muted/50 web:transition-colors', D ? 'px-2 py-1 web:hover:bg-muted' : 'min-h-9 px-2.5 py-1.5')}>
         <Icon as={Wrench} size={12} tone="muted-foreground" />
         <Text className="font-mono text-xs text-muted-foreground">{m.toolName}</Text>
         {!!m.summary && <Text className="shrink text-xs text-muted-foreground/80" numberOfLines={1}>· {m.summary}</Text>}
         {!!m.text && <Icon as={ChevronRight} size={12} tone="muted-foreground" style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }} />}
       </Pressable>
-      {open && <Text selectable className="mt-1.5 max-h-72 w-full rounded-md bg-muted/60 p-2 font-mono text-[11.5px]">{m.text}</Text>}
+      {open && <Text selectable className="mt-1.5 max-h-72 w-full rounded-md border border-border bg-muted/60 p-2 font-mono text-[11.5px]">{m.text}</Text>}
     </View>
   )
 }
@@ -37,11 +43,11 @@ function EventCard({ m }: { m: ThreadMessage }) {
   const ev = m.event!
   return (
     <View className="rounded-xl border border-border bg-muted/30">
-      <Pressable onPress={() => setOpen((o) => !o)} className="min-h-12 flex-row items-start gap-2 px-3 py-2">
+      <Pressable onPress={() => setOpen((o) => !o)} className={cn('flex-row items-start gap-2 px-3 py-2', !D && 'min-h-12')}>
         <Icon as={EVENT_ICON[ev.source] || Bell} size={14} tone="muted-foreground" style={{ marginTop: 2 }} />
         <View className="flex-1">
           <Text className="text-[11px] text-muted-foreground" numberOfLines={1}>{t(EVENT_LABEL[ev.source] || 'Event')}{ev.route ? ` · ${ev.route}` : ''}{m.ts ? `  ·  ${clock(m.ts)}` : ''}</Text>
-          <Text className="text-sm font-medium" numberOfLines={2}>{ev.title}</Text>
+          <Text className="mt-0.5 text-sm font-medium text-foreground/90" numberOfLines={2}>{ev.title}</Text>
         </View>
         <Icon as={ChevronRight} size={14} tone="muted-foreground" style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }} />
       </Pressable>
@@ -67,8 +73,8 @@ function PaseoInline({ m, chips, sessionId }: { m: ThreadMessage; chips: PaseoCh
     )
   }
   return (
-    <Pressable onPress={open} className="min-h-14 flex-row items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 active:bg-accent">
-      <Icon as={Bot} size={18} tone="muted-foreground" />
+    <Pressable onPress={open} className={cn('flex-row items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 active:bg-accent web:transition-colors web:hover:border-foreground/20', D ? 'max-w-md' : 'min-h-14')} style={shadow('xs')}>
+      <View className="h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-muted"><Icon as={Bot} size={16} tone="muted-foreground" /></View>
       <View className="flex-1">
         <Text className="text-sm font-medium" numberOfLines={1}>{title}</Text>
         <View className="flex-row items-center gap-1.5">
@@ -116,9 +122,9 @@ export const MessageView = memo(function MessageView({ m, sessionId, chips, onIm
       <View className="items-end">
         {(reply || origin) && <Text className="mb-1 text-[11px] text-muted-foreground" numberOfLines={1}>{reply ? `↳ ${reply.text}` : t('via {where}', { where: origin!.text })}</Text>}
         <View className={cn('max-w-[85%] rounded-2xl rounded-br-md border border-border/60 bg-muted px-3.5 py-2', o && !bad && 'opacity-60', bad && 'border-destructive/50')}>
-          {!!m.text && <Text selectable className="text-[15px] leading-[21px]">{m.text}</Text>}
+          {!!m.text && <Text selectable className={D ? 'text-sm leading-5' : 'text-[15px] leading-[21px]'}>{m.text}</Text>}
           <Attachments atts={atts} onImage={onImage} />
-          {!!m.ts && <Text className="mt-1 text-right text-[11px] text-muted-foreground">{clock(m.ts)}</Text>}
+          {!!m.ts && <Text className={cn('mt-1 text-right text-muted-foreground', D ? 'text-[10.5px]' : 'text-[11px]')}>{clock(m.ts)}</Text>}
         </View>
         {o && (
           <View className="mt-1 flex-row items-center gap-2">
@@ -136,10 +142,10 @@ export const MessageView = memo(function MessageView({ m, sessionId, chips, onIm
   }
   if (m.role === 'system') return <Text className="text-center text-xs text-muted-foreground">{m.text}</Text>
   return (
-    <View>
+    <View {...HOVER_MSG}>
       {!!m.text && <Markdown text={m.live ? stripMediaTags(m.text) : m.text} />}
       <Attachments atts={atts} onImage={onImage} />
-      {!!m.ts && <Text className="mt-1 text-[11px] text-muted-foreground">{clock(m.ts)}</Text>}
+      {!!m.ts && <Text {...HOVER_TS} className={cn('mt-1 text-muted-foreground', D ? 'text-[10.5px]' : 'text-[11px]')}>{clock(m.ts)}</Text>}
     </View>
   )
 })
