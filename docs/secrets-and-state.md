@@ -74,7 +74,7 @@ the installed apps know):
 keytool -list -v -keystore app/.secrets/release.keystore \
   -storepass "$(sed -n 's/^storePassword=//p' app/.secrets/keystore.properties)" | grep 'SHA256:'
 npm --prefix app ci && npm run app:release:android   # then, for the built APK:
-"$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs app/dist/*arm64*.apk | grep SHA-256
+"$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner" verify --print-certs app/dist/*arm64*.apk | grep SHA-256
 ```
 
 Both must print the same fingerprint as before. Then remove what is left of the old folder (only build
