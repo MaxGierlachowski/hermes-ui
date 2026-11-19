@@ -12,6 +12,7 @@ What the board, the thread panel and the inbox do, in detail. The mobile app: [a
 - **Thread panel:**
   - Full transcript with tool calls (collapsible) and images, live streaming, stop button.
   - Composer with text, images (paste or drag & drop) and voice messages. Voice is recorded with MediaRecorder and transcribed by Hermes' own STT.
+  - **Summary pill:** a small floating "Summary" pill sits right above the composer. A click sends one fixed prompt as an ordinary message into that chat (the composer's own send path, no special route): Hermes summarizes the chat, explains what was decided or done and why, and lists every open task with what, who and what blocks it, answering in the chat's language and without starting new work. The pill is hidden while the chat is empty, while Hermes works on a turn or waits for an approval / answer, and for drafts; after a click it shows "Requesting summary …" and then "Summary requested", and a second click in that time sends nothing. The prompt text lives in one place, `shared/summary.ts` (app and web UI).
   - While a voice message is transcribed and sent, the composer shows "Transcribing voice message …" with an indeterminate bar, the recording's length and the seconds waited (Hermes' STT reports no progress). A recording that could not be sent stays in the composer with *send again* / *discard*; a failed transcription is reported (the message then goes out as an audio file). Nothing about a voice message fails silently.
 - **Approvals and questions:** shown on the card and inline in the thread.
   - Approval: approve with the options Hermes offers (once / session / always) or deny.
@@ -39,6 +40,7 @@ What the board, the thread panel and the inbox do, in detail. The mobile app: [a
   - The thread opens as a bottom sheet: drag it down to close. The composer is one row (attach · text · one round button that is the mic, send, or stop), Enter makes a new line, and it stays above the keyboard on iOS too.
   - Board: column tabs, swipe sideways to switch columns, long-press a card to move it. Column choice, new chat, notifications and remote access open as bottom sheets; search is full screen.
   - Images (thread, attachments, Paseo transcripts) open full screen: pinch or double-tap to zoom the image only (the app itself never zooms), drag to pan, swipe down to close.
+- **Image viewer in the app (phone, web, desktop):** the image is shown at its own size (at most the window) on a dark backdrop, with a spinner while it loads; pinch or double-tap zooms, the X, Esc / back or a click beside the image closes it. An image that does not load shows "The image could not be loaded" with its file path (never the access token) and, for plain web URLs, a link to open it.
 
 ## Push notifications
 

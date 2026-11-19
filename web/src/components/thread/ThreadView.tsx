@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { clock } from '@/lib/format'
-import { COLUMNS, type Attachment, type Column, type OutboxState, type PaseoChip, type ThreadMessage } from '@/lib/types'
+import { COLUMNS, type Attachment, type Column, type OutboxState, type OutgoingMessage, type PaseoChip, type ThreadMessage } from '@/lib/types'
 import { AGENT_STATE, AgentStateDot, AgentIcon, agentKindLabel } from '@/components/paseo/AgentChip'
 import { stripMediaTags } from '@/lib/media-tags'
 import { clearHighlight, dismissOutbox, getState, interrupt, openThread, retryOutbox, sendMessage, setColumn, useBoard } from '@/lib/store'
@@ -17,6 +17,8 @@ import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { SourceIcon, StatusDot } from '@/components/board/status'
 import { Composer } from './Composer'
 import { PendingPrompt } from './PendingPrompt'
+import { SummaryPill } from './SummaryPill'
+import { useSummaryPill } from '@/hooks/use-summary-pill'
 import { MediaAudio, MediaImage } from '@/components/common/Media'
 import { PaseoPanel } from '@/components/paseo/PaseoPanel'
 import { OverlayScroll } from '@/components/common/OverlayScroll'
@@ -318,6 +320,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
   const isMobile = useIsMobile()
   useEffect(() => { setTab('chat'); setAgentOpen(null); setFromMsg(null); setReturnTo(null) }, [id])
   const clearReturn = useCallback(() => setReturnTo(null), [])
+  const summary = useSummaryPill(id || '', messages.length, !!session?.running || !!session?.pending?.length)
   if (!id || !session) return null
   const agentCount = session.paseo?.length || 0
   const openAgent = (agentId: string, msgId?: number) => { setFromMsg(msgId ?? null); setAgentOpen(agentId); setTab('paseo') }
@@ -329,6 +332,11 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
 
   const confirmForeign = () => MESSAGING.has(session.source)
     || confirm(t('Diese Session gehört zu „{src}“. Hermes kann die Antwort auch dort posten. Trotzdem senden?', { src: session.source }))
+  // The composer's send path, also used by the Summary pill.
+  const submit = async (msg: OutgoingMessage) => {
+    if (!confirmForeign()) throw new Error('abgebrochen')
+    return sendMessage(getState().openId!, msg)
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -402,7 +410,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
       )}
 
       <ChatContainerRoot className="relative min-h-0 flex-1">
-        <ChatContainerContent className="flex flex-col gap-4 px-4 py-4">
+        <ChatContainerContent className={cn('flex flex-col gap-4 px-4 py-4', summary.state !== 'hidden' && 'pb-14')}>
           {loading && !messages.length && <div className="flex justify-center py-8"><Loader variant="dots" /></div>}
           {!loading && !messages.length && !streaming && <div className="py-8 text-center text-sm text-muted-foreground">{t('Noch keine Nachrichten.')}</div>}
           <PaseoCtx.Provider value={{ chips: session.paseo || [], open: openAgent }}>
@@ -424,16 +432,14 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
 
       </>)}
 
-      {tab === 'chat' && <div className="border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-md:px-2 max-md:pt-2 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))] [.keyboard-open_&]:pb-2">
+      {tab === 'chat' && <div className="relative border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-md:px-2 max-md:pt-2 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))] [.keyboard-open_&]:pb-2">
+        {!session.draft && <SummaryPill state={summary.state} onClick={() => summary.run((text) => submit({ text, images: [], audio: null }))} />}
         <Composer
           key={session.id}
           draftKey={session.id}
           onStop={session.running ? () => interrupt(session.id) : undefined}
           placeholder={session.draft ? 'Entwurf ergänzen und starten …' : t('Antworten …')}
-          onSubmit={async (msg) => {
-            if (!confirmForeign()) throw new Error('abgebrochen')
-            return sendMessage(getState().openId!, msg)
-          }}
+          onSubmit={submit}
         />
       </div>}
     </div>

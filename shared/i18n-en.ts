@@ -362,4 +362,12 @@ export const EN: Record<string, string> = {
   'Sprachnachricht wird transkribiert …': 'Transcribing voice message …',
   'Aufnahme {len}': 'Recording {len}',
   'Sprachnachricht nicht transkribiert – als Audiodatei gesendet': 'Voice message not transcribed – sent as an audio file',
+  // Summary pill above the composer
+  'Summary': 'Summary',
+  'Zusammenfassung wird angefordert …': 'Requesting summary …',
+  'Zusammenfassung angefordert': 'Summary requested',
+  'Zusammenfassung, Stand und offene Tasks': 'Summary, current state and open tasks',
+  // Image viewer
+  'Bild konnte nicht geladen werden': 'The image could not be loaded',
+  'Bild öffnen': 'Open image',
 }

@@ -73,8 +73,19 @@ const img = mp.locator('.hk-thread img').first()
 ok('image in thread renders', (await img.count()) > 0 && (await img.evaluate((i) => i.naturalWidth)) > 0)
 await img.click(); await mp.waitForTimeout(600)
 ok('lightbox opens', (await mp.locator('img').count()) >= 2)
+// The image must be visible on a dark backdrop (it once opened at 0 px height on a transparent overlay).
+const lb = await mp.locator('[data-testid="lightbox-image"]').boundingBox()
+ok(`lightbox image has a size (${lb && Math.round(lb.width)}×${lb && Math.round(lb.height)})`, !!lb && lb.width > 100 && lb.height > 100)
+ok('lightbox backdrop is dark', await mp.locator('[data-testid="lightbox-image"]').evaluate((el) => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c !== 'rgba(0, 0, 0, 0)') return /^rgba?\(0, 0, 0/.test(c) } return false }))
+await mp.mouse.click(lb.x + lb.width / 2, lb.y + lb.height / 2); await mp.waitForTimeout(400)
+ok('a click on the image keeps the lightbox open', (await mp.locator('[data-testid="lightbox-image"]').count()) === 1)
+await mp.mouse.click(Math.max(4, lb.x / 2), lb.y + lb.height / 2); await mp.waitForTimeout(500)
+ok('a click beside the image closes it', (await mp.locator('[data-testid="lightbox-image"]').count()) === 0)
+await img.click({ force: true }); await mp.waitForTimeout(600)
 await mp.keyboard.press('Escape'); await mp.waitForTimeout(600)
 ok('Esc closes the lightbox, the chat stays open', (await mp.locator('img').count()) === 1 && (await mp.locator('.hk-thread').count()) === 1)
+// Summary pill: hidden while an approval waits (demo-site), shown in an idle chat, one click = one message.
+ok('summary pill hidden while an approval waits', !(await mp.locator('[data-testid="summary-pill"]').isVisible()))
 if (engine !== 'webkit') {
   await mp.locator('[aria-label="Voice message"]').click(); await mp.waitForTimeout(1500)
   ok('recording state shown', await mp.getByText(/Recording/).isVisible())
@@ -96,6 +107,13 @@ if (engine !== 'webkit') {
   await mp.getByRole('button', { name: 'Take photo' }).last().click(); await mp.waitForTimeout(800)
   ok('camera photo becomes an attachment', await mp.locator('[aria-label="Remove image"]').count() === 2)
 }
+await mp.goto('http://127.0.0.1:8811/demo?thread=demo-weekly', { waitUntil: 'networkidle' }); await mp.waitForTimeout(1200)
+const pill = mp.locator('[data-testid="summary-pill"]')
+ok('summary pill shown in an idle chat', await pill.isVisible())
+await pill.dblclick(); await mp.waitForTimeout(200)
+ok(`summary pill gives feedback ("${await pill.textContent().catch(() => '')}")`, /requested|angefordert/.test((await pill.textContent().catch(() => '')) || ''))
+await mp.waitForTimeout(1500)
+ok('a double click sends one summary request', (await mp.locator('.hk-thread').getByText('Please summarize this chat so far').count()) === 1)
 await mb.close()
 
 // Refused microphone / camera: a notice with the way to the settings instead of a silent failure.
