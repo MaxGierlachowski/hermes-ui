@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the app's own pages (the bundled web build) may call. Remote content gets nothing.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-badge-count",
+    "core:menu:default",
+    "notification:default",
+    "opener:allow-open-url"
+  ]
+}

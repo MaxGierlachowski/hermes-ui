@@ -1,0 +1,6 @@
+node_modules/
+dist-web/
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/resources/server/
+src-tauri/gen/schemas/
