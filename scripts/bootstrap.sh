@@ -98,16 +98,17 @@ if [[ $MOBILE == 1 ]]; then
 
   step "Android SDK + NDK"
   export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
-  sdkmanager="$(ls "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager 2>/dev/null || command -v sdkmanager || true)"
-  if [[ -z "$sdkmanager" ]]; then
-    brew_install --cask android-commandlinetools
-    sdkmanager="$(command -v sdkmanager)"
-  fi
   missing=()
   for p in "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS" "$ANDROID_NDK_RN" "$ANDROID_NDK_RUST" "platform-tools"; do
     [[ -d "$ANDROID_HOME/${p//;//}" ]] || missing+=("$p")
   done
   if (( ${#missing[@]} )); then
+    # sdkmanager only when something is missing (Android Studio installs it as "Command-line Tools").
+    sdkmanager="$(ls "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager 2>/dev/null || command -v sdkmanager || true)"
+    if [[ -z "$sdkmanager" ]]; then
+      brew_install --cask android-commandlinetools
+      sdkmanager="$(command -v sdkmanager)"
+    fi
     ask "install ${missing[*]} with sdkmanager?" || die "Android SDK packages missing: ${missing[*]}"
     yes | "$sdkmanager" --sdk_root="$ANDROID_HOME" --licenses >/dev/null || true
     "$sdkmanager" --sdk_root="$ANDROID_HOME" "${missing[@]}"
@@ -116,15 +117,15 @@ if [[ $MOBILE == 1 ]]; then
   ok "SDK $ANDROID_HOME, NDK for Rust ${ANDROID_NDK_RUST#ndk;}"
 
   step "Rust"
-  if ! have rustup && [[ -x "$HOME/.cargo/bin/rustup" ]]; then export PATH="$HOME/.cargo/bin:$PATH"; fi
+  if ! have rustup && [[ -x "${CARGO_HOME:-$HOME/.cargo}/bin/rustup" ]]; then export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"; fi
   if ! have rustup; then
     if have brew && ask "install rustup with Homebrew?"; then brew install rustup && rustup-init -y --no-modify-path
     elif ask "install rustup (https://sh.rustup.rs)?"; then curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
     else die "rustup is required for the iroh library"; fi
-    export PATH="$HOME/.cargo/bin:$PATH"
+    export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
   fi
   # rustup puts its own cargo first; Homebrew's cargo has no Android/iOS targets.
-  export PATH="$HOME/.cargo/bin:$PATH"
+  export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
   (cd mobile-app/modules/expo-iroh/rust && rustup show active-toolchain >/dev/null && rustc --version)
   if [[ "$(cargo ndk --version 2>/dev/null || true)" != *"$CARGO_NDK_VERSION"* ]]; then
     cargo install cargo-ndk --locked --version "$CARGO_NDK_VERSION"
