@@ -49,7 +49,7 @@ function ColumnSheet({ open, onClose, current, onPick }: { open: boolean; onClos
 const NO_CHIPS: PaseoChip[] = []
 // Stable keys also for messages without a database id (the cache keeps only the newest ones, so an
 // index would shift when the full history arrives).
-const rowKey = (m: ThreadMessage) => (m.id != null ? `m${m.id}` : `t${m.ts ?? 0}-${m.role}-${m.text.length}`)
+const rowKey = (m: ThreadMessage) => m.key ?? (m.id != null ? `m${m.id}` : `t${m.ts ?? 0}-${m.role}-${m.text.length}`)
 
 /** True once the screen's open transition has finished (or after 400 ms at the latest). */
 function useTransitionDone(embedded: boolean) {
@@ -103,6 +103,7 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
   }
 
   const agents = session?.paseo?.length || 0
+  const agentsRunning = session?.paseo?.filter((a) => a.state === 'running' && a.rel !== 'watches').length || 0
   return (
     <View className="flex-1 bg-background">
       <View className={cn('flex-row gap-1 border-b border-border', embedded ? 'items-start px-2 py-2' : 'items-center px-1 pb-1')} style={embedded ? undefined : { paddingTop: insets.top + 2 }}>
@@ -129,8 +130,9 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
           </View>
         )}
         {agents > 0 && (
-          <Button variant="ghost" size="sm" onPress={() => showPaseo(sessionId)} accessibilityLabel={t('Paseo-Agents')} {...({ dataSet: { tip: t('Paseo-Agents') } } as object)}>
+          <Button variant="ghost" size="sm" onPress={() => showPaseo(sessionId)} accessibilityLabel={t('Agents')} {...({ dataSet: { tip: agentsRunning ? t('Agents ({n} laufen)', { n: agentsRunning }) : t('Agents') } } as object)}>
             <Icon as={Bot} size={embedded ? 16 : 18} /><Text className="text-sm tabular-nums">{agents}</Text>
+            {agentsRunning > 0 && <View className="h-1.5 w-1.5 rounded-full bg-indigo-500 web:animate-pulse" />}
           </Button>
         )}
         <View ref={columnButton} collapsable={false}>

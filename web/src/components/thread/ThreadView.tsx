@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { clock } from '@/lib/format'
 import { COLUMNS, type Attachment, type Column, type OutboxState, type PaseoChip, type ThreadMessage } from '@/lib/types'
-import { AGENT_STATE, AgentStateDot } from '@/components/paseo/AgentChip'
+import { AGENT_STATE, AgentStateDot, AgentIcon, agentKindLabel } from '@/components/paseo/AgentChip'
 import { stripMediaTags } from '@/lib/media-tags'
 import { clearHighlight, dismissOutbox, getState, interrupt, openThread, retryOutbox, sendMessage, setColumn, useBoard } from '@/lib/store'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
@@ -183,6 +183,7 @@ function PaseoInline({ m }: { m: ThreadMessage }) {
   const state = chip?.state || 'unknown'
   const st = AGENT_STATE[state] || AGENT_STATE.unknown
   const title = chip?.title || p.title || p.ref.slice(0, 8)
+  const who = chip ?? { provider: p.provider, kind: p.kind ?? null, account: p.account ?? null }
   const running = state === 'running'
   const [, tick] = useState(0)
   useEffect(() => {
@@ -215,13 +216,14 @@ function PaseoInline({ m }: { m: ThreadMessage }) {
       className={cn('group flex w-full max-w-md items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-left shadow-xs transition-colors', clickable ? 'hover:border-foreground/20' : 'opacity-70', chip?.archived && 'opacity-60')}
     >
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted ring-1 ring-border/60">
-        {running ? <Loader variant="circular" size="sm" className="size-4" /> : <Bot className="size-4 text-muted-foreground" />}
+        {running ? <Loader variant="circular" size="sm" className="size-4" /> : <AgentIcon a={who} className="size-4 text-muted-foreground" />}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-medium leading-snug">{title}</span>
         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-muted-foreground">
+          {who.provider === 'hermes' && <span>{agentKindLabel(who)}</span>}
           <span className={cn('inline-flex items-center gap-1.5', st.text)}><AgentStateDot state={state} />{chip ? st.label : t('unbekannt / gelöscht')}</span>
-          {(chip?.account || p.account) && <span>Account {chip?.account || p.account}</span>}
+          {who.provider !== 'hermes' && (chip?.account || p.account) && <span>Account {chip?.account || p.account}</span>}
           {chip && <span className="tabular-nums">{duration(chip.createdAt, end, m.ts ? m.ts * 1000 : undefined)}</span>}
           {!!chip?.pendingCount && <span className="text-amber-700 dark:text-amber-300">{t('{n} Freigabe(n) offen', { n: chip.pendingCount })}</span>}
         </span>
@@ -323,7 +325,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
     setAgentOpen(null)
     if (fromMsg != null) { setReturnTo(fromMsg); setFromMsg(null); setTab('chat') }
   }
-  const runningAgents = session.paseo?.filter((a) => a.state === 'running').length || 0
+  const runningAgents = session.paseo?.filter((a) => a.state === 'running' && a.rel !== 'watches').length || 0
 
   const confirmForeign = () => MESSAGING.has(session.source)
     || confirm(t('Diese Session gehört zu „{src}“. Hermes kann die Antwort auch dort posten. Trotzdem senden?', { src: session.source }))
@@ -374,7 +376,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
         <div className="flex items-center gap-1 border-b px-3 py-1.5 max-md:py-1">
           <TabButton active={tab === 'chat'} onClick={() => { setTab('chat'); setAgentOpen(null); setFromMsg(null) }}><MessagesSquare className="size-3.5" />{t('Chat')}</TabButton>
           <TabButton active={tab === 'paseo'} onClick={() => { setTab('paseo'); setAgentOpen(null); setFromMsg(null) }}>
-            <Bot className="size-3.5" />{t('Paseo-Agents')} <span className="tabular-nums opacity-70">{agentCount}</span>
+            <Bot className="size-3.5" />{session.paseo?.some((a) => a.provider === 'hermes') ? t('Agents') : t('Paseo-Agents')} <span className="tabular-nums opacity-70">{agentCount}</span>
             {runningAgents > 0 && <span className="size-1.5 animate-pulse rounded-full bg-indigo-500" />}
           </TabButton>
           {session.paseoNote && <span className="ml-auto truncate pl-2 text-[11px] text-muted-foreground">{session.paseoNote}</span>}
@@ -404,7 +406,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
           {loading && !messages.length && <div className="flex justify-center py-8"><Loader variant="dots" /></div>}
           {!loading && !messages.length && !streaming && <div className="py-8 text-center text-sm text-muted-foreground">{t('Noch keine Nachrichten.')}</div>}
           <PaseoCtx.Provider value={{ chips: session.paseo || [], open: openAgent }}>
-            {messages.map((m, i) => <MessageRow key={m.id ?? `l${i}`} m={m} />)}
+            {messages.map((m, i) => <MessageRow key={m.key ?? m.id ?? `l${i}`} m={m} />)}
           </PaseoCtx.Provider>
           <ReturnTo msgId={returnTo} done={clearReturn} />
           {streaming && (

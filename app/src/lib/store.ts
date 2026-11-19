@@ -10,6 +10,7 @@ import { DemoBackend } from './demo'
 import { clearCache, initCache, readCache, trimMessages, writeCache } from './cache'
 import { appInBackground, notifyInboxItem } from './notify'
 import { t } from './i18n'
+import { agentTimelinePath } from './agents'
 
 export type Auth = 'unknown' | 'unpaired' | 'connecting' | 'ok' | 'refused' | 'offline'
 export type Tab = 'board' | 'inbox'
@@ -366,7 +367,7 @@ export async function paseoAgents(sessionId: string) {
 }
 /** quiet: the 3-second poll of a running agent does not light up the progress bar each time. */
 export async function paseoTimeline(agentId: string, quiet = false) {
-  const req = api<{ items: PaseoItem[]; agent?: PaseoAgent }>(`/api/paseo/agents/${agentId}/timeline`)
+  const req = api<{ items: PaseoItem[]; agent?: PaseoAgent }>(agentTimelinePath(agentId))
   const r = await (quiet ? req : track(req))
   writeCache(`paseo:timeline ${agentId}`, trimMessages(r.items))
   return r

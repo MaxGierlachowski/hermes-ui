@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ArrowLeft, Bot, ChevronRight, ListTodo, TriangleAlert, Wrench } from 'lucide-react-native'
+import { ArrowLeft, ChevronRight, ListTodo, TriangleAlert, Wrench } from 'lucide-react-native'
 import type { PaseoAgent, PaseoItem } from '@shared/types'
 import { Text } from '@/components/ui/text'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import { SyncBar } from '@/components/SyncBar'
 import { ThreadList } from '@/components/thread/ThreadList'
 import { cn } from '@/lib/utils'
 import { relTime, t } from '@/lib/i18n'
+import { agentIcon, agentKindLabel, agentMatchNote } from '@/lib/agents'
 
 const REL: Record<string, string> = { created: 'gestartet', steers: 'gesteuert', watches: 'beobachtet' }
 
@@ -20,14 +21,15 @@ function AgentRow({ a, onPress }: { a: PaseoAgent; onPress: () => void }) {
   const st = AGENT_STATE[a.state] || AGENT_STATE.unknown
   return (
     <Pressable onPress={onPress} className={cn('min-h-16 flex-row items-center gap-3 border-b border-border py-3 active:bg-accent', a.archived && 'opacity-50')}>
-      <Icon as={Bot} size={20} tone="muted-foreground" />
+      <Icon as={agentIcon(a)} size={20} tone="muted-foreground" />
       <View className="flex-1 gap-0.5">
         <Text className="text-[15px] font-medium" numberOfLines={1}>{a.title || a.id.slice(0, 8)}</Text>
         <View className="flex-row items-center gap-1.5">
           <View className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
-          <Text className={cn('text-xs text-muted-foreground', st.text)} numberOfLines={1}>{st.label} · {t(REL[a.rel] || a.rel)}{a.account ? ` · ${a.account}` : ''}{a.updatedAt ? ` · ${relTime(Date.parse(a.updatedAt) / 1000)}` : ''}</Text>
+          <Text className={cn('text-xs text-muted-foreground', st.text)} numberOfLines={1}>{agentKindLabel(a)} · {st.label} · {t(REL[a.rel] || a.rel)}{a.provider !== 'hermes' && a.account ? ` · ${a.account}` : ''}{a.updatedAt ? ` · ${relTime(Date.parse(a.updatedAt) / 1000)}` : ''}</Text>
         </View>
         {!!a.goal && <Text className="text-xs text-muted-foreground" numberOfLines={2}>{t('Ziel')}: {a.goal}</Text>}
+        {!!agentMatchNote(a.match) && <Text className="text-[11px] italic text-muted-foreground">{agentMatchNote(a.match)}</Text>}
       </View>
       <Icon as={ChevronRight} size={16} tone="muted-foreground" />
     </Pressable>
@@ -67,7 +69,8 @@ function ItemView({ it }: { it: PaseoItem }) {
 }
 
 /**
- * Paseo agents of a session and their read-only transcripts (no input, nothing that changes an agent).
+ * Agents of a session (Paseo agents and Hermes' own subagents / terminal runs) and their read-only
+ * transcripts (no input, nothing that changes an agent).
  * A screen on the phone (app/paseo/[id].tsx), the split pane on the desktop (embedded).
  */
 export function PaseoPane({ id, agent: agentParam, embedded = false, onBack }: { id: string; agent?: string; embedded?: boolean; onBack: () => void }) {
@@ -96,7 +99,7 @@ export function PaseoPane({ id, agent: agentParam, embedded = false, onBack }: {
     <View className="flex-1 bg-background">
       <View className={cn('flex-row items-center gap-1 border-b border-border px-1 pb-1', embedded && 'h-12 pb-0')} style={embedded ? undefined : { paddingTop: insets.top + 2 }}>
         <Button variant="ghost" size="icon" onPress={() => (agentId && !agentParam ? setAgentId(null) : onBack())} accessibilityLabel={t('Zurück')}><Icon as={ArrowLeft} /></Button>
-        <Text className="flex-1 text-[16px] font-semibold" numberOfLines={1}>{agent ? agent.title || agent.id.slice(0, 8) : t('Paseo-Agents')}</Text>
+        <Text className="flex-1 text-[16px] font-semibold" numberOfLines={1}>{agent ? agent.title || agent.id.slice(0, 8) : t('Agents')}</Text>
       </View>
       <SyncBar />
       {!agentId ? (
@@ -107,7 +110,7 @@ export function PaseoPane({ id, agent: agentParam, embedded = false, onBack }: {
             contentContainerClassName="px-4 pb-10"
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadAgents(); setRefreshing(false) }} />}
             renderItem={({ item }) => <AgentRow a={item} onPress={() => setAgentId(item.id)} />}
-            ListEmptyComponent={<Text className="py-10 text-center text-muted-foreground">{t('Keine Paseo-Agents.')}</Text>}
+            ListEmptyComponent={<Text className="py-10 text-center text-muted-foreground">{t('Keine Agents.')}</Text>}
           />
         )
       ) : items === null ? <ActivityIndicator className="mt-10" /> : items.length === 0 ? (

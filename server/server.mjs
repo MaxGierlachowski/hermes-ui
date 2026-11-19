@@ -1203,7 +1203,7 @@ const server = http.createServer(async (req, res) => {
       await Promise.all(list.filter((a) => !a.known).map((a) => paseo.ensure(a.id)));
       return send(res, 200, { connected: paseo.connected, source: paseo.sourceLabel, agents: agentsFor(id) });
     }
-    if ((m = p.match(/^\/api\/agents\/(hermes:[^/]+)\/timeline$/)) && req.method === 'GET') {
+    if ((m = p.match(/^\/api\/agents\/(hermes(?::|%3A)[^/]+)\/timeline$/i)) && req.method === 'GET') {
       const id = decodeURIComponent(m[1]);
       const limit = Math.min(Number(url.searchParams.get('limit') || 150), 400);
       const parent = hermesAgents.index.get(id)?.parent;
