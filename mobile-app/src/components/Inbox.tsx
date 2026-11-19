@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { FlatList, RefreshControl, View, Pressable } from 'react-native'
+import { memo } from 'react'
+import { RefreshControl, View, Pressable } from 'react-native'
+import { FlashList } from '@shopify/flash-list'
 import { router } from 'expo-router'
 import { Bot, CheckCheck, CircleAlert, CircleCheck, ShieldAlert } from 'lucide-react-native'
 import type { InboxItem, OpenItem } from '@shared/types'
@@ -44,7 +46,7 @@ function OpenCard({ item }: { item: OpenItem }) {
 
 const ITEM_ICON = (k: InboxItem['kind']) => (k.endsWith('error') || k === 'paseo-limit' ? CircleAlert : k === 'approval' || k === 'permission' ? ShieldAlert : CircleCheck)
 
-function HistoryRow({ item }: { item: InboxItem }) {
+const HistoryRow = memo(function HistoryRow({ item }: { item: InboxItem }) {
   return (
     <Pressable
       onPress={() => { markRead([item.id]); if (item.sessionId) { openThread(item.sessionId); router.push(`/thread/${encodeURIComponent(item.sessionId)}`) } }}
@@ -62,16 +64,16 @@ function HistoryRow({ item }: { item: InboxItem }) {
       {!item.read && <View className="mt-1.5 h-2 w-2 rounded-full bg-primary" />}
     </Pressable>
   )
-}
+})
 
 export function Inbox() {
   const inbox = useStore((s) => s.inbox)
   const [refreshing, setRefreshing] = useState(false)
   return (
-    <FlatList
+    <FlashList
       data={inbox.items}
       keyExtractor={(i) => i.id}
-      contentContainerClassName="px-4 pb-32"
+      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 128 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadInbox(); setRefreshing(false) }} />}
       ListHeaderComponent={
         <View className="gap-4 pb-2 pt-1">

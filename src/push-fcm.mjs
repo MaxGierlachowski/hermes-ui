@@ -64,7 +64,7 @@ export class FcmSender {
       android: {
         priority: urgent ? 'HIGH' : 'NORMAL',
         ttl: `${ttl}s`,
-        // channel_id: the app's notification channel (mobile/src/lib/notify.ts).
+        // channel_id: the app's notification channel (mobile-app/src/lib/notify.ts).
         notification: { channel_id: 'hermes', tag: payload.tag || undefined, ...(typeof payload.badge === 'number' ? { notification_count: payload.badge } : {}) },
       },
     };

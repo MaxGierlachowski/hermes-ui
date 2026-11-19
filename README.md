@@ -57,12 +57,36 @@ HERMES_UI_REMOTE=iroh HERMES_UI_URL=https://maxgierlachowski.github.io/hermes-ui
 npx hermes-ui pair     # or: node bin/hermes-ui.mjs pair
 ```
 
-### Native app (experimental)
+### Mobile app (Android/iOS)
 
-[`mobile/`](mobile/README.md) holds a React Native app (Expo) with native screens and a native iroh client
-(Rust through UniFFI), protocol-compatible with the same `iroh-gateway`: direct UDP paths instead of
-relay-only, the device key in the platform keystore, the same pairing links. Android builds as an APK;
-iOS builds for the simulator.
+[`mobile-app/`](mobile-app/README.md) is the native app for phones: React Native (Expo SDK 58, New
+Architecture) with native screens, not a WebView. It talks to the same backend through the same
+`iroh-gateway`; nothing on the host changes.
+
+- **Structure.** `mobile-app/modules/expo-iroh` is a native iroh client: a small Rust crate around
+  iroh-bridge's `client-core` (the same client the browser's `iroh-fetch` uses), exposed to Kotlin and
+  Swift through UniFFI and to JavaScript as a fetch-like API with SSE streams and file downloads. Unlike
+  the browser it hole-punches a direct UDP path and uses the relay only to start. Types, the SSE parser,
+  pairing links, media-tag rules and the English texts live in [`shared/`](shared), used by the web UI
+  and the app alike.
+- **Fast by default.** The board, inbox, the newest messages of each chat and Paseo transcripts are
+  cached on the device: the app shows the last state at once (also offline, with "as of …"), refreshes
+  in the background and shows a thin progress bar while it does.
+- **Build locally (Android).** Node 24, JDK 17, Android SDK + NDK, Rust via rustup with the Android
+  targets and `cargo-ndk`; then `cd mobile-app && npm install && npm run iroh:android && npx expo
+  prebuild -p android && npm run apk`. iOS builds for the simulator (`npm run iroh:ios`, `npx expo
+  run:ios`); a device or TestFlight build needs an Apple developer account.
+- **Signing.** Release APKs are signed with a local keystore in `mobile-app/.secrets/` (git-ignored,
+  never committed). Keep it: Android installs an update over the existing app only if it is signed with
+  the same key. Raise `android.versionCode` in `mobile-app/app.config.ts` for every release.
+- **Pairing.** Same links as the web UI: scan the QR code of `hermes-ui pair` (or the "Pair device"
+  dialog), open the `https://<ui>/#iroh=…` link, or paste it. The device key lives in the Android
+  Keystore / iOS Keychain, so the gateway keeps recognising the phone across updates.
+- **Push (FCM).** Without Firebase the app notifies while it runs, and in the background through an
+  optional keep-alive service. For push with the app closed, build with
+  `GOOGLE_SERVICES_JSON=/path/to/google-services.json` and start the backend with
+  `HERMES_UI_FCM_SERVICE_ACCOUNT=/path/to/service-account.json`; details in
+  [`mobile-app/README.md`](mobile-app/README.md#push-with-the-app-closed-fcm).
 
 ### CLI
 
@@ -98,7 +122,7 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_PASEO_RESPOND` | `--paseo-respond` | `on` | `off` = the inbox shows Paseo permissions but cannot answer them. |
 | `HERMES_UI_PUSH` | `--push` | `on` | `off` disables Web Push. |
 | `HERMES_UI_PUSH_SUBJECT` | `--push-subject` | `HERMES_UI_URL` if https | VAPID subject (`mailto:` or `https:`); Apple rejects anything else. |
-| `HERMES_UI_FCM_SERVICE_ACCOUNT` | `--fcm-service-account` | – | Firebase service-account JSON: push to the native Android app through FCM, next to Web Push. See [mobile/README.md](mobile/README.md). |
+| `HERMES_UI_FCM_SERVICE_ACCOUNT` | `--fcm-service-account` | – | Firebase service-account JSON: push to the native Android app through FCM, next to Web Push. See [mobile-app/README.md](mobile-app/README.md). |
 | `HERMES_UI_INBOX_DAYS`, `HERMES_UI_INBOX_MAX` | `--inbox-days`, `--inbox-max` | `30`, `1000` | How long / how many inbox entries are kept. |
 | `PASEO_DAEMON_URL` | `--paseo-url` | from `PASEO_MCP_CONFIG`, else `ws://127.0.0.1:6767/ws` | Paseo daemon. |
 | `PASEO_MCP_CONFIG` | `--paseo-mcp-config` | `~/.config/paseo-mcp/config.json` | Where the daemon URL is read from. |

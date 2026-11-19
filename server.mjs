@@ -987,7 +987,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/push' && req.method === 'GET') return send(res, 200, { publicKey: push.publicKey, subscriptions: push.forDevice(deviceKey) });
       const body = await readJson(req);
       if (p === '/api/push/subscribe' && req.method === 'POST') return send(res, 200, push.subscribe(deviceKey, deviceName, body.subscription, body.settings));
-      // Native app (mobile/): FCM device token instead of a Web Push subscription.
+      // Native app (mobile-app/): FCM device token instead of a Web Push subscription.
       if (p === '/api/push/native' && req.method === 'POST') {
         try { return send(res, 200, push.subscribeNative(deviceKey, deviceName, body, body.settings)); } catch (err) { return send(res, err.status || 400, { error: err.message }); }
       }

@@ -11,7 +11,7 @@ const googleServices = process.env.GOOGLE_SERVICES_JSON // FCM; without it push 
 const config: ExpoConfig = {
   name: 'Hermes UI',
   slug: 'hermes-ui',
-  version: '0.1.0',
+  version: '0.2.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'hermesui',
@@ -27,7 +27,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: pkg,
-    versionCode: 1,
+    versionCode: 2,
     adaptiveIcon: {
       backgroundColor: '#6366f1',
       foregroundImage: './assets/images/android-icon-foreground.png',
@@ -56,7 +56,7 @@ const config: ExpoConfig = {
     'expo-secure-store',
     ['expo-share-intent', { androidIntentFilters: ['text/*', 'image/*'], disableIOS: true }],
     ['expo-build-properties', { android: { minSdkVersion: 24 } }],
-    // Release signing from mobile/.secrets (never committed) and the ABIs the iroh library is built for.
+    // Release signing from mobile-app/.secrets (never committed) and the ABIs the iroh library is built for.
     ['./plugins/with-android-release', { abis: (process.env.HERMES_UI_ABIS || 'arm64-v8a,x86_64').split(',') }],
   ],
   experiments: { typedRoutes: true },

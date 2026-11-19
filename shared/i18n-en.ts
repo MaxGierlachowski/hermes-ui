@@ -264,8 +264,10 @@ export const EN: Record<string, string> = {
   'Zum Board': 'Go to Board',
   'Zur Inbox': 'Go to Inbox',
   'Benachrichtigungen …': 'Notifications …',
-  // Native app (mobile/)
+  // Native app (mobile-app/)
   'Einstellungen': 'Settings',
+  'Aktualisiere …': 'Updating …',
+  'Offline, Stand von {when}': 'Offline, as of {when}',
   'Keine Chats in dieser Spalte.': 'No chats in this column.',
   'Backend nicht erreichbar': 'Backend not reachable',
   'Erneut verbinden': 'Reconnect',

@@ -5,7 +5,8 @@ import { AppState } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Column, InboxItem, OpenItem, OutgoingMessage, PaseoAgent, PaseoItem, Session, ThreadMessage } from '@shared/types'
 import { parsePairingLink } from '@shared/pairing'
-import { api, ApiError, connect, deviceName, forgetGateway, getBackend, rememberGateway, savedGateway, Unauthorized } from './connection'
+import { api, ApiError, clearMedia, connect, deviceName, forgetGateway, getBackend, isNetworkError, pruneMedia, rememberGateway, savedGateway, Unauthorized } from './connection'
+import { clearCache, readCache, trimMessages, writeCache } from './cache'
 import { notifyInboxItem } from './notify'
 import { t } from './i18n'
 
@@ -29,6 +30,11 @@ type State = {
   pendingFirst: { id: string; text: string; ts: number } | null
   inbox: { open: OpenItem[]; items: InboxItem[]; unread: number; loaded: boolean; paseo: { connected: boolean; canRespond: boolean } }
   toast: { id: number; kind: 'info' | 'error' | 'success'; text: string; sessionId?: string | null } | null
+  // Stale-while-revalidate: background loads in flight (header progress bar), when the board data
+  // shown was loaded (the offline hint says "as of …"), and whether it came from the cache.
+  syncing: number
+  boardAt: number | null
+  hydrated: boolean
 }
 
 let state: State = {
@@ -48,6 +54,9 @@ let state: State = {
   pendingFirst: null,
   inbox: { open: [], items: [], unread: 0, loaded: false, paseo: { connected: false, canRespond: false } },
   toast: null,
+  syncing: 0,
+  boardAt: null,
+  hydrated: false,
 }
 const listeners = new Set<() => void>()
 const set = (patch: Partial<State> | ((s: State) => Partial<State>)) => {
@@ -67,24 +76,59 @@ export function toast(text: string, kind: 'info' | 'error' | 'success' = 'info',
 }
 export const dismissToast = () => set({ toast: null })
 
-const handle = (err: unknown) => {
+const handle = (err: unknown, quiet = false) => {
   if (err instanceof Unauthorized) { set({ auth: 'refused' }); return }
+  // A background refresh that cannot reach the backend keeps what is on screen; the header says offline.
+  if (quiet && isNetworkError(err)) return
   toast(err instanceof Error ? err.message : String(err), 'error')
 }
 
+/** Counts a background load for the header's progress bar. */
+async function track<T>(p: Promise<T>): Promise<T> {
+  set((s) => ({ syncing: s.syncing + 1 }))
+  try { return await p } finally { set((s) => ({ syncing: s.syncing - 1 })) }
+}
+
+// ---------- cache ----------
+type BoardCache = { sessions: Session[]; gateway: boolean }
+type InboxCache = Omit<State['inbox'], 'loaded'>
+
+/** Startup: the last board and inbox from the cache, before the connection is even up. */
+function hydrate() {
+  const board = readCache<BoardCache>('board')
+  const inbox = readCache<InboxCache>('inbox')
+  if (inbox) set({ inbox: { ...inbox.data, loaded: true } })
+  if (!board) return
+  set({ sessions: Object.fromEntries(board.data.sessions.map((s) => [s.id, s])), gateway: false, boardAt: board.at, hydrated: true })
+  pickColumn(board.data.sessions)
+}
+const persistBoard = () => writeCache<BoardCache>('board', { sessions: Object.values(state.sessions), gateway: state.gateway }, 1000)
+const persistInbox = () => { const { loaded: _, ...rest } = state.inbox; writeCache<InboxCache>('inbox', rest, 1000) }
+const threadKey = (id: string) => `thread:${id}`
+const persistThread = (id: string, messages: ThreadMessage[]) => writeCache(threadKey(id), trimMessages(messages.filter((m) => !m.live)))
+
 // ---------- startup and pairing ----------
+let prefsLoaded = false
+let retryTimer: ReturnType<typeof setTimeout> | undefined
 export async function bootstrap() {
-  const prefs = JSON.parse((await AsyncStorage.getItem('hk_prefs')) || '{}') as Partial<Pick<State, 'days' | 'system' | 'column'>>
-  set({ ...prefs })
-  columnChosen = !!prefs.column
+  clearTimeout(retryTimer)
+  if (!prefsLoaded) {
+    const prefs = JSON.parse((await AsyncStorage.getItem('hk_prefs')) || '{}') as Partial<Pick<State, 'days' | 'system' | 'column'>>
+    set({ ...prefs })
+    columnChosen = !!prefs.column
+    prefsLoaded = true
+  }
   const gw = await savedGateway()
   if (!gw) { set({ auth: 'unpaired' }); return }
+  if (!state.hydrated) hydrate()
   set({ auth: 'connecting', error: null })
   try {
-    await connect(gw)
-    await start()
+    await track((async () => { await connect(gw); await start() })())
   } catch (err) {
-    set({ auth: err instanceof Unauthorized ? 'refused' : 'offline', error: err instanceof Error ? err.message : String(err) })
+    const refused = err instanceof Unauthorized
+    set({ auth: refused ? 'refused' : 'offline', error: err instanceof Error ? err.message : String(err) })
+    // Offline with the cached board on screen: keep trying quietly.
+    if (!refused) retryTimer = setTimeout(() => { if (state.auth === 'offline') bootstrap() }, 15_000)
   }
 }
 
@@ -109,7 +153,9 @@ export async function pair(link: string) {
 export async function unpair() {
   stopEvents()
   await forgetGateway()
-  set({ auth: 'unpaired', sessions: {}, openId: null, messages: [], inbox: { ...state.inbox, open: [], items: [], unread: 0, loaded: false } })
+  clearCache()
+  clearMedia()
+  set({ auth: 'unpaired', sessions: {}, openId: null, messages: [], hydrated: false, boardAt: null, inbox: { ...state.inbox, open: [], items: [], unread: 0, loaded: false } })
 }
 
 async function start() {
@@ -119,24 +165,29 @@ async function start() {
   set({ auth: 'ok' })
   connectEvents()
   loadInbox()
+  setTimeout(pruneMedia, 5000)
 }
 
 // ---------- loading ----------
 export async function loadSessions(throwing = false) {
   try {
-    const { sessions, gateway } = await api<{ sessions: Session[]; gateway: boolean }>(`/api/sessions?days=${state.days}&system=${state.system ? 1 : 0}`)
-    set({ gateway, sessions: Object.fromEntries(sessions.map((s) => [s.id, s])) })
-    // Until the user picked a column: start on the first one with cards (Doing, Waiting, New, Done).
-    if (!columnChosen) {
-      const first = (['doing', 'waiting', 'new', 'done'] as Column[]).find((c) => sessions.some((s) => s.column === c))
-      if (first) set({ column: first })
-    }
+    const { sessions, gateway } = await track(api<{ sessions: Session[]; gateway: boolean }>(`/api/sessions?days=${state.days}&system=${state.system ? 1 : 0}`))
+    set({ gateway, sessions: Object.fromEntries(sessions.map((s) => [s.id, s])), boardAt: Date.now() })
+    writeCache<BoardCache>('board', { sessions, gateway })
+    pickColumn(sessions)
     return true
   } catch (err) {
     if (throwing) throw err
-    handle(err)
+    handle(err, true)
     return false
   }
+}
+
+// Until the user picked a column: start on the first one with cards (Doing, Waiting, New, Done).
+function pickColumn(sessions: Session[]) {
+  if (columnChosen) return
+  const first = (['doing', 'waiting', 'new', 'done'] as Column[]).find((c) => sessions.some((s) => s.column === c))
+  if (first) set({ column: first })
 }
 
 let columnChosen = false
@@ -148,13 +199,14 @@ export async function setPrefs(patch: Partial<Pick<State, 'days' | 'system' | 'c
 }
 export const setTab = (tab: Tab) => { set({ tab }); if (tab === 'inbox') loadInbox() }
 
-function upsert(s: Session) { set((st) => ({ sessions: { ...st.sessions, [s.id]: s } })) }
+function upsert(s: Session) { set((st) => ({ sessions: { ...st.sessions, [s.id]: s } })); persistBoard() }
 function remove(id: string) {
   set((st) => {
     const sessions = { ...st.sessions }
     delete sessions[id]
     return { sessions }
   })
+  persistBoard()
 }
 
 // ---------- thread ----------
@@ -165,18 +217,27 @@ function withPending(id: string, messages: ThreadMessage[]) {
   return [{ role: 'user' as const, text: p.text, ts: p.ts }, ...messages]
 }
 
+/** Opens a thread with what the cache has (rendered in the first frame), then refreshes it. */
 export async function openThread(id: string | null) {
-  set({ openId: id, messages: id === state.openId ? state.messages : [], loadingThread: !!id, streaming: state.streaming?.id === id ? state.streaming : null })
+  if (id && id === state.openId) { refreshThread(id); return }
+  const cached = id ? readCache<ThreadMessage[]>(threadKey(id))?.data : undefined
+  set({ openId: id, messages: id && cached ? withPending(id, cached) : [], loadingThread: !!id && !cached, streaming: state.streaming?.id === id ? state.streaming : null })
   if (id) await refreshThread(id)
 }
 
 export async function refreshThread(id: string) {
   try {
-    const { session, messages } = await api<{ session: Session; messages: ThreadMessage[] }>(`/api/sessions/${encodeURIComponent(id)}`)
+    const { session, messages } = await track(api<{ session: Session; messages: ThreadMessage[] }>(`/api/sessions/${encodeURIComponent(id)}`))
     upsert(session)
+    persistThread(id, messages)
     if (state.openId !== id) return
     set({ messages: withPending(id, messages), loadingThread: false })
-  } catch (err) { set({ loadingThread: false }); handle(err) }
+  } catch (err) { set({ loadingThread: false }); handle(err, true) }
+}
+
+/** Long-press / warm-up: loads a thread into the cache without opening it. */
+export function prefetchThread(id: string) {
+  if (!readCache(threadKey(id))) refreshThread(id)
 }
 
 // Automated E2E runs mark their chats as "TEST · …" (web: localStorage hk_e2e_test). Dev builds only:
@@ -202,6 +263,7 @@ export async function sendMessage(id: string, msg: OutgoingMessage) {
   }
   if (res.session && res.session.id !== id) { remove(id); upsert(res.session); return res.session.id }
   if (res.session) upsert(res.session)
+  if (res.messages) persistThread(id, res.messages)
   if (res.messages && state.openId === id) set({ messages: res.messages })
   return id
 }
@@ -231,6 +293,7 @@ export async function retryOutbox(sessionId: string, outboxId: string, retry = t
   try {
     const res = await api<{ session: Session; messages: ThreadMessage[] }>(`/api/outbox/${outboxId}${retry ? '/retry' : ''}`, { method: retry ? 'POST' : 'DELETE' })
     if (res.session) upsert(res.session)
+    persistThread(sessionId, res.messages)
     if (state.openId === sessionId) set({ messages: res.messages })
   } catch (err) { handle(err); refreshThread(sessionId) }
 }
@@ -238,15 +301,29 @@ export async function retryOutbox(sessionId: string, outboxId: string, retry = t
 export type SearchHit = { session: Session & { archived?: boolean }; hit?: { msgId: number; role: string; ts: number; snippet: string; hits: number } }
 export const searchChats = (q: string) => api<{ q: string; title: SearchHit[]; content: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`)
 
-export const paseoAgents = (sessionId: string) => api<{ agents: PaseoAgent[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/paseo`)
-export const paseoTimeline = (agentId: string) => api<{ items: PaseoItem[]; agent?: PaseoAgent }>(`/api/paseo/agents/${agentId}/timeline`)
+// Paseo: agents per chat and their transcripts, cached like threads (screen state, not the store).
+export const cachedPaseoAgents = (sessionId: string) => readCache<PaseoAgent[]>(`paseo:agents ${sessionId}`)?.data ?? null
+export const cachedPaseoTimeline = (agentId: string) => readCache<PaseoItem[]>(`paseo:timeline ${agentId}`)?.data ?? null
+export async function paseoAgents(sessionId: string) {
+  const r = await track(api<{ agents: PaseoAgent[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/paseo`))
+  writeCache(`paseo:agents ${sessionId}`, r.agents)
+  return r
+}
+/** quiet: the 3-second poll of a running agent does not light up the progress bar each time. */
+export async function paseoTimeline(agentId: string, quiet = false) {
+  const req = api<{ items: PaseoItem[]; agent?: PaseoAgent }>(`/api/paseo/agents/${agentId}/timeline`)
+  const r = await (quiet ? req : track(req))
+  writeCache(`paseo:timeline ${agentId}`, trimMessages(r.items))
+  return r
+}
 
 // ---------- inbox ----------
 export async function loadInbox() {
   try {
-    const r = await api<{ open: OpenItem[]; items: InboxItem[]; unread: number; paseo: { connected: boolean; canRespond: boolean } }>('/api/inbox')
+    const r = await track(api<{ open: OpenItem[]; items: InboxItem[]; unread: number; paseo: { connected: boolean; canRespond: boolean } }>('/api/inbox'))
     set({ inbox: { ...r, loaded: true } })
-  } catch (err) { handle(err) }
+    persistInbox()
+  } catch (err) { handle(err, true) }
 }
 export async function markRead(ids: string[] | 'all') {
   if (ids !== 'all' && !ids.length) return
@@ -293,26 +370,35 @@ export function connectEvents() {
         break
       case 'removed': remove(d.id); break
       case 'gateway': set({ gateway: d.connected }); break
-      case 'inbox': set((st) => ({ inbox: { ...st.inbox, open: d.open, unread: d.unread } })); break
+      case 'inbox': set((st) => ({ inbox: { ...st.inbox, open: d.open, unread: d.unread } })); persistInbox(); break
       case 'inbox-item': {
         const item = d as InboxItem
         const known = state.inbox.items.some((x) => x.id === item.id)
         set((st) => ({ inbox: { ...st.inbox, items: known ? st.inbox.items.map((x) => (x.id === item.id ? item : x)) : [item, ...st.inbox.items] } }))
         if (!known) onNewInboxItem(item)
+        persistInbox()
         break
       }
       case 'inbox-read': {
         const ids = d.ids as string[] | 'all'
         set((st) => ({ inbox: { ...st.inbox, items: st.inbox.items.map((x) => (ids === 'all' || ids.includes(x.id) ? { ...x, read: true } : x)) } }))
+        persistInbox()
         break
       }
       case 'delta':
         set((st) => ({ streaming: { id: d.id, text: (st.streaming && st.streaming.id === d.id ? st.streaming.text : '') + d.text } }))
         break
-      case 'message':
-        if (d.id !== state.openId) return
+      case 'message': {
+        // Not open: keep a cached copy of that chat current, so opening it shows the new message at once.
+        if (d.id !== state.openId) {
+          const cached = readCache<ThreadMessage[]>(threadKey(d.id))
+          if (cached) persistThread(d.id, [...cached.data, d.message])
+          return
+        }
         set((st) => ({ messages: [...st.messages, d.message] }))
+        persistThread(d.id, state.messages)
         break
+      }
       case 'reload':
         if (d.final && state.streaming?.id === d.id) set({ streaming: null })
         if (d.id !== state.openId) return
@@ -338,6 +424,7 @@ function onNewInboxItem(item: InboxItem) {
 
 // Coming back to the foreground: reconnect the stream if it died while the app slept.
 AppState.addEventListener('change', (s) => {
+  if (s === 'active' && state.auth === 'offline') { bootstrap(); return }
   if (s !== 'active' || state.auth !== 'ok') return
   if (!state.live) connectEvents()
   loadSessions()

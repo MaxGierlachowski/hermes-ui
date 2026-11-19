@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, View } from 'react-native'
-import { router, useLocalSearchParams } from 'expo-router'
+import { ActivityIndicator, KeyboardAvoidingView, Pressable, View } from 'react-native'
+import { router, useLocalSearchParams, useNavigation } from 'expo-router'
+import { FlashList } from '@shopify/flash-list'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeft, Bot, Check, Columns3 } from 'lucide-react-native'
-import { COLUMNS, type Column, type ThreadMessage } from '@shared/types'
+import { COLUMNS, type Column, type PaseoChip, type ThreadMessage } from '@shared/types'
 import { stripMediaTags } from '@shared/media-tags'
 import { Text } from '@/components/ui/text'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,9 @@ import { Markdown } from '@/components/Markdown'
 import { PendingPrompt } from '@/components/PendingPrompt'
 import { Composer } from '@/components/Composer'
 import { Lightbox } from '@/components/Lightbox'
+import { TransitionReady } from '@/components/Media'
+import { Sheet } from '@/components/Sheet'
+import { SyncBar } from '@/components/SyncBar'
 import { COLUMN_COLOR, StatusDot } from '@/components/status'
 import { getState, interrupt, openThread, sendMessage, setColumn, useStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -20,12 +24,8 @@ import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
 
 function ColumnSheet({ open, onClose, current, onPick }: { open: boolean; onClose: () => void; current: Column; onPick: (c: Column | 'auto') => void }) {
-  const insets = useSafeAreaInsets()
   return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
-      <Pressable className="flex-1 bg-black/40" onPress={onClose} />
-      <View className="rounded-t-2xl border-t border-border bg-background px-4 pt-3" style={{ paddingBottom: insets.bottom + 12 }}>
-        <View className="mb-2 h-1 w-10 self-center rounded-full bg-border" />
+    <Sheet open={open} onClose={onClose}>
         <Text className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('Spalte')}</Text>
         {COLUMNS.map((c) => (
           <Pressable key={c.id} onPress={() => onPick(c.id)} className="min-h-12 flex-row items-center gap-3 rounded-lg px-2 active:bg-accent">
@@ -38,12 +38,29 @@ function ColumnSheet({ open, onClose, current, onPick }: { open: boolean; onClos
           <View className="h-2.5 w-2.5" />
           <Text className="flex-1 text-[15px] text-muted-foreground">{t('Automatisch')}</Text>
         </Pressable>
-      </View>
-    </Modal>
+    </Sheet>
   )
 }
 
 type Row = { key: string; kind: 'msg'; m: ThreadMessage } | { key: string; kind: 'stream'; text: string } | { key: string; kind: 'prompts' }
+const NO_CHIPS: PaseoChip[] = []
+// Stable keys also for messages without a database id (the cache keeps only the newest ones, so an
+// index would shift when the full history arrives).
+const rowKey = (m: ThreadMessage) => (m.id != null ? `m${m.id}` : `t${m.ts ?? 0}-${m.role}-${m.text.length}`)
+
+/** True once the screen's open transition has finished (or after 400 ms at the latest). */
+function useTransitionDone() {
+  const navigation = useNavigation()
+  const [done, setDone] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setDone(true), 400)
+    const off = navigation.addListener('transitionEnd' as never, () => { clearTimeout(timer); setDone(true) })
+    return () => { clearTimeout(timer); off() }
+  }, [navigation])
+  return done
+}
+
+const RowGap = () => <View className="h-3" />
 
 export default function ThreadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -56,6 +73,8 @@ export default function ThreadScreen() {
   const insets = useSafeAreaInsets()
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [sheet, setSheet] = useState(false)
+  const ready = useTransitionDone()
+  const chips = session?.paseo?.length ? session.paseo : NO_CHIPS
 
   useEffect(() => { if (openId !== sessionId) openThread(sessionId) }, [sessionId])
   // Leaving the thread: stop treating it as open (live messages, toasts for its own turns).
@@ -66,7 +85,7 @@ export default function ThreadScreen() {
     const out: Row[] = []
     if (session?.pending?.length) out.push({ key: 'prompts', kind: 'prompts' })
     if (streaming) out.push({ key: 'stream', kind: 'stream', text: streaming })
-    for (let i = messages.length - 1; i >= 0; i--) out.push({ key: `m${messages[i].id ?? `i${i}`}`, kind: 'msg', m: messages[i] })
+    for (let i = messages.length - 1; i >= 0; i--) out.push({ key: rowKey(messages[i]), kind: 'msg', m: messages[i] })
     return out
   }, [messages, streaming, session?.pending])
 
@@ -86,26 +105,29 @@ export default function ThreadScreen() {
         )}
         <Button variant="ghost" size="icon" onPress={() => setSheet(true)} accessibilityLabel={t('Spalte')}><Icon as={Columns3} size={20} /></Button>
       </View>
+      <SyncBar />
       <KeyboardAvoidingView behavior="padding" className="flex-1" keyboardVerticalOffset={0}>
         {loading && !messages.length ? (
           <View className="flex-1 items-center justify-center"><ActivityIndicator /></View>
         ) : (
-          <FlatList
+          <TransitionReady.Provider value={ready}>
+          <FlashList
             inverted
             data={rows}
             keyExtractor={(r) => r.key}
-            contentContainerClassName="gap-3 px-4 py-4"
+            getItemType={(r) => (r.kind === 'msg' ? r.m.role : r.kind)}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
+            ItemSeparatorComponent={RowGap}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             renderItem={({ item }) => item.kind === 'msg'
-              ? <MessageView m={item.m} sessionId={sessionId} chips={session?.paseo || []} onImage={setLightbox} />
+              ? <MessageView m={item.m} sessionId={sessionId} chips={chips} onImage={setLightbox} />
               : item.kind === 'stream'
                 ? <View className="opacity-90"><Markdown text={stripMediaTags(item.text)} /></View>
                 : <View className="gap-3">{session?.pending.map((p) => <PendingPrompt key={p.promptId} sessionId={sessionId} prompt={p} />)}</View>}
             ListFooterComponent={session?.initialPrompt && !messages.length ? <Text className="text-center text-sm text-muted-foreground">„{session.initialPrompt}“</Text> : undefined}
-            initialNumToRender={15}
-            windowSize={9}
           />
+          </TransitionReady.Provider>
         )}
         <View style={{ paddingBottom: insets.bottom }} className="bg-background">
           <Composer

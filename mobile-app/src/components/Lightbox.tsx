@@ -1,15 +1,26 @@
+import { useEffect, useState } from 'react'
 import { Modal, Pressable, View } from 'react-native'
 import { Image } from 'expo-image'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { X } from 'lucide-react-native'
 import { Icon } from '@/components/ui/icon'
 import { t } from '@/lib/i18n'
 
-/** Full-screen image: pinch to zoom, pan while zoomed, double tap toggles 2.5×. Back button closes it. */
-export function Lightbox({ uri, onClose }: { uri: string | null; onClose: () => void }) {
+/**
+ * Full-screen image: pinch to zoom, pan while zoomed, double tap toggles 2.5×. Back button closes it.
+ * Fades in 150 ms / out 120 ms itself (the Modal "fade" uses Android's 500 ms config_longAnimTime).
+ */
+export function Lightbox({ uri: openUri, onClose }: { uri: string | null; onClose: () => void }) {
   const insets = useSafeAreaInsets()
+  const [uri, setUri] = useState(openUri)
+  const fade = useSharedValue(0)
+  useEffect(() => {
+    if (openUri) { setUri(openUri); fade.value = withTiming(1, { duration: 150 }); return }
+    fade.value = withTiming(0, { duration: 120 }, (done) => { if (done) runOnJS(setUri)(null) })
+  }, [openUri])
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }))
   const scale = useSharedValue(1)
   const saved = useSharedValue(1)
   const tx = useSharedValue(0)
@@ -32,9 +43,9 @@ export function Lightbox({ uri, onClose }: { uri: string | null; onClose: () => 
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }] }))
 
   return (
-    <Modal visible={!!uri} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={() => { reset(); onClose() }}>
+    <Modal visible={!!uri} transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={() => { reset(); onClose() }}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View className="flex-1 bg-black">
+        <Animated.View className="flex-1 bg-black" style={fadeStyle}>
           <GestureDetector gesture={Gesture.Simultaneous(pinch, pan, doubleTap)}>
             <Animated.View style={[{ flex: 1 }, style]}>
               {uri && <Image source={{ uri }} style={{ flex: 1 }} contentFit="contain" accessibilityLabel={t('Bild')} />}
@@ -43,7 +54,7 @@ export function Lightbox({ uri, onClose }: { uri: string | null; onClose: () => 
           <Pressable onPress={() => { reset(); onClose() }} accessibilityLabel={t('Schließen')} className="absolute right-3 h-12 w-12 items-center justify-center rounded-full bg-black/60" style={{ top: insets.top + 8 }}>
             <Icon as={X} color="#fff" />
           </Pressable>
-        </View>
+        </Animated.View>
       </GestureHandlerRootView>
     </Modal>
   )

@@ -13,6 +13,8 @@ const GATEWAY_KEY = 'hermes-ui.gateway'
 const SECRET_KEY = 'hermes-ui.iroh-secret-key'
 
 export class Unauthorized extends Error {}
+/** No backend connection yet (still connecting, or offline with cached content on screen). */
+export class NotConnected extends Error {}
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message) }
 }
@@ -55,7 +57,7 @@ export const deviceName = () => `${Platform.OS === 'ios' ? 'iPhone' : 'Android'}
 
 /** JSON API call over iroh. 401 / 403 (gateway refuses this device) → Unauthorized. */
 export async function api<T = unknown>(path: string, init: { method?: string; json?: unknown; timeoutMs?: number; signal?: AbortSignal } = {}): Promise<T> {
-  if (!backend) throw new Unauthorized('not connected')
+  if (!backend) throw new NotConnected('not connected')
   const res = await backend.fetch(path, { method: init.method, json: init.json, timeoutMs: init.timeoutMs, signal: init.signal })
   if (res.status === 401 || res.status === 403) { res.cancel(); throw new Unauthorized('unauthorized') }
   const text = await res.text()
@@ -65,7 +67,7 @@ export async function api<T = unknown>(path: string, init: { method?: string; js
   return body as T
 }
 
-export const isNetworkError = (e: unknown) => e instanceof IrohError
+export const isNetworkError = (e: unknown) => e instanceof IrohError || e instanceof NotConnected
 
 // ---------- media: backend URLs (/api/media/…, /api/file?…) as local files for <Image>/players ----------
 const mediaDir = () => {
@@ -74,6 +76,25 @@ const mediaDir = () => {
   return dir
 }
 const inflight = new Map<string, Promise<string>>()
+const MEDIA_MAX_BYTES = 200 * 1024 * 1024
+
+/** Keeps the media cache under MEDIA_MAX_BYTES, oldest files first (the OS may also clear it). */
+export function pruneMedia() {
+  try {
+    const files = mediaDir().list().filter((f): f is File => f instanceof File)
+      .map((f) => ({ f, size: f.size ?? 0, t: f.modificationTime ?? 0 }))
+      .sort((a, b) => b.t - a.t)
+    let total = 0
+    for (const { f, size } of files) {
+      total += size
+      if (total > MEDIA_MAX_BYTES) { try { f.delete() } catch { /* in use or gone */ } }
+    }
+  } catch { /* nothing cached yet */ }
+}
+
+export function clearMedia() {
+  try { new Directory(Paths.cache, 'media').delete() } catch { /* nothing cached */ }
+}
 
 const hash = (s: string) => {
   let h1 = 0x811c9dc5, h2 = 0x01000193
@@ -81,16 +102,26 @@ const hash = (s: string) => {
   return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36)
 }
 
+const mediaPath = (url: string) => {
+  const ext = (url.split('?')[0].match(/\.(\w{2,5})$/)?.[1] || decodeURIComponent(url).match(/\.(png|jpe?g|gif|webp|heic|m4a|mp3|ogg|opus|wav|webm|mp4)\b/i)?.[1] || 'bin').toLowerCase()
+  return new File(mediaDir(), `${hash(url)}.${ext}`)
+}
+
+/** Already on disk? Then a screen can render the image in its first frame instead of a spinner. */
+export function cachedMediaFile(url: string): string | null {
+  if (!url.startsWith('/api/')) return url
+  try { const file = mediaPath(url); return file.exists ? file.uri : null } catch { return null }
+}
+
 /** file:// URI of a backend media URL, downloaded over iroh once and cached. */
 export function mediaFile(url: string): Promise<string> {
   if (!url.startsWith('/api/')) return Promise.resolve(url)
-  const ext = (url.split('?')[0].match(/\.(\w{2,5})$/)?.[1] || decodeURIComponent(url).match(/\.(png|jpe?g|gif|webp|heic|m4a|mp3|ogg|opus|wav|webm|mp4)\b/i)?.[1] || 'bin').toLowerCase()
-  const file = new File(mediaDir(), `${hash(url)}.${ext}`)
+  const file = mediaPath(url)
   if (file.exists) return Promise.resolve(file.uri)
   let p = inflight.get(url)
   if (!p) {
     p = (async () => {
-      if (!backend) throw new Unauthorized('not connected')
+      if (!backend) throw new NotConnected('not connected')
       const r = await backend.download(url, file.uri)
       if (r.status < 200 || r.status >= 300) throw new ApiError(`HTTP ${r.status}`, r.status)
       return file.uri

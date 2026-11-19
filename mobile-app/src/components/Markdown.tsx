@@ -1,15 +1,14 @@
 import { memo } from 'react'
 import { View } from 'react-native'
 import { useColorScheme } from 'nativewind'
-import { useMarkdown } from 'react-native-marked'
+import { useMarkdown, type useMarkdownHookOptions } from 'react-native-marked'
 import { THEME } from '@/lib/theme'
 
-/** Hermes' replies (GFM) as native text: selectable, theme colours, mono code blocks. */
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
-  const { colorScheme } = useColorScheme()
-  const dark = colorScheme === 'dark'
+// One options object per colour scheme. useMarkdown memoizes styles, parser and tokens on the identity
+// of these objects; building them inline re-parsed every message on every render of the thread.
+const options = (dark: boolean): useMarkdownHookOptions => {
   const c = THEME[dark ? 'dark' : 'light']
-  const elements = useMarkdown(text, {
+  return {
     colorScheme: dark ? 'dark' : 'light',
     theme: { colors: { text: c.foreground, link: c.primary, code: c.muted, border: c.border } },
     styles: {
@@ -24,6 +23,13 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
       blockquote: { borderLeftColor: c.border, borderLeftWidth: 3, paddingLeft: 10, marginVertical: 4 },
       li: { fontSize: 15, lineHeight: 22, color: c.foreground },
     },
-  })
+  }
+}
+const OPTIONS = { light: options(false), dark: options(true) }
+
+/** Hermes' replies (GFM) as native text: selectable, theme colours, mono code blocks. */
+export const Markdown = memo(function Markdown({ text }: { text: string }) {
+  const { colorScheme } = useColorScheme()
+  const elements = useMarkdown(text, OPTIONS[colorScheme === 'dark' ? 'dark' : 'light'])
   return <View>{elements.map((el, i) => <View key={i}>{el}</View>)}</View>
 })

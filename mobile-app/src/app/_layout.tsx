@@ -76,11 +76,13 @@ export default function RootLayout() {
           <ThemeProvider value={navTheme(dark)}>
             <View className="flex-1 bg-background">
               <StatusBar style={dark ? 'light' : 'dark'} />
-              <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: THEME[dark ? 'dark' : 'light'].background } }}>
+              {/* Android: ios_from_right runs 200 ms (config_shortAnimTime) where slide_from_right takes
+                  400 ms; fade_from_bottom 210 ms instead of 400. iOS: 250 ms, swipe back from anywhere. */}
+              <Stack screenOptions={{ headerShown: false, animation: 'ios_from_right', animationDuration: 250, gestureEnabled: true, fullScreenGestureEnabled: true, contentStyle: { backgroundColor: THEME[dark ? 'dark' : 'light'].background } }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="pair" options={{ animation: 'fade' }} />
-                <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="new" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal', animation: 'fade_from_bottom' }} />
+                <Stack.Screen name="new" options={{ presentation: 'modal', animation: 'fade_from_bottom' }} />
                 <Stack.Screen name="thread/[id]" />
                 <Stack.Screen name="settings" />
                 <Stack.Screen name="search" options={{ animation: 'fade' }} />

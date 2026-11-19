@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Markdown } from '@/components/Markdown'
 import { AGENT_STATE } from '@/components/status'
-import { paseoAgents, paseoTimeline } from '@/lib/store'
+import { cachedPaseoAgents, cachedPaseoTimeline, paseoAgents, paseoTimeline } from '@/lib/store'
+import { SyncBar } from '@/components/SyncBar'
 import { cn } from '@/lib/utils'
 import { relTime, t } from '@/lib/i18n'
 
@@ -69,21 +70,22 @@ function ItemView({ it }: { it: PaseoItem }) {
 export default function PaseoScreen() {
   const { id, agent: agentParam } = useLocalSearchParams<{ id: string; agent?: string }>()
   const insets = useSafeAreaInsets()
-  const [agents, setAgents] = useState<PaseoAgent[] | null>(null)
+  // Cached agents and transcripts render at once; fresh ones replace them when they arrive.
+  const [agents, setAgents] = useState<PaseoAgent[] | null>(() => cachedPaseoAgents(decodeURIComponent(id)))
   const [agentId, setAgentId] = useState<string | null>(agentParam || null)
-  const [items, setItems] = useState<PaseoItem[] | null>(null)
+  const [items, setItems] = useState<PaseoItem[] | null>(() => (agentParam ? cachedPaseoTimeline(agentParam) : null))
   const [refreshing, setRefreshing] = useState(false)
 
-  const loadAgents = useCallback(async () => { try { setAgents((await paseoAgents(decodeURIComponent(id))).agents) } catch { setAgents([]) } }, [id])
-  const loadTimeline = useCallback(async (aid: string) => { try { setItems((await paseoTimeline(aid)).items) } catch { setItems([]) } }, [])
+  const loadAgents = useCallback(async () => { try { setAgents((await paseoAgents(decodeURIComponent(id))).agents) } catch { setAgents((a) => a ?? []) } }, [id])
+  const loadTimeline = useCallback(async (aid: string, quiet = false) => { try { setItems((await paseoTimeline(aid, quiet)).items) } catch { setItems((x) => x ?? []) } }, [])
   useEffect(() => { loadAgents() }, [loadAgents])
   useEffect(() => {
     if (!agentId) return
-    setItems(null)
+    setItems(cachedPaseoTimeline(agentId))
     loadTimeline(agentId)
     const running = agents?.find((a) => a.id === agentId)?.state === 'running'
     if (!running) return
-    const timer = setInterval(() => loadTimeline(agentId), 3000)
+    const timer = setInterval(() => loadTimeline(agentId, true), 3000)
     return () => clearInterval(timer)
   }, [agentId, agents?.length])
 
@@ -94,6 +96,7 @@ export default function PaseoScreen() {
         <Button variant="ghost" size="icon" onPress={() => (agentId && !agentParam ? setAgentId(null) : router.back())} accessibilityLabel={t('Zurück')}><Icon as={ArrowLeft} /></Button>
         <Text className="flex-1 text-[16px] font-semibold" numberOfLines={1}>{agent ? agent.title || agent.id.slice(0, 8) : t('Paseo-Agents')}</Text>
       </View>
+      <SyncBar />
       {!agentId ? (
         agents === null ? <ActivityIndicator className="mt-10" /> : (
           <FlatList

@@ -1,4 +1,4 @@
-# Hermes UI – native app (Expo, experimental)
+# Hermes UI – mobile app (Android/iOS)
 
 A React Native app (Expo SDK 58, New Architecture, Expo Router) for the hermes-ui backend. It is not a
 WebView wrapper: the screens are native, and the connection to the backend is a **native iroh client**
@@ -32,13 +32,14 @@ The backend and its `iroh-gateway` stay unchanged.
 | Area | Status |
 |---|---|
 | Pairing: QR scan, deep link, pasted link; identity in the keystore | ✅ |
-| Board: column tabs with counts, live status dots, Paseo chips, pull to refresh, live via SSE | ✅ |
+| Board: the columns as a swipe pager (tabs follow the finger, counts, last column remembered), live status dots, Paseo chips, pull to refresh, live via SSE | ✅ |
 | Thread: Markdown, streaming replies, tool chips, event cards, inline Paseo cards, images with pinch-zoom lightbox, audio | ✅ |
 | Composer: text, gallery / camera images, voice messages, send / stop, above the keyboard | ✅ |
 | Inbox: open approvals and clarify questions (answer in place), Paseo permissions, history | ✅ |
 | New chat, search, Paseo agents + read-only transcripts, settings (path, theme, board, notifications) | ✅ |
 | Share sheet "Share → Hermes UI" (text, image) starts a new chat | ✅ (Android) |
 | Hardware back (closes lightbox / sheets first), haptics, edge-to-edge system bars in theme colours | ✅ |
+| Cache: board, inbox, newest messages per chat, Paseo transcripts and images on the device; shown at once, refreshed in the background (progress bar), last state offline | ✅ |
 | Notifications while the app runs; in the background via a keep-alive foreground service (Android) | ✅ |
 | Push with the app closed (FCM) | prepared, needs a Firebase project (below) |
 | iOS | Swift module + XCFramework; the app runs in the simulator (pairing, board, threads, direct path 2 ms). No device / TestFlight build (needs an Apple account) |
@@ -49,20 +50,20 @@ Requirements: Node 24, JDK 17, Android SDK + NDK (r27+), Rust via rustup with
 `rustup target add aarch64-linux-android x86_64-linux-android`, and `cargo install cargo-ndk`.
 
 ```bash
-cd mobile
+cd mobile-app
 npm install
 npm run iroh:android              # Rust → libhermes_iroh.so (arm64-v8a, x86_64) + Kotlin bindings
 npx expo prebuild --platform android
 npm run apk                       # android/app/build/outputs/apk/release/app-<abi>-release.apk
 ```
 
-Release signing uses a local keystore that is **never committed** (`mobile/.secrets/` is git-ignored):
+Release signing uses a local keystore that is **never committed** (`mobile-app/.secrets/` is git-ignored):
 
 ```bash
 mkdir -p .secrets && keytool -genkeypair -storetype PKCS12 -keystore .secrets/release.keystore \
   -alias hermes-ui -keyalg RSA -keysize 4096 -validity 10000
 cat > .secrets/keystore.properties <<EOF
-storeFile=/absolute/path/to/mobile/.secrets/release.keystore
+storeFile=/absolute/path/to/mobile-app/.secrets/release.keystore
 storePassword=…
 keyAlias=hermes-ui
 keyPassword=…
@@ -78,6 +79,14 @@ marks chats created by test runs as `TEST · …`, as `hk_e2e_test` does in the 
 Configuration through the environment at build time (`app.config.ts`): `HERMES_UI_ANDROID_PACKAGE`,
 `HERMES_UI_IOS_BUNDLE_ID`, `HERMES_UI_LINK_HOST` / `HERMES_UI_LINK_PATH` (which `https` pairing links
 the app offers to open), `HERMES_UI_ABIS`, `GOOGLE_SERVICES_JSON`.
+
+## Cache
+
+`src/lib/cache.ts` keeps what the screens showed last as small JSON files in the app's documents
+directory: the board, the inbox, the newest 80 messages of the 40 most recent chats and of 20 Paseo
+transcripts. Screens render from it in their first frame and refresh in the background; live events
+update it directly. Images and audio are cached separately (`connection.ts`, at most 200 MB, oldest
+first). "Forget pairing" deletes both.
 
 ## Push with the app closed (FCM)
 

@@ -1,32 +1,56 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, View } from 'react-native'
 import { Image } from 'expo-image'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { ImageOff, Pause, Play } from 'lucide-react-native'
-import { mediaFile } from '@/lib/connection'
+import { cachedMediaFile, mediaFile } from '@/lib/connection'
 import { Text } from '@/components/ui/text'
 import { Icon } from '@/components/ui/icon'
 import { t } from '@/lib/i18n'
 
+/**
+ * Set by a screen while its open transition runs: downloads wait until it has finished, so the
+ * animation does not compete with network and decoding work. Files already on disk show at once.
+ */
+export const TransitionReady = createContext(true)
+
 /** Backend media URL → local file over iroh (cached), or null while loading / on error. */
 export function useMediaFile(url: string) {
-  const [state, setState] = useState<{ uri: string | null; error: boolean }>({ uri: null, error: false })
+  const ready = useContext(TransitionReady)
+  const [state, setState] = useState<{ uri: string | null; error: boolean }>(() => ({ uri: cachedMediaFile(url), error: false }))
   useEffect(() => {
+    if (state.uri || !ready) return
     let alive = true
     mediaFile(url).then((uri) => alive && setState({ uri, error: false }), () => alive && setState({ uri: null, error: true }))
     return () => { alive = false }
-  }, [url])
+  }, [url, ready])
   return state
 }
 
+// Aspect ratio per image, so a thread opened again lays out at the final size in its first frame.
+const ratios = new Map<string, number>()
+
 export function MediaImage({ url, onOpen }: { url: string; onOpen: (uri: string) => void }) {
   const { uri, error } = useMediaFile(url)
-  const [ratio, setRatio] = useState(4 / 3)
+  const [ratio, setRatio] = useState(() => ratios.get(url) ?? 4 / 3)
   if (error) return <View className="h-24 w-40 flex-row items-center justify-center gap-2 rounded-lg border border-border"><Icon as={ImageOff} size={16} tone="muted-foreground" /><Text className="text-xs text-muted-foreground">{t('Bild nicht verfügbar')}</Text></View>
-  if (!uri) return <View className="h-40 w-56 items-center justify-center rounded-lg bg-muted"><ActivityIndicator /></View>
+  // The placeholder has the size the image will most likely have: no jump when it arrives.
+  if (!uri) return <View className="items-center justify-center rounded-[10px] bg-muted" style={{ width: 240, aspectRatio: ratio }}><ActivityIndicator /></View>
   return (
     <Pressable onPress={() => onOpen(uri)} accessibilityLabel={t('Bild vergrößern')}>
-      <Image source={{ uri }} style={{ width: 240, aspectRatio: ratio, borderRadius: 10 }} contentFit="cover" onLoad={(e) => e.source.width && setRatio(Math.max(0.5, Math.min(2, e.source.width / e.source.height)))} />
+      <Image
+        source={{ uri }}
+        style={{ width: 240, aspectRatio: ratio, borderRadius: 10 }}
+        contentFit="cover"
+        recyclingKey={url}
+        transition={ratios.has(url) ? 0 : 120}
+        onLoad={(e) => {
+          if (!e.source.width) return
+          const r = Math.max(0.5, Math.min(2, e.source.width / e.source.height))
+          ratios.set(url, r)
+          setRatio(r)
+        }}
+      />
     </Pressable>
   )
 }
