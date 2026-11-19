@@ -28,6 +28,9 @@ All notable changes. The backend + web UI and the app share one repository; app 
 - Camera in the desktop composer (live preview, the photo becomes an attachment).
 - Stable ad-hoc signature (`scripts/sign-adhoc.sh`): permission decisions survive rebuilds.
 - Keychain entries per bundle identifier; Keychain calls no longer block the window.
+- Board: the top card's selected / open / focus ring is drawn inside the card (was cut off).
+- Toasts redesigned in the web UI's sonner style (soft shadow / dark border, stacking, hover to
+  spread and close), one component for phone, web and desktop.
 
 ### Desktop app (new, `desktop-app/`, unsigned spike)
 - Tauri 2 shell for macOS: overlay title bar, menu bar, tray, launch at login, global shortcut,
