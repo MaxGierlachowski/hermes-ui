@@ -30,6 +30,7 @@ type ExpoIrohNative = {
   startKeepAlive?(title: string, text: string): boolean
   updateKeepAlive?(title: string, text: string): void
   stopKeepAlive?(): void
+  keepAliveRunning?(): boolean
 }
 
 export default requireNativeModule<ExpoIrohNative>('ExpoIroh')

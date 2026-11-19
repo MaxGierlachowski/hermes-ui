@@ -1,6 +1,6 @@
 {
   "name": "hermes-ui-mobile",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -54,9 +54,12 @@
     "iroh:ios": "modules/expo-iroh/scripts/build-ios.sh",
     "iroh:test": "cd modules/expo-iroh/rust && cargo test --release --test e2e -- --ignored --nocapture",
     "prebuild:android": "expo prebuild --platform android",
-    "apk": "cd android && ./gradlew app:assembleRelease",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "apk": "cd android && ./gradlew app:assembleRelease",
+    "aab": "cd android && ./gradlew app:bundleRelease",
+    "release:android": "scripts/release-android.sh",
+    "eas-build-post-install": "scripts/eas-build-post-install.sh"
   },
   "private": true
 }
