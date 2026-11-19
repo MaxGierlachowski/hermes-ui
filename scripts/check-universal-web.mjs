@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Interaction check of the universal app's wide (desktop) layout in the demo mode: ⌘K palette, keyboard
 // navigation, Esc, text selection, Enter to send, new chat, right-click menu, drag & drop between columns,
-// split resize. Serve mobile-app/dist-web on :8811 first (static, index.html fallback).
+// split resize; lightbox, voice message, image paste. Serve mobile-app/dist-web on :8811 first (static, index.html fallback).
 //   node scripts/check-universal-web.mjs [chromium|webkit]
 import { chromium, webkit } from '@playwright/test'
 const engine = process.argv[2] || 'chromium'
@@ -61,3 +61,32 @@ ok(`split resize (${b0 && Math.round(b0.x)} → ${b1 && Math.round(b1.x)})`, b0 
 await page.screenshot({ path: '/tmp/hu-spike/i-final.png' })
 ok(`no page errors ${errors.join(' | ')}`, errors.length === 0)
 await browser.close()
+
+// Media: lightbox (Esc closes only the lightbox), voice message (MediaRecorder, fake microphone),
+// image pasted into the composer.
+const mb = await (engine === 'webkit' ? webkit : chromium).launch(engine === 'webkit' ? {} : { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] })
+const mctx = await mb.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-GB', ...(engine === 'webkit' ? {} : { permissions: ['microphone'] }) })
+const mp = await mctx.newPage()
+await mp.goto('http://127.0.0.1:8811/demo?thread=demo-site', { waitUntil: 'networkidle' }); await mp.waitForTimeout(1500)
+await mp.locator('.hk-thread').evaluate((el) => { el.scrollTop = -100000 }); await mp.waitForTimeout(800)
+const img = mp.locator('.hk-thread img').first()
+ok('image in thread renders', (await img.count()) > 0 && (await img.evaluate((i) => i.naturalWidth)) > 0)
+await img.click(); await mp.waitForTimeout(600)
+ok('lightbox opens', (await mp.locator('img').count()) >= 2)
+await mp.keyboard.press('Escape'); await mp.waitForTimeout(600)
+ok('Esc closes the lightbox, the chat stays open', (await mp.locator('img').count()) === 1 && (await mp.locator('.hk-thread').count()) === 1)
+if (engine !== 'webkit') {
+  await mp.locator('[aria-label="Voice message"]').click(); await mp.waitForTimeout(1500)
+  ok('recording state shown', await mp.getByText(/Recording/).isVisible())
+  await mp.locator('[aria-label="Send recording"]').click(); await mp.waitForTimeout(2000)
+  ok('voice message sent', await mp.locator('.hk-thread').getByText(/voice message/).count() > 0)
+}
+await mp.getByPlaceholder('Reply …').click()
+await mp.evaluate(async () => {
+  const c = document.createElement('canvas'); c.width = c.height = 40; c.getContext('2d').fillRect(0, 0, 40, 40)
+  const blob = await new Promise((r) => c.toBlob(r, 'image/png')); const dt = new DataTransfer(); dt.items.add(new File([blob], 'x.png', { type: 'image/png' }))
+  document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+})
+await mp.waitForTimeout(600)
+ok('pasted image becomes an attachment', await mp.locator('[aria-label="Remove image"]').count() === 1)
+await mb.close()

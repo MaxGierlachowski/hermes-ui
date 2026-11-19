@@ -2,7 +2,7 @@
 // and "new chat" are screens on the navigation stack. In the wide layout (desktop, large tablet) the
 // thread and the transcript open in the split pane next to the board, search and "new chat" as
 // overlays, so the board stays in view.
-import { useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { Dimensions } from 'react-native'
 import { router } from 'expo-router'
 import { openThread } from './store'
@@ -26,6 +26,18 @@ export function useNav<T>(select: (n: Nav) => T): T {
 export const isWide = () => layoutFor(Dimensions.get('window').width) === 'desktop'
 export const setPane = (pane: Pane) => set({ pane })
 export const setOverlay = (overlay: Nav['overlay']) => set({ overlay })
+
+// Layers above the screen (lightbox, bottom sheet, popover menu) take Esc first: the desktop
+// keyboard handler leaves Esc alone while one is open.
+let layers = 0
+export const hasLayer = () => layers > 0
+export function useLayer(open: boolean) {
+  useEffect(() => {
+    if (!open) return
+    layers++
+    return () => { layers-- }
+  }, [open])
+}
 
 const threadHref = (id: string) => `/thread/${encodeURIComponent(id)}` as const
 

@@ -7,12 +7,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { X } from 'lucide-react-native'
 import { Icon } from '@/components/ui/icon'
 import { t } from '@/lib/i18n'
+import { useLayer } from '@/lib/nav'
 
 /**
  * Full-screen image: pinch to zoom, pan while zoomed, double tap toggles 2.5×. Back button closes it.
  * Fades in 150 ms / out 120 ms itself (the Modal "fade" uses Android's 500 ms config_longAnimTime).
  */
 export function Lightbox({ uri: openUri, onClose }: { uri: string | null; onClose: () => void }) {
+  useLayer(!!openUri)
   const insets = useSafeAreaInsets()
   const [uri, setUri] = useState(openUri)
   const fade = useSharedValue(0)

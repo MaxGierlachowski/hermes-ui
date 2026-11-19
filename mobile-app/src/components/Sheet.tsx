@@ -3,6 +3,7 @@ import { Modal, Pressable, View } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useLayer } from '@/lib/nav'
 
 const IN = { duration: 220, easing: Easing.out(Easing.cubic) }
 const OUT = { duration: 160, easing: Easing.in(Easing.quad) }
@@ -13,6 +14,7 @@ const OUT = { duration: 160, easing: Easing.in(Easing.quad) }
  */
 export function Sheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
   const insets = useSafeAreaInsets()
+  useLayer(open)
   const [mounted, setMounted] = useState(open)
   const [height, setHeight] = useState(0)
   const y = useSharedValue(1000)

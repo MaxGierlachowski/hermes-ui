@@ -20,7 +20,7 @@ import { PaseoPane } from '@/components/paseo/PaseoPane'
 import { BoardColumns, cardMenu } from './BoardColumns'
 import { badgeCount, createChat, exitDemo, setTab, toast, useStore } from '@/lib/store'
 import { groupSessions } from '@/lib/board'
-import { closeThread, setOverlay, setPane, showNewChat, showSearch, showThread, useNav } from '@/lib/nav'
+import { closeThread, hasLayer, setOverlay, setPane, showNewChat, showSearch, showThread, useNav } from '@/lib/nav'
 import { useKeydown, useSplitResize } from '@/lib/web-input'
 import { isDesktop, isMac, onShellAction } from '@/lib/desktop'
 import { cn } from '@/lib/utils'
@@ -164,6 +164,7 @@ export function DesktopHome() {
   // KEYS: ⌘K or / search · ⌘N or n new chat · ⌘B / ⌘I board / inbox · ⌘1–4 a column · ↑ ↓ ← → move
   // in the board · Enter open · Esc close the dialog, then the chat · ⌘, settings.
   useKeydown((e) => {
+    if (hasLayer()) return // a lightbox, sheet or menu is open: Esc and the keys are its own
     if (e.meta && e.key.toLowerCase() === 'k') { e.preventDefault(); setOverlay(overlay === 'search' ? null : 'search'); return }
     if (e.meta && e.key.toLowerCase() === 'n') { e.preventDefault(); act('new-chat'); return }
     if (e.meta && e.key === ',') { e.preventDefault(); act('settings'); return }

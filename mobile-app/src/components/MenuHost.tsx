@@ -7,12 +7,14 @@ import { Icon } from '@/components/ui/icon'
 import { closeMenu, useMenu } from '@/lib/menu'
 import { useKeydown } from '@/lib/web-input'
 import { cn } from '@/lib/utils'
+import { useLayer } from '@/lib/nav'
 
 const W = 240
 
 export function MenuHost() {
   const menu = useMenu()
   const { width, height } = useWindowDimensions()
+  useLayer(!!menu)
   useKeydown((e) => { if (menu && e.key === 'Escape') { e.preventDefault(); closeMenu() } })
   if (!menu) return null
   const x = Math.min(menu.at.align === 'right' ? menu.at.x - W : menu.at.x, width - W - 8)
