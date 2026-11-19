@@ -1,18 +1,18 @@
 // Code blocks with syntax highlighting, like the web UI's shiki blocks (github-light / github-dark):
 // Prism tokens as nested Text, so it works the same on phone, web and desktop and stays selectable.
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { Platform, ScrollView, Text, View } from 'react-native'
 import { useColorScheme } from 'nativewind'
-import { Prism, normalizeTokens } from 'prism-react-renderer'
 import { THEME } from '@/lib/theme'
 import { isWebDesktop } from '@/lib/web-input'
 
-// prism-react-renderer bundles the common languages; shell and diff are what agents print most besides.
-;(globalThis as { Prism?: unknown }).Prism = Prism
-require('prismjs/components/prism-bash')
-require('prismjs/components/prism-diff')
-
-const ALIAS: Record<string, string> = { sh: 'bash', shell: 'bash', zsh: 'bash', console: 'bash', shellsession: 'bash', ts: 'typescript', js: 'javascript', py: 'python', yml: 'yaml', patch: 'diff', html: 'markup', xml: 'markup' }
+// The highlighter is not in the start bundle: it loads with the first code block, or when the app is idle.
+// Until then a block shows its plain text in the same box.
+type Highlighter = typeof import('@/lib/highlight')
+let highlighter: Highlighter | null = null
+let loading: Promise<Highlighter> | null = null
+const loadHighlighter = () => (loading ??= import('@/lib/highlight').then((m) => (highlighter = m)))
+setTimeout(() => { loadHighlighter().catch(() => {}) }, 3000)
 
 // GitHub's light and dark code colours (the shiki themes of the web UI), by Prism token type.
 const COLORS = {
@@ -42,12 +42,9 @@ export const CodeBlock = memo(function CodeBlock({ code, language }: { code: str
   const p = COLORS[dark ? 'dark' : 'light']
   const c = THEME[dark ? 'dark' : 'light']
   const text = code.replace(/\n$/, '')
-  const lines = useMemo(() => {
-    const lang = ALIAS[language?.toLowerCase() ?? ''] ?? language?.toLowerCase() ?? ''
-    const grammar = lang ? Prism.languages[lang] : undefined
-    if (!grammar) return null
-    try { return normalizeTokens(Prism.tokenize(text, grammar)) } catch { return null }
-  }, [text, language])
+  const [hl, setHl] = useState(highlighter)
+  useEffect(() => { if (!hl) loadHighlighter().then(setHl, () => {}) }, [hl])
+  const lines = useMemo(() => (hl ? hl.tokenize(text, language) : null), [hl, text, language])
   const body = (
     <Text selectable style={{ fontFamily: MONO, fontSize: isWebDesktop ? 13 : 12.5, lineHeight: isWebDesktop ? 20 : 18, color: p.plain }}>
       {lines

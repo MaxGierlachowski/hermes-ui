@@ -16,6 +16,10 @@ export function relTime(ts?: number) {
   if (d < 60) return t('gerade')
   if (d < 3600) return `${Math.floor(d / 60)} min`
   if (d < 86400) return `${Math.floor(d / 3600)} h`
-  return new Date(ts * 1000).toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-GB', { day: '2-digit', month: '2-digit' })
+  return SHORT_DATE.format(ts * 1000)
 }
-export const clock = (ts?: number) => (ts ? new Date(ts * 1000).toLocaleString(lang === 'de' ? 'de-DE' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '')
+// Created once: toLocale…String builds a new formatter on every call (once per message in a long thread).
+const LOCALE = lang === 'de' ? 'de-DE' : 'en-GB'
+const SHORT_DATE = new Intl.DateTimeFormat(LOCALE, { day: '2-digit', month: '2-digit' })
+const CLOCK = new Intl.DateTimeFormat(LOCALE, { dateStyle: 'short', timeStyle: 'short' })
+export const clock = (ts?: number) => (ts ? CLOCK.format(ts * 1000) : '')

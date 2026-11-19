@@ -138,6 +138,7 @@ function Overlay() {
 }
 
 const SPLIT_KEY = 'hk_split'
+const HIDDEN = { display: 'none' } as const
 
 /** The line between board and chat; drag it to resize (mounted with the pane, so the hook sees it). */
 function SplitHandle({ onResize, onEnd }: { onResize: (dx: number) => void; onEnd: () => void }) {
@@ -159,6 +160,8 @@ export function DesktopHome() {
   const { width } = useWindowDimensions()
   const { lists } = useMemo(() => groupSessions(sessions), [sessions])
   const [sel, setSel] = useState<{ col: number; idx: number } | null>(null)
+  const [inboxSeen, setInboxSeen] = useState(tab === 'inbox')
+  useEffect(() => { if (tab === 'inbox') setInboxSeen(true) }, [tab])
 
   // Split view: thread width in px, remembered; the board keeps at least 520 px.
   const [split, setSplit] = useState(Math.round(width * 0.42))
@@ -214,7 +217,9 @@ export function DesktopHome() {
       <OfflineBanner />
       <View className="flex-1 flex-row">
         <View className="min-w-0 flex-1">
-          {tab === 'board' ? <BoardColumns lists={lists} visible={4} selection={sel} openId={openId} /> : <View className="mx-auto w-full max-w-[760px] flex-1"><Inbox /></View>}
+          {/* The inbox stays mounted after its first visit: switching back is instant and keeps its scroll position. */}
+          <View className="flex-1" style={tab === 'board' ? undefined : HIDDEN}><BoardColumns lists={lists} visible={4} selection={sel} openId={openId} /></View>
+          {inboxSeen && <View className="mx-auto w-full max-w-[760px] flex-1" style={tab === 'inbox' ? undefined : HIDDEN}><Inbox /></View>}
         </View>
         {openId && (
           <>

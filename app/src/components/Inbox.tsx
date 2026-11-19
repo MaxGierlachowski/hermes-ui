@@ -32,7 +32,7 @@ function Segmented<T extends string>({ value, options, onChange, grow }: { value
     <View className={cn('flex-row rounded-lg border border-border', grow && 'flex-1')}>
       {options.map((o, i) => (
         <Pressable key={o.id} onPress={() => { haptic('select'); onChange(o.id) }} accessibilityRole="tab" accessibilityState={{ selected: value === o.id }}
-          className={cn('items-center justify-center px-2.5 web:transition-colors', D ? 'h-7' : 'h-10 flex-1', i > 0 && 'border-l border-border', i === 0 && 'rounded-l-[7px]', i === options.length - 1 && 'rounded-r-[7px]', value === o.id ? 'bg-muted' : 'web:hover:bg-muted/50')}>
+          className={cn('items-center justify-center px-2.5 web:transition-colors', D ? 'h-7' : 'h-11 flex-1', i > 0 && 'border-l border-border', i === 0 && 'rounded-l-[7px]', i === options.length - 1 && 'rounded-r-[7px]', value === o.id ? 'bg-muted' : 'web:hover:bg-muted/50')}>
           <Text className={cn(D ? 'text-xs' : 'text-[13px]', value === o.id ? 'font-medium' : 'text-muted-foreground')}>{o.label}</Text>
         </Pressable>
       ))}
@@ -153,13 +153,18 @@ function resolutionText(it: InboxItem) {
   return `${what}${r.device ? ` · ${r.device}` : ''}`
 }
 
+// Formatters are created once: toLocale…String builds a new one on every call, per row.
+const LOCALE = lang === 'de' ? 'de-DE' : 'en-GB'
+const DAY = new Intl.DateTimeFormat(LOCALE, { weekday: 'long', day: '2-digit', month: '2-digit' })
+const TIME = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit' })
+
 function dayLabel(ts: number) {
   const d = new Date(ts * 1000)
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const diff = Math.round((today.getTime() - new Date(d).setHours(0, 0, 0, 0)) / 86400000)
   if (diff === 0) return t('Heute')
   if (diff === 1) return t('Gestern')
-  return d.toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-GB', { weekday: 'long', day: '2-digit', month: '2-digit' })
+  return DAY.format(d)
 }
 
 const HistoryRow = memo(function HistoryRow({ item, first, last }: { item: InboxItem; first: boolean; last: boolean }) {
@@ -177,7 +182,7 @@ const HistoryRow = memo(function HistoryRow({ item, first, last }: { item: Inbox
         <View className="flex-row items-center gap-2">
           <Text className={cn('shrink', D ? 'text-sm' : 'text-[15px]', item.read ? 'text-foreground/80' : 'font-medium')} numberOfLines={1}>{title || '—'}</Text>
           <Text className="text-[11px] text-muted-foreground">{item.source === 'paseo' ? 'Paseo' : 'Hermes'}</Text>
-          <Text className="ml-auto text-[11px] tabular-nums text-muted-foreground">{new Date(item.at * 1000).toLocaleTimeString(lang === 'de' ? 'de-DE' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}</Text>
+          <Text className="ml-auto text-[11px] tabular-nums text-muted-foreground">{TIME.format(item.at * 1000)}</Text>
           <View className={cn('h-1.5 w-1.5 rounded-full', item.read ? 'bg-transparent' : 'bg-primary')} />
         </View>
         <Text className={cn('mt-0.5 text-muted-foreground', D ? 'text-xs' : 'text-[13px]')} numberOfLines={1}>
@@ -216,11 +221,12 @@ export function Inbox() {
     let day = ''
     const items = inbox.items.filter((it) => (source === 'all' || it.source === source) && matchesKind(it.kind, kind)
       && !(REQUESTS.has(it.kind) && !it.resolution && inbox.open.some((o) => o.key === it.id)))
+    const labels = items.map((it) => dayLabel(it.at))
     items.forEach((item, i) => {
-      const label = dayLabel(item.at)
+      const label = labels[i]
       const first = label !== day
       if (first) { out.push({ kind: 'day', label }); day = label }
-      out.push({ kind: 'item', item, first, last: i === items.length - 1 || dayLabel(items[i + 1].at) !== label })
+      out.push({ kind: 'item', item, first, last: labels[i + 1] !== label })
     })
     return out
   }, [inbox.items, inbox.open, kind, source])

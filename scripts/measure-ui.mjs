@@ -77,8 +77,9 @@ const UIS = {
     async prepare(context, url) {
       await context.addInitScript((base) => { if (!localStorage.getItem('hermes-ui.target')) localStorage.setItem('hermes-ui.target', JSON.stringify({ kind: 'http', baseUrl: base, token: 'measure' })) }, url)
     },
-    inbox: (page) => page.getByRole('tab', { name: /Inbox/ }).first().click(),
-    board: (page) => page.getByRole('tab', { name: /Board/ }).first().click(),
+    // A DOM click like for shadcn: Playwright's click() adds its actionability waits (~70 ms) to the time.
+    inbox: (page) => page.getByRole('tab', { name: /Inbox/ }).first().evaluate((el) => el.click()),
+    board: (page) => page.getByRole('tab', { name: /Board/ }).first().evaluate((el) => el.click()),
   },
 }
 

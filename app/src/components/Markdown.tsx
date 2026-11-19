@@ -74,13 +74,15 @@ const options = (dark: boolean): useMarkdownHookOptions => {
       text: { ...BODY, color: c.foreground },
       paragraph: { marginVertical: isWebDesktop ? 6 : 3, paddingVertical: 0 },
       strong: { fontWeight: '600' },
-      link: { color: c.primary, textDecorationLine: 'underline', textDecorationColor: `${c.primary}66` } as TextStyle,
+      link: { color: c.primary, fontStyle: 'normal', textDecorationLine: 'underline', textDecorationColor: `${c.primary}66` } as TextStyle,
       codespan: { fontFamily: MONO, fontStyle: 'normal', fontSize: BODY.fontSize * 0.88, backgroundColor: c.muted, color: c.foreground },
       h1: { fontSize: isWebDesktop ? 22 : 20, lineHeight: isWebDesktop ? 30 : 26, fontWeight: '700', color: c.foreground, marginTop: 10, marginBottom: 6 },
       h2: { fontSize: isWebDesktop ? 18 : 18, lineHeight: isWebDesktop ? 26 : 24, fontWeight: '700', color: c.foreground, marginTop: 10, marginBottom: 4 },
       h3: { fontSize: isWebDesktop ? 15 : 16, lineHeight: 22, fontWeight: '600', color: c.foreground, marginTop: 8, marginBottom: 4 },
       blockquote: { borderLeftColor: c.border, borderLeftWidth: 3, paddingLeft: 12, marginVertical: 6 },
       li: { ...BODY, color: c.foreground },
+      // The marker box: a hanging indent like the web UI's 22 px list padding.
+      list: { marginLeft: 6, marginRight: 8 },
       hr: { borderBottomWidth: 1, borderColor: c.border, marginVertical: 12 },
     },
   }

@@ -10,7 +10,7 @@ import { isWebDesktop } from '@/lib/web-input'
 // (32 px, sm 28, lg 36, icon 32); on touch screens touch targets of at least 48 dp (ADR 0011).
 const SIZES = isWebDesktop
   ? { default: 'h-8 gap-1.5 px-2.5', sm: 'h-7 gap-1 rounded-md px-2.5', lg: 'h-9 gap-1.5 px-3', icon: 'h-8 w-8', 'icon-sm': 'h-7 w-7 rounded-md' }
-  : { default: 'h-12 gap-2 px-4', sm: 'h-10 gap-1.5 px-3', lg: 'h-14 gap-2 px-6', icon: 'h-12 w-12', 'icon-sm': 'h-10 w-10' }
+  : { default: 'h-12 gap-2 px-4', sm: 'h-11 gap-1.5 px-3', lg: 'h-14 gap-2 px-6', icon: 'h-12 w-12', 'icon-sm': 'h-11 w-11' }
 const buttonVariants = cva('flex-row items-center justify-center rounded-lg border border-transparent web:select-none web:transition-colors web:duration-150 active:opacity-80 web:active:opacity-100 web:active:translate-y-px', {
   variants: {
     variant: {

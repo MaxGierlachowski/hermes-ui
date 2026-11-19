@@ -102,7 +102,7 @@ export function PendingPrompt({ sessionId, prompt: p }: { sessionId: string; pro
         <Input className="flex-1" value={text} onChangeText={setText} placeholder={choices.length ? t('Oder frei antworten …') : t('Antwort …')} editable={!busy} onSubmitEditing={() => text.trim() && send({ answer: text.trim() })} />
         <Button size={D ? 'default' : undefined} variant="secondary" disabled={busy || !text.trim()} onPress={() => send({ answer: text.trim() })}><Text>{t('Senden')}</Text></Button>
       </View>
-      <Pressable className={cn('self-start', D ? 'py-0.5' : 'min-h-11 justify-center')} disabled={busy} onPress={() => send({ answer: '' })} accessibilityRole="button">
+      <Pressable className={cn('self-start', D ? 'py-0.5' : 'min-h-11 min-w-11 justify-center')} disabled={busy} onPress={() => send({ answer: '' })} accessibilityRole="button">
         <Text className={cn('text-muted-foreground web:hover:text-foreground', D ? 'text-xs' : 'text-sm')}>{t('Überspringen')}</Text>
       </Pressable>
     </Shell>

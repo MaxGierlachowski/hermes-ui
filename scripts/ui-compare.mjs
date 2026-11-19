@@ -8,6 +8,9 @@
 //   npm -w web run build && npm --prefix app run web:export
 //   node scripts/ui-compare.mjs --out /tmp/ui-compare [--only board,thread] [--engine chromium|webkit] [--ui both|shadcn|universal]
 //
+// On phone screens it also lists every visible control smaller than 44 × 44 px (touch targets, as in
+// web/e2e/touch-targets.spec.ts) and exits with 1 if there is one.
+//
 // It serves both builds itself (ports 8812 shadcn, 8811 universal, index.html fallback). docs/ui-audit.md has the findings.
 import { chromium, webkit } from '@playwright/test'
 import { createServer } from 'node:http'
@@ -142,6 +145,19 @@ const SCREENS = {
   },
 }
 
+// ---------- touch targets ----------
+// Visible, enabled controls in the viewport with a box under 44 px (hit slop does not exist on the web).
+const smallTargets = (page) => page.evaluate(() => {
+  const out = []
+  for (const el of document.querySelectorAll('button, a[href], input, textarea, select, [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="link"]')) {
+    if (el.closest('[aria-hidden="true"]') || el.getAttribute('aria-disabled') === 'true' || el.disabled) continue
+    const r = el.getBoundingClientRect(), st = getComputedStyle(el)
+    if (!r.width || !r.height || st.visibility === 'hidden' || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue
+    if (r.width < 44 || r.height < 44) out.push(`${Math.round(r.width)}×${Math.round(r.height)} ${el.getAttribute('aria-label') || el.textContent.trim().slice(0, 40) || el.tagName}`)
+  }
+  return out
+})
+
 // ---------- side-by-side ----------
 async function sideBySide(browser, a, b, out, label) {
   const page = await browser.newPage({ viewport: { width: 400, height: 300 } })
@@ -163,6 +179,7 @@ if (WHICH !== 'shadcn') servers.push(await serve(path.join(ROOT, 'app/dist-web')
 const browser = await (ENGINE === 'webkit' ? webkit : chromium).launch()
 const UIS = { shadcn: 'http://127.0.0.1:8812', universal: 'http://127.0.0.1:8811' }
 const shots = []
+const small = []
 for (const [name, screen] of Object.entries(SCREENS)) {
   if (ONLY && !ONLY.has(name)) continue
   for (const vp of screen.vp) for (const theme of THEMES) {
@@ -185,6 +202,7 @@ for (const [name, screen] of Object.entries(SCREENS)) {
       try { await screen.go(page, ui) } catch (e) { errors.push(`navigation: ${e.message.split('\n')[0]}`) }
       const file = path.join(OUT, `${name}-${vp}-${theme}-${ui}.png`)
       await page.screenshot({ path: file })
+      if (vp === 'phone') for (const t of await smallTargets(page)) small.push(`${name}/${theme}/${ui}: ${t}`)
       files[ui] = file
       if (errors.length) console.log(`  ${name}/${vp}/${theme}/${ui}: ${errors.join(' | ').slice(0, 300)}`)
       await ctx.close()
@@ -200,3 +218,4 @@ for (const [name, screen] of Object.entries(SCREENS)) {
 await browser.close()
 servers.forEach((s) => s.close())
 console.log(`${shots.length} pairs in ${OUT}`)
+if (small.length) { console.log(`Touch targets under 44 px (${small.length}):\n  ${small.join('\n  ')}`); process.exitCode = 1 }

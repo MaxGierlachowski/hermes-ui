@@ -46,8 +46,9 @@ textarea { field-sizing: content; }
 * { scrollbar-width: thin; scrollbar-color: hsl(var(--foreground) / 0.22) transparent; }
 ${isDesktop ? 'html { cursor: default; } a, [role="button"], [role="tab"] { cursor: default; }' : '[role="button"]:not([aria-disabled="true"]), [role="tab"], a { cursor: pointer; }'}
 [data-drop="1"] { box-shadow: inset 0 0 0 2px hsl(var(--primary)); border-radius: 12px; }
-/* An assistant message's time shows on hover, like the web UI. */
-[data-hk-ts] { opacity: 0; transition: opacity 150ms; }
+/* An assistant message's time shows on hover, like the web UI, but without its fade: wheel-scrolling moves
+   rows under a resting pointer, and a transition on each of them cost a 33 → 50 ms frame (measure-ui). */
+[data-hk-ts] { opacity: 0; }
 [data-hk-msg]:hover [data-hk-ts], [data-hk-ts]:focus-within { opacity: 1; }
 /* Motion like the web UI's dialogs, popovers and tooltips (tailwindcss-animate: fade + zoom 95 %). */
 @keyframes hk-fade-in { from { opacity: 0 } }
