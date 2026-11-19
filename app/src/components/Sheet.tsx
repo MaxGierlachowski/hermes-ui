@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Modal, Pressable, View } from 'react-native'
+import { Modal, Pressable, StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -48,18 +48,17 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <Animated.View className="absolute inset-0 bg-black/40" style={backdrop}>
-          <Pressable className="flex-1" onPress={onClose} accessibilityRole="button" />
+        {/* Animated.Views only animate; their looks sit on plain Views (NativeWind does not style reanimated's views on the web). */}
+        <Animated.View style={[StyleSheet.absoluteFill, backdrop]}>
+          <Pressable className="flex-1 bg-black/40" onPress={onClose} accessibilityRole="button" />
         </Animated.View>
         <View className="flex-1 justify-end" pointerEvents="box-none">
           <GestureDetector gesture={pan}>
-            <Animated.View
-              onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
-              className="rounded-t-2xl border-t border-border bg-background px-4 pt-3"
-              style={[{ paddingBottom: insets.bottom + 12 }, panel, !height && { opacity: 0 }]}
-            >
-              <View className="mb-2 h-1 w-10 self-center rounded-full bg-border" />
-              {children}
+            <Animated.View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={[panel, !height && { opacity: 0 }]}>
+              <View className="rounded-t-2xl border-t border-border bg-background px-4 pt-3" style={{ paddingBottom: insets.bottom + 12 }}>
+                <View className="mb-2 h-1 w-10 self-center rounded-full bg-border" />
+                {children}
+              </View>
             </Animated.View>
           </GestureDetector>
         </View>

@@ -10,14 +10,15 @@ export type Row = { key: string; kind: 'msg'; m: ThreadMessage } | { key: string
 const RowGap = () => <View className="h-3" />
 
 /** `rows` come newest first (row 0 sits at the bottom of the screen). */
-export function ThreadList<R extends { key: string; kind: string }>({ rows, renderRow, footer }: { rows: R[]; renderRow: (r: R) => ReactElement; footer?: ReactElement }) {
+export function ThreadList<R extends { key: string; kind: string }>({ rows, renderRow, footer, bottomInset = 0 }: { rows: R[]; renderRow: (r: R) => ReactElement; footer?: ReactElement; /** Room below the newest row (e.g. for a pill floating above the composer). */ bottomInset?: number }) {
   return (
     <FlashList
       inverted
       data={rows}
       keyExtractor={(r) => r.key}
       getItemType={(r) => (r.kind === 'msg' && 'm' in r ? (r as unknown as { m: { role: string } }).m.role : r.kind)}
-      contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
+      // Inverted: the content's top edge is the bottom of the screen.
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 + bottomInset, paddingBottom: 16 }}
       ItemSeparatorComponent={RowGap}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"

@@ -31,7 +31,8 @@ export function SyncBar() {
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: (-0.35 + x.value * 1.35) * width }] }))
   return (
     <View className="h-0.5 overflow-hidden" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} accessibilityLabel={shown ? t('Aktualisiere …') : undefined}>
-      {shown && width > 0 && <Animated.View className="absolute left-0 top-0 h-0.5 rounded-full bg-primary" style={[{ width: width * 0.35 }, style]} />}
+      {/* The Animated.View only moves; the bar's looks sit on a plain View (NativeWind does not style reanimated's views on the web). */}
+      {shown && width > 0 && <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: width * 0.35 }, style]}><View className="h-0.5 w-full rounded-full bg-primary" /></Animated.View>}
     </View>
   )
 }

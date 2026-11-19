@@ -1,11 +1,11 @@
 // One chat: header, messages, open approvals / questions and the composer. A screen on the phone
 // (app/thread/[id].tsx), the right half of the split view on the desktop (embedded).
-import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Pressable, View } from 'react-native'
 import { useNavigation } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeft, Bot, Check, Columns3, X } from 'lucide-react-native'
-import { COLUMNS, type Column, type PaseoChip, type ThreadMessage } from '@shared/types'
+import { COLUMNS, type Column, type OutgoingMessage, type PaseoChip, type ThreadMessage } from '@shared/types'
 import { stripMediaTags } from '@shared/media-tags'
 import { Text } from '@/components/ui/text'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import { Sheet } from '@/components/Sheet'
 import { SyncBar } from '@/components/SyncBar'
 import { COLUMN_COLOR, StatusDot, sourceIcon } from '@/components/status'
 import { ThreadList, type Row } from './ThreadList'
+import { SUMMARY_PILL_SPACE, SummaryPill, useSummaryPill } from './SummaryPill'
 import { getState, interrupt, openThread, sendMessage, setColumn, useStore } from '@/lib/store'
 import { closeThread, showPaseo, showThread } from '@/lib/nav'
 import { openMenu } from '@/lib/menu'
@@ -49,7 +50,7 @@ function ColumnSheet({ open, onClose, current, onPick }: { open: boolean; onClos
 const NO_CHIPS: PaseoChip[] = []
 // Stable keys also for messages without a database id (the cache keeps only the newest ones, so an
 // index would shift when the full history arrives).
-const rowKey = (m: ThreadMessage) => (m.id != null ? `m${m.id}` : `t${m.ts ?? 0}-${m.role}-${m.text.length}`)
+const rowKey = (m: ThreadMessage) => m.key ?? (m.id != null ? `m${m.id}` : `t${m.ts ?? 0}-${m.role}-${m.text.length}`)
 
 /** True once the screen's open transition has finished (or after 400 ms at the latest). */
 function useTransitionDone(embedded: boolean) {
@@ -71,7 +72,7 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
   const loading = useStore((s) => s.loadingThread)
   const streaming = useStore((s) => (s.streaming && s.streaming.id === sessionId ? s.streaming.text : ''))
   const insets = useSafeAreaInsets()
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ uri: string; source: string } | null>(null)
   const [sheet, setSheet] = useState(false)
   const columnButton = useRef<ComponentRef<typeof View>>(null)
   const ready = useTransitionDone(embedded)
@@ -102,7 +103,17 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
     })
   }
 
+  const openImage = useCallback((uri: string, source: string) => setLightbox({ uri, source }), [])
+  // The composer's send path, also used by the Summary pill.
+  const submit = async (msg: OutgoingMessage) => {
+    const next = await sendMessage(sessionId, msg)
+    if (!next) return false // not delivered: the composer keeps the message (and a voice take)
+    if (next !== sessionId) showThread(next, { replace: true })
+  }
+  const summary = useSummaryPill(sessionId, session?.draft ? 0 : messages.length, !!session?.running || !!session?.pending?.length)
+
   const agents = session?.paseo?.length || 0
+  const agentsRunning = session?.paseo?.filter((a) => a.state === 'running' && a.rel !== 'watches').length || 0
   return (
     <View className="flex-1 bg-background">
       <View className={cn('flex-row gap-1 border-b border-border', embedded ? 'items-start px-2 py-2' : 'items-center px-1 pb-1')} style={embedded ? undefined : { paddingTop: insets.top + 2 }}>
@@ -129,8 +140,9 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
           </View>
         )}
         {agents > 0 && (
-          <Button variant="ghost" size="sm" onPress={() => showPaseo(sessionId)} accessibilityLabel={t('Paseo-Agents')} {...({ dataSet: { tip: t('Paseo-Agents') } } as object)}>
+          <Button variant="ghost" size="sm" onPress={() => showPaseo(sessionId)} accessibilityLabel={t('Agents')} {...({ dataSet: { tip: agentsRunning ? t('Agents ({n} laufen)', { n: agentsRunning }) : t('Agents') } } as object)}>
             <Icon as={Bot} size={embedded ? 16 : 18} /><Text className="text-sm tabular-nums">{agents}</Text>
+            {agentsRunning > 0 && <View className="h-1.5 w-1.5 rounded-full bg-indigo-500 web:animate-pulse" />}
           </Button>
         )}
         <View ref={columnButton} collapsable={false}>
@@ -147,30 +159,29 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
             <ThreadList
               rows={rows}
               renderRow={(item) => item.kind === 'msg'
-                ? <MessageView m={item.m} sessionId={sessionId} chips={chips} onImage={setLightbox} />
+                ? <MessageView m={item.m} sessionId={sessionId} chips={chips} onImage={openImage} />
                 : item.kind === 'stream'
                   ? <View className="opacity-90"><Markdown text={stripMediaTags(item.text)} /></View>
                   : <View className="gap-3">{session?.pending.map((p) => <PendingPrompt key={p.promptId} sessionId={sessionId} prompt={p} />)}</View>}
               footer={session?.initialPrompt && !messages.length ? <Text className="text-center text-sm text-muted-foreground">„{session.initialPrompt}“</Text> : undefined}
+              bottomInset={summary.state === 'hidden' ? 0 : SUMMARY_PILL_SPACE}
             />
           </TransitionReady.Provider>
         )}
-        <View style={{ paddingBottom: embedded ? 0 : insets.bottom }} className="bg-background">
+        <View style={{ paddingBottom: embedded ? 0 : insets.bottom }} className="relative bg-background">
+          <SummaryPill state={summary.state} onPress={() => summary.run((text) => submit({ text, images: [], audio: null }))} />
           <Composer
             key={sessionId}
             draftKey={sessionId}
             autoFocus={embedded}
             running={session?.running}
             onStop={() => interrupt(sessionId)}
-            onSend={async (msg) => {
-              const next = await sendMessage(sessionId, msg)
-              if (next && next !== sessionId) showThread(next, { replace: true })
-            }}
+            onSend={submit}
           />
         </View>
       </KeyboardAvoidingView>
       {!embedded && <ColumnSheet open={sheet} onClose={() => setSheet(false)} current={session?.column || 'new'} onPick={pickColumn} />}
-      <Lightbox uri={lightbox} onClose={() => setLightbox(null)} />
+      <Lightbox uri={lightbox?.uri ?? null} source={lightbox?.source} onClose={() => setLightbox(null)} />
     </View>
   )
 }

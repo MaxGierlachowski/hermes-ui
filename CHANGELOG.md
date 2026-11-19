@@ -5,6 +5,34 @@ All notable changes. The backend + web UI and the app share one repository; app 
 
 ## Unreleased – universal spike
 
+### Hermes' own agents next to Paseo agents (ADR 0013)
+- `delegate_task` subagents and terminal runs of `hermes [-p <profile>] chat -q …` show up like Paseo agents:
+  inline where they were started, in the chat's agent list with state and read-only transcript, as chips
+  on the card, and the chat stays in Doing while one runs ("Agents running (n)"). Backend, app and web UI.
+- Subagents are matched by Hermes' ids; terminal runs by prompt or start time, labelled as heuristic.
+
+### Summary pill above the composer
+- A floating "Summary" pill above a chat's composer sends one fixed prompt (in `shared/summary.ts`) as a
+  normal message: Hermes summarizes the chat, explains the state and lists every open task (what, who,
+  blocked by), in the chat's language. Hidden while the chat is empty, a turn runs or an approval waits;
+  feedback after the click, no double send. App and web UI.
+
+### Image viewer on the desktop
+- Fixed: in the desktop app (and the app's web build) a click on an image opened a transparent overlay
+  with only the X. NativeWind does not style reanimated's `Animated.View` on react-native-web, so the
+  viewer had no height and no backdrop; its layout and colours are now plain styles. The image shows at
+  its own size on a dark backdrop, with a loading spinner and an error state (file path, link for web
+  URLs); closes with X, Esc or a click beside the image. The web UI's viewer was not affected.
+- Same cause, also fixed: on the app's web build the bottom sheet (narrow window / phone browser) had no
+  backdrop and no background, the sync progress bar and the pulsing status ring did not show.
+
+### Voice messages on the desktop
+- Fixed: in the desktop app nothing happened after recording and pressing send. The CSP refused
+  `fetch(blob:)` and the error was swallowed. The recording now stays a Blob (no fetch), the CSP allows
+  `blob:` / `data:`, and every failure is shown; an undelivered recording is kept with "send again".
+- While a voice message is transcribed, the composer shows a progress state (app and web UI); the
+  backend reports a failed transcription to the client.
+
 ### Renamed: `mobile-app/` → `app/`
 - The app is no longer only the mobile app, so its folder is `app/` (package `@hermes-ui/app`). App id,
   bundle id and signing are unchanged. Release tags: `app-vX.Y.Z`.

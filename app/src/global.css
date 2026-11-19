@@ -47,3 +47,9 @@
     --ring: 240.8 100.0% 68.6%;
   }
 }
+
+/* Composer: indeterminate progress while a voice message is transcribed (web / desktop). */
+@keyframes voice-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}

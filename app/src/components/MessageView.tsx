@@ -1,7 +1,7 @@
 import { memo, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { showPaseo } from '@/lib/nav'
-import { AlertTriangle, Archive, Bell, Bot, ChevronRight, Clock, CornerDownRight, FileText, RotateCcw, ShieldCheck, Webhook, Wrench, Zap, type LucideIcon } from 'lucide-react-native'
+import { AlertTriangle, Archive, Bell, ChevronRight, Clock, CornerDownRight, FileText, RotateCcw, ShieldCheck, Webhook, Wrench, Zap, type LucideIcon } from 'lucide-react-native'
 import type { Attachment, PaseoChip, ThreadMessage } from '@shared/types'
 import { stripMediaTags } from '@shared/media-tags'
 import { Text } from '@/components/ui/text'
@@ -15,6 +15,7 @@ import { clock, t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
 import { isWebDesktop as D } from '@/lib/web-input'
 import { shadow } from '@/lib/shadow'
+import { agentIcon, agentKindLabel } from '@/lib/agents'
 
 // Desktop: hover reveals an assistant message's time (CSS for data-hk-msg / data-hk-ts in PlatformShell.web.tsx).
 const HOVER_MSG = D ? ({ dataSet: { hkMsg: '' } } as object) : {}
@@ -61,6 +62,7 @@ function PaseoInline({ m, chips, sessionId }: { m: ThreadMessage; chips: PaseoCh
   const chip = p.agentId ? chips.find((c) => c.id === p.agentId) : undefined
   const st = AGENT_STATE[chip?.state || 'unknown'] || AGENT_STATE.unknown
   const title = chip?.title || p.title || p.ref.slice(0, 8)
+  const who = chip ?? { provider: p.provider, kind: p.kind ?? null, account: p.account ?? null }
   const open = () => p.agentId && showPaseo(sessionId, p.agentId)
   if (p.action !== 'create') {
     const ActionIcon = p.action === 'archive' ? Archive : p.action === 'permission' ? ShieldCheck : CornerDownRight
@@ -74,12 +76,12 @@ function PaseoInline({ m, chips, sessionId }: { m: ThreadMessage; chips: PaseoCh
   }
   return (
     <Pressable onPress={open} className={cn('flex-row items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 active:bg-accent web:transition-colors web:hover:border-foreground/20', D ? 'max-w-md' : 'min-h-14')} style={shadow('xs')}>
-      <View className="h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-muted"><Icon as={Bot} size={16} tone="muted-foreground" /></View>
+      <View className="h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-muted"><Icon as={agentIcon(who)} size={16} tone="muted-foreground" /></View>
       <View className="flex-1">
         <Text className="text-sm font-medium" numberOfLines={1}>{title}</Text>
         <View className="flex-row items-center gap-1.5">
           <View className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
-          <Text className={cn('text-xs text-muted-foreground', st.text)}>Paseo · {st.label}{p.account ? ` · ${p.account}` : ''}</Text>
+          <Text className={cn('text-xs text-muted-foreground', st.text)}>{agentKindLabel(who)} · {st.label}{who.provider !== 'hermes' && p.account ? ` · ${p.account}` : ''}</Text>
         </View>
       </View>
       <Icon as={ChevronRight} size={16} tone="muted-foreground" />
@@ -87,7 +89,7 @@ function PaseoInline({ m, chips, sessionId }: { m: ThreadMessage; chips: PaseoCh
   )
 }
 
-function Attachments({ atts, onImage }: { atts: Attachment[]; onImage: (uri: string) => void }) {
+function Attachments({ atts, onImage }: { atts: Attachment[]; onImage: (uri: string, source: string) => void }) {
   if (!atts.length) return null
   return (
     <View className="mt-2 items-start gap-2">
@@ -108,7 +110,7 @@ const OUTBOX_LABEL: Record<string, string> = {
 }
 
 /** One transcript entry (web: ThreadView MessageBody). */
-export const MessageView = memo(function MessageView({ m, sessionId, chips, onImage }: { m: ThreadMessage; sessionId: string; chips: PaseoChip[]; onImage: (uri: string) => void }) {
+export const MessageView = memo(function MessageView({ m, sessionId, chips, onImage }: { m: ThreadMessage; sessionId: string; chips: PaseoChip[]; onImage: (uri: string, source: string) => void }) {
   if (m.role === 'tool') return <ToolChip m={m} />
   if (m.role === 'paseo' && m.paseo) return <PaseoInline m={m} chips={chips} sessionId={sessionId} />
   if (m.role === 'event' && m.event) return <EventCard m={m} />

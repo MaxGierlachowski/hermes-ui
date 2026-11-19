@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Bot, ChevronDown, ChevronRight, ExternalLink, Eye, Lock, Wrench } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, ExternalLink, Eye, Lock, Wrench } from 'lucide-react'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { clock } from '@/lib/format'
 import type { PaseoAgent, PaseoItem } from '@/lib/types'
-import { AGENT_STATE, AgentStateDot } from './AgentChip'
+import { AGENT_STATE, AgentStateDot, AgentIcon, agentKindLabel, agentMatchNote, agentTimelinePath } from './AgentChip'
 import { t } from '@/lib/i18n'
 import { MediaImage } from '@/components/common/Media'
 
@@ -48,8 +48,8 @@ export function PaseoPanel({ sessionId, version, open, onOpen, onBack, backLabel
   const archived = agents.filter((a) => a.archived)
   return (
     <div className="flex flex-col gap-3 p-4">
-      {!connected && <p className="text-xs text-amber-600">{t('Paseo-Daemon nicht erreichbar – Status kann veraltet sein.')}</p>}
-      {!agents.length && <p className="py-6 text-center text-sm text-muted-foreground">{t('Diese Session hat keine Paseo-Agents gestartet oder gesteuert.')}</p>}
+      {!connected && agents.some((a) => a.provider !== 'hermes') && <p className="text-xs text-amber-600">{t('Paseo-Daemon nicht erreichbar – Status kann veraltet sein.')}</p>}
+      {!agents.length && <p className="py-6 text-center text-sm text-muted-foreground">{t('Diese Session hat keine Agents gestartet oder gesteuert.')}</p>}
       {active.map((a) => <AgentRow key={a.id} a={a} onOpen={() => onOpen(a.id)} />)}
       {archived.length > 0 && (
         <Collapsible open={showArchived} onOpenChange={setShowArchived}>
@@ -69,18 +69,21 @@ export function PaseoPanel({ sessionId, version, open, onOpen, onBack, backLabel
 
 function AgentRow({ a, onOpen }: { a: PaseoAgent; onOpen: () => void }) {
   const st = AGENT_STATE[a.state] || AGENT_STATE.unknown
+  const match = agentMatchNote(a.match)
   return (
     <button onClick={onOpen} className="group flex w-full flex-col gap-1.5 rounded-lg border bg-card p-3 text-left transition-colors hover:border-foreground/20">
       <div className="flex items-start gap-2">
-        <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <AgentIcon a={a} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1 text-sm font-medium leading-snug">{a.title || a.id}</div>
         <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 touch:opacity-100" />
       </div>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-6 text-xs text-muted-foreground">
         <span className={cn('inline-flex items-center gap-1.5', st.text)}><AgentStateDot state={a.state} />{st.label}</span>
         <span>{REL_LABEL[a.rel]}</span>
-        {a.account && <span>Account {a.account}</span>}
-        {a.kind && <span>{a.kind}</span>}
+        {a.provider === 'hermes' ? <span>{agentKindLabel(a)}</span> : <>
+          {a.account && <span>Account {a.account}</span>}
+          {a.kind && <span>{a.kind}</span>}
+        </>}
         {a.updatedAt && <span>{clock(Date.parse(a.updatedAt) / 1000)}</span>}
       </div>
       {a.pendingPermissions && a.pendingPermissions.length > 0 && (
@@ -90,6 +93,7 @@ function AgentRow({ a, onOpen }: { a: PaseoAgent; onOpen: () => void }) {
       )}
       {a.lastError && <div className="ml-6 text-xs text-red-600 dark:text-red-400">{a.lastError}</div>}
       {a.goal && a.goal !== a.title && <div className="ml-6 line-clamp-2 text-xs text-muted-foreground/80">Ziel: {a.goal}</div>}
+      {match && <div className="ml-6 text-[11px] italic text-muted-foreground">{match}</div>}
     </button>
   )
 }
@@ -100,7 +104,7 @@ function Transcript({ agentId, onBack, backLabel }: { agentId: string; onBack: (
   const [limit, setLimit] = useState(150)
   const load = useCallback(async () => {
     try {
-      setData(await api(`/api/paseo/agents/${agentId}/timeline?limit=${limit}`))
+      setData(await api(`${agentTimelinePath(agentId)}?limit=${limit}`))
       setError('')
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
   }, [agentId, limit])

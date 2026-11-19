@@ -5,16 +5,21 @@ What the board, the thread panel and the inbox do, in detail. The mobile app: [a
 
 - **Board:** drag & drop (dnd-kit). On a phone it switches to tabs per column.
 - **Column rules:**
-  - Doing: Hermes is running a turn, or a Paseo agent the session owns is still running ("Paseo running (n)").
+  - Doing: Hermes is running a turn, or an agent the session started is still running: a Paseo agent ("Paseo running (n)") or one of Hermes' own subagents / terminal runs ("Agents running (n)").
   - Waiting: the turn has finished and nothing of the session runs any more, or there is an open approval or clarify prompt.
   - Done: **only you** set it, and it sticks until you write in that session again.
   - Finished cron, webhook and one-shot runs go to Done; they are visible behind the "Cron/system" filter.
 - **Thread panel:**
   - Full transcript with tool calls (collapsible) and images, live streaming, stop button.
   - Composer with text, images (paste or drag & drop) and voice messages. Voice is recorded with MediaRecorder and transcribed by Hermes' own STT.
+  - **Summary pill:** a small floating "Summary" pill sits right above the composer. A click sends one fixed prompt as an ordinary message into that chat (the composer's own send path, no special route): Hermes summarizes the chat, explains what was decided or done and why, and lists every open task with what, who and what blocks it, answering in the chat's language and without starting new work. The pill is hidden while the chat is empty, while Hermes works on a turn or waits for an approval / answer, and for drafts; after a click it shows "Requesting summary …" and then "Summary requested", and a second click in that time sends nothing. The prompt text lives in one place, `shared/summary.ts` (app and web UI).
+  - While a voice message is transcribed and sent, the composer shows "Transcribing voice message …" with an indeterminate bar, the recording's length and the seconds waited (Hermes' STT reports no progress). A recording that could not be sent stays in the composer with *send again* / *discard*; a failed transcription is reported (the message then goes out as an audio file). Nothing about a voice message fails silently.
 - **Approvals and questions:** shown on the card and inline in the thread.
   - Approval: approve with the options Hermes offers (once / session / always) or deny.
   - Clarify: answer with buttons, multi-select or free text, or skip. A countdown shows when Hermes gives a time limit.
+- **Hermes' own agents (read-only):** subagents a chat starts with `delegate_task` and Hermes runs started through the terminal tool (`hermes [-p <profile>] chat -q …`) appear exactly like Paseo agents: inline after the message that started them, in the chat's agent list with state and full transcript, as chips on the card, and they keep the chat in Doing while they run.
+  - Subagents are tied to the chat by Hermes' own ids (`parent_session_id`, subagent id). Terminal runs carry no parent id in Hermes; they are matched by prompt or start time and labelled "matched by prompt / start time (heuristic)".
+  - State comes from Hermes' data: the child session ended, the delegation record, the exit code in Hermes' "process complete" notice, and whether the run's process is still alive. Details: [decisions/0013](decisions/0013-hermes-child-agents.md).
 - **Paseo agents (optional; read-only except answering permissions from the inbox):**
   - The board finds a session's agents from the session's own `paseo_*` tool calls and shows them as chips with their live state.
   - The live state comes from [paseo-mcp](https://github.com/MaxGierlachowski/paseo-mcp) events (≥ 0.4.0): a subscription to the `paseo://agents` resource, with no polling. A direct daemon connection is the fallback. When the daemon is reachable it also provides richer transcripts and the app deep link.
@@ -35,6 +40,7 @@ What the board, the thread panel and the inbox do, in detail. The mobile app: [a
   - The thread opens as a bottom sheet: drag it down to close. The composer is one row (attach · text · one round button that is the mic, send, or stop), Enter makes a new line, and it stays above the keyboard on iOS too.
   - Board: column tabs, swipe sideways to switch columns, long-press a card to move it. Column choice, new chat, notifications and remote access open as bottom sheets; search is full screen.
   - Images (thread, attachments, Paseo transcripts) open full screen: pinch or double-tap to zoom the image only (the app itself never zooms), drag to pan, swipe down to close.
+- **Image viewer in the app (phone, web, desktop):** the image is shown at its own size (at most the window) on a dark backdrop, with a spinner while it loads; pinch or double-tap zooms, the X, Esc / back or a click beside the image closes it. An image that does not load shows "The image could not be loaded" with its file path (never the access token) and, for plain web URLs, a link to open it.
 
 ## Push notifications
 

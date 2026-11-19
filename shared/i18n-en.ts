@@ -349,4 +349,25 @@ export const EN: Record<string, string> = {
   'Systemeinstellungen öffnen': 'Open System Settings',
   'Erlaube den Zugriff in den Website-Einstellungen des Browsers und lade die Seite neu.': 'Allow it in the browser\'s site settings and reload the page.',
   'Solange die App läuft (auch nur im Tray), kommen neue Inbox-Einträge als Systembenachrichtigung; ein Klick öffnet den Chat.': 'While the app runs (also in the tray only), new inbox entries arrive as system notifications; a click opens the chat.',
+  // Hermes' own agents (subagents, terminal runs) next to Paseo agents
+  'Agents ({n} laufen)': 'Agents ({n} running)',
+  'Keine Agents.': 'No agents.',
+  'Diese Session hat keine Agents gestartet oder gesteuert.': 'This session has not started or steered any agents.',
+  'Terminal': 'Terminal',
+  'zugeordnet über die Startzeit (Heuristik)': 'matched by start time (heuristic)',
+  'zugeordnet über den Prompt (Heuristik)': 'matched by prompt (heuristic)',
+  // Voice messages: progress and errors
+  'Aufnahme fehlgeschlagen': 'Recording failed',
+  'Sprachnachricht ({len}) nicht gesendet': 'Voice message ({len}) not sent',
+  'Sprachnachricht wird transkribiert …': 'Transcribing voice message …',
+  'Aufnahme {len}': 'Recording {len}',
+  'Sprachnachricht nicht transkribiert – als Audiodatei gesendet': 'Voice message not transcribed – sent as an audio file',
+  // Summary pill above the composer
+  'Summary': 'Summary',
+  'Zusammenfassung wird angefordert …': 'Requesting summary …',
+  'Zusammenfassung angefordert': 'Summary requested',
+  'Zusammenfassung, Stand und offene Tasks': 'Summary, current state and open tasks',
+  // Image viewer
+  'Bild konnte nicht geladen werden': 'The image could not be loaded',
+  'Bild öffnen': 'Open image',
 }

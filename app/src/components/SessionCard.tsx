@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { Pressable, View } from 'react-native'
-import { Bot, CircleHelp, FlaskConical, MessageSquare, Pin, ShieldAlert } from 'lucide-react-native'
+import { CircleHelp, FlaskConical, MessageSquare, Pin, ShieldAlert } from 'lucide-react-native'
 import type { PaseoChip, Session } from '@shared/types'
 import { Text } from '@/components/ui/text'
 import { Icon } from '@/components/ui/icon'
@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { relTime, t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
 import { isWebDesktop as D } from '@/lib/web-input'
+import { agentIcon } from '@/lib/agents'
 
 // Desktop: the web UI's card density (13 px title, 12 px text, 11 px meta); phones: a size up for touch.
 const ICON = D ? 12 : 13
@@ -18,7 +19,7 @@ function AgentChip({ a }: { a: PaseoChip }) {
   const st = AGENT_STATE[a.state] || AGENT_STATE.unknown
   return (
     <View className={cn('max-w-full flex-row items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5', a.archived && 'opacity-50')}>
-      <Icon as={Bot} size={12} tone="muted-foreground" />
+      <Icon as={agentIcon(a)} size={12} tone="muted-foreground" />
       <View className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
       <Text className={cn('shrink text-[11px] text-muted-foreground', st.text)} numberOfLines={1}>{a.title || a.id.slice(0, 8)}</Text>
     </View>

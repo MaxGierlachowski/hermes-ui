@@ -116,6 +116,72 @@ export class Store {
       ORDER BY id`).all(sinceId);
   }
 
+  // Sessions that started child agents of their own (src/hermes-children.mjs): delegate_task results,
+  // and terminal calls that run `hermes … chat`. The LIKE filter is coarse; the parser decides.
+  childRefs(sinceId) {
+    return this.db.prepare(`
+      SELECT DISTINCT session_id FROM messages
+      WHERE id > ? AND ((role = 'tool' AND tool_name = 'delegate_task')
+        OR (role = 'assistant' AND tool_calls LIKE '%delegate_task%')
+        OR (role = 'assistant' AND tool_calls LIKE '%terminal%' AND tool_calls LIKE '%hermes%' AND tool_calls LIKE '%chat%'))`).all(sinceId).map((r) => r.session_id);
+  }
+
+  // The rows of one chat that childCalls() reads: the calls, their results, the completion notices.
+  childRows(sessionId) {
+    const calls = this.db.prepare(`
+      SELECT id, role, tool_calls, timestamp FROM messages
+      WHERE session_id = ? AND role = 'assistant' AND active = 1
+        AND (tool_calls LIKE '%delegate_task%' OR (tool_calls LIKE '%terminal%' AND tool_calls LIKE '%hermes%' AND tool_calls LIKE '%chat%'))
+      ORDER BY id`).all(sessionId);
+    if (!calls.length) return [];
+    const results = this.db.prepare(`
+      SELECT id, role, tool_name, tool_call_id, content, timestamp FROM messages
+      WHERE session_id = ? AND role = 'tool' AND tool_name IN ('delegate_task', 'terminal') AND id >= ?
+      ORDER BY id`).all(sessionId, calls[0].id);
+    const notices = this.db.prepare(`
+      SELECT id, role, substr(content, 1, 600) AS content, timestamp, display_kind FROM messages
+      WHERE session_id = ? AND role = 'user' AND display_kind IN ('process_complete', 'async_delegation_complete') AND id >= ?
+      ORDER BY id`).all(sessionId, calls[0].id);
+    return [...calls, ...results, ...notices].sort((a, b) => a.id - b.id);
+  }
+
+  // delegate_task children of a chat (all segments: compression continues a child in a new row).
+  subagentSessions(parentId) {
+    return this.db.prepare(`
+      SELECT s.id, s.title, s.started_at, s.ended_at, s.end_reason, s.last_activity_at, s.message_count, s.model,
+        json_extract(s.model_config, '$._subagent_id') AS subagent_id,
+        (SELECT substr(content, 1, 4000) FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id LIMIT 1) AS first_prompt
+      FROM sessions s
+      WHERE s.source = 'subagent' AND (s.parent_session_id = ? OR json_extract(s.model_config, '$._delegate_from') = ?)
+      ORDER BY s.started_at`).all(parentId, parentId);
+  }
+
+  // Background delegations: the authoritative completed / error record (async_delegations).
+  delegations(ids) {
+    if (!ids.length) return [];
+    try {
+      return this.db.prepare(`SELECT delegation_id, state, completed_at, owner_pid FROM async_delegations
+        WHERE delegation_id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+    } catch { return []; } // older Hermes without the table
+  }
+
+  // Top-level sessions that started in a time window, with their first prompt: candidates for a
+  // terminal `hermes chat` run (src/hermes-children.mjs matchTerminal).
+  sessionsStartedBetween(from, to) {
+    return this.db.prepare(`
+      SELECT s.id, s.source, s.created_source, s.title, s.started_at, s.ended_at, s.end_reason,
+        s.last_activity_at, s.message_count, s.model,
+        (SELECT substr(content, 1, 20000) FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id LIMIT 1) AS first_prompt
+      FROM sessions s
+      WHERE s.parent_session_id IS NULL AND s.started_at BETWEEN ? AND ?
+      ORDER BY s.started_at LIMIT 50`).all(from, to);
+  }
+
+  sessionBrief(id) {
+    return this.db.prepare(`SELECT id, source, title, started_at, ended_at, end_reason, last_activity_at, message_count, model, parent_session_id
+      FROM sessions WHERE id = ?`).get(id);
+  }
+
   // Full-text search over chat content with Hermes' own FTS5 index (messages_fts, kept current by
   // Hermes), plus a title match. Only user and assistant text; tool output and tool calls are left out.
   // Returns the best hit per session, ranked by bm25; snippets mark hits with \u0002 … \u0003.

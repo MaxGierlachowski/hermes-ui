@@ -141,7 +141,9 @@ open "src-tauri/target/release/bundle/dmg/"
 ## Security notes
 
 - The webview may call only the commands listed in `src-tauri/capabilities/default.json`; the CSP allows
-  connections to `127.0.0.1`, HTTPS / WSS (iroh relays) and nothing else.
+  connections to `127.0.0.1`, HTTPS / WSS (iroh relays), and `blob:` / `data:` (reading back the app's own
+  in-memory files; without them `fetch(blob:)` failed, which is what broke voice messages up to
+  desktop-spike-3) and nothing else.
 - The backend answers CORS only for `tauri://localhost` (and `HERMES_UI_CORS_ORIGINS`), and only with the
   Bearer token: no cookies across origins.
 - The built-in backend listens on 127.0.0.1 only, like any hermes-ui backend. Other local processes can

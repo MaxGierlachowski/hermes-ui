@@ -18,7 +18,7 @@ export type Row = { key: string; kind: 'msg'; m: ThreadMessage } | { key: string
 const OPEN_ROWS = 40
 const CHUNK = 120
 
-export function ThreadList<R extends { key: string; kind: string }>({ rows, renderRow, footer }: { rows: R[]; renderRow: (r: R) => ReactElement; footer?: ReactElement }) {
+export function ThreadList<R extends { key: string; kind: string }>({ rows, renderRow, footer, bottomInset = 0 }: { rows: R[]; renderRow: (r: R) => ReactElement; footer?: ReactElement; /** Room below the newest row (e.g. for a pill floating above the composer). */ bottomInset?: number }) {
   const [limit, setLimit] = useState(OPEN_ROWS)
   useEffect(() => {
     if (limit >= rows.length) return
@@ -28,7 +28,7 @@ export function ThreadList<R extends { key: string; kind: string }>({ rows, rend
   }, [limit, rows.length])
   const shown = rows.length > limit ? rows.slice(0, limit) : rows
   return (
-    <div className="hk-thread" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column-reverse', padding: '16px 16px 16px 16px', gap: 12, overscrollBehavior: 'contain' }}>
+    <div className="hk-thread" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column-reverse', padding: `16px 16px ${16 + bottomInset}px 16px`, gap: 12, overscrollBehavior: 'contain' }}>
       {/* First in DOM = bottom on screen: takes the free space of a short thread, so it starts at the top (like the web UI); 0 once the thread scrolls. */}
       <div style={{ flex: '1 1 0px', minHeight: 0 }} aria-hidden />
       {shown.map((r) => (
