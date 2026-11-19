@@ -1,242 +1,62 @@
 # Hermes UI
 
-A Kanban board for [Hermes Agent](https://hermes-agent.nousresearch.com) sessions. Every chat (desktop, Slack, cron, CLI, or one started from the board) is a card. Cards move between **New Task → Doing → Waiting → Done** live.
+A Kanban board for [Hermes Agent](https://hermes-agent.nousresearch.com) sessions: every chat (desktop,
+Slack, cron, CLI, or one started from the board) is a card that moves through **New Task → Doing →
+Waiting → Done** live. Start and continue chats with text, images and voice, answer approvals and
+questions from one inbox, follow the [Paseo](https://paseo.sh) coding agents a chat started, and get
+notified when something needs you, in the browser or in the native app for Android and iOS.
 
-On the board you can:
+Self-hosted: a headless backend runs next to Hermes on your machine (bound to `127.0.0.1`); browsers
+and phones reach it end-to-end encrypted over [iroh](https://www.iroh.computer), with no open port and
+no account. *Unofficial client, not affiliated with Nous Research.*
 
-- start and continue chats with text, images and voice messages,
-- answer Hermes' approval and clarify prompts on the card,
-- see the [Paseo](https://paseo.sh) coding agents a session started, with read-only transcripts.
+| Web (desktop) | App: board | App: thread | App: inbox |
+|---|---|---|---|
+| <img src="web/e2e/__screenshots__/desktop-regression.spec.ts/board-light.png" width="420" alt="Board in the browser"> | <img src="store/screenshots/ios-iphone-6.9/light-1-board.jpg" width="150" alt="Board in the app"> | <img src="store/screenshots/ios-iphone-6.9/light-2-thread.jpg" width="150" alt="Thread with an approval"> | <img src="store/screenshots/ios-iphone-6.9/dark-3-inbox.jpg" width="150" alt="Inbox"> |
 
-It has two parts:
-
-- a **headless backend** (`hermes-ui serve`), which binds to `127.0.0.1` only;
-- a **standalone UI**, a static PWA without any data or secrets. The backend can serve the UI itself, or you host it anywhere (GitHub Pages, any static host) and it reaches your backend over **iroh**: end-to-end encrypted, no open port, no account.
-
-```
- Phone / iPad / any browser                        your machine (behind NAT)
-┌──────────────────────────┐                     ┌──────────────────────────────────────────────┐
-│ UI (static PWA)          │     iroh relay      │ iroh-gateway ──HTTP──▶ hermes-ui backend │
-│  iroh-fetch (WASM): API, │ ◀── E2E QUIC ─────▶ │  (child process,       127.0.0.1:8787        │
-│  SSE, uploads, images    │   (n0 or your own)  │   allow-list of        │  │  │               │
-└──────────────────────────┘                     │   paired devices)      │  │  └─ Paseo daemon  │
-                                                 │                        │  │     (optional,    │
- Local browser ─────────── http://127.0.0.1:8787 ─────────────────────────▶│  │      read-only)   │
-                                                 │                        │  └─ Hermes gateway WS │
-                                                 │                        └──── ~/.hermes/state.db│
-                                                 └──────────────────────────────────────────────┘
-```
+All screenshots show made-up demo data.
 
 ## Quick start
 
 ```bash
 git clone https://github.com/MaxGierlachowski/hermes-ui.git && cd hermes-ui
-npm install          # also installs the UI (web/)
-npm start            # builds the UI, starts the backend on http://127.0.0.1:8787
+scripts/bootstrap.sh     # Node 24 check, npm ci, iroh-gateway, tests, UI build
+npm start                # backend + UI on http://127.0.0.1:8787 (token in .env)
 ```
 
-The first start writes `HERMES_UI_TOKEN` to `.env`. Open <http://127.0.0.1:8787/> and sign in with it once; an HttpOnly cookie keeps you signed in.
+Needs Node.js 24 and a running Hermes gateway (the desktop app starts one, or `hermes gateway run`).
+For phones: start with `HERMES_UI_REMOTE=iroh`, open the hosted UI
+(<https://maxgierlachowski.github.io/hermes-ui/>) or the app, and pair with `npx hermes-ui pair`
+(or `node bin/hermes-ui.mjs pair`) → scan the QR code. Details: [docs/self-hosting.md](docs/self-hosting.md).
 
-Requirements:
+The **mobile app** ([`mobile-app/`](mobile-app)) is React Native with a native Rust iroh client. Try it
+without a backend: "Try the demo" on its first screen. Builds and pre-releases:
+[docs/mobile-app.md](docs/mobile-app.md), [Releases](https://github.com/MaxGierlachowski/hermes-ui/releases).
 
-- Node.js 24 or newer.
-- A running Hermes gateway. The desktop app starts one; otherwise run `hermes gateway run`.
-- Optional: a Paseo daemon.
+## Documentation
 
-### Use it from a phone or tablet (iroh, recommended)
+| | |
+|---|---|
+| [Features](docs/features.md) | board, thread, inbox, search, Paseo, push in detail |
+| [Self-hosting](docs/self-hosting.md) · [Configuration](docs/configuration.md) | install, remote modes, every setting, autostart |
+| [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md) | how the pieces fit, and why |
+| [Security](docs/security.md) | pairing, allow-list, tokens, what relays see |
+| [Development](docs/development.md) | fresh machine in one command, versions, tests |
+| [Mobile app](docs/mobile-app.md) · [Releasing](docs/releasing.md) | builds, signing, push, App Store / Google Play |
+| [Secrets and state](docs/secrets-and-state.md) | what is not in git and how to move it |
+| [Design](docs/design.md) · [Mobile audit](docs/mobile-audit.md) | visual language, touch standards |
 
-1. Use the hosted UI at <https://maxgierlachowski.github.io/hermes-ui/> (built from this repo by `.github/workflows/pages.yml`), or host `web/dist` yourself on any static host. It works from any path. Set its URL as `HERMES_UI_URL`.
-2. Start the backend with `--remote iroh` (or `HERMES_UI_REMOTE=iroh`). On first start it downloads `iroh-gateway` for your platform from the [iroh-bridge releases](https://github.com/irohkit/iroh-bridge/releases) and verifies its SHA-256. Alternatively set `IROH_GATEWAY_BIN`.
-3. Pair the device:
-   - Run `hermes-ui pair`, or open the remote-access dialog (📱) on the host and press "Pair device".
-   - Scan the QR code. The link carries the gateway's endpoint id and a one-time code, both in the `#fragment`, which no web server sees.
-4. The browser keeps a stable iroh identity. From then on the gateway only admits paired devices: everyone else is refused at connection time. You can revoke a device in the dialog.
+Repository: `server/` backend + CLI · `web/` UI · `mobile-app/` app · `shared/` shared TypeScript ·
+`docs/` · `store/` listing material · `site/` privacy and support pages.
 
-```bash
-HERMES_UI_REMOTE=iroh HERMES_UI_URL=https://maxgierlachowski.github.io/hermes-ui npm start
-npx hermes-ui pair     # or: node bin/hermes-ui.mjs pair
-```
+## Contributing and license
 
-### Mobile app (Android/iOS)
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Hermes UI is released under the
+**MIT** license ([LICENSE](LICENSE)); third-party components and their licenses:
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-[`mobile-app/`](mobile-app/README.md) is the native app for phones: React Native (Expo SDK 58, New
-Architecture) with native screens, not a WebView. It talks to the same backend through the same
-`iroh-gateway`; nothing on the host changes.
+### Main components
 
-- **Structure.** `mobile-app/modules/expo-iroh` is a native iroh client: a small Rust crate around
-  iroh-bridge's `client-core` (the same client the browser's `iroh-fetch` uses), exposed to Kotlin and
-  Swift through UniFFI and to JavaScript as a fetch-like API with SSE streams and file downloads. Unlike
-  the browser it hole-punches a direct UDP path and uses the relay only to start. Types, the SSE parser,
-  pairing links, media-tag rules and the English texts live in [`shared/`](shared), used by the web UI
-  and the app alike.
-- **Fast by default.** The board, inbox, the newest messages of each chat and Paseo transcripts are
-  cached on the device: the app shows the last state at once (also offline, with "as of …"), refreshes
-  in the background and shows a thin progress bar while it does.
-- **Build locally (Android).** Node 24, JDK 17, Android SDK + NDK, Rust via rustup with the Android
-  targets and `cargo-ndk`; then `cd mobile-app && npm install && npm run iroh:android && npx expo
-  prebuild -p android && npm run apk`. iOS builds for the simulator (`npm run iroh:ios`, `npx expo
-  run:ios`); a device or TestFlight build needs an Apple developer account.
-- **Signing.** Release APKs are signed with a local keystore in `mobile-app/.secrets/` (git-ignored,
-  never committed). Keep it: Android installs an update over the existing app only if it is signed with
-  the same key. Raise `android.versionCode` in `mobile-app/app.config.ts` for every release.
-- **Pairing.** Same links as the web UI: scan the QR code of `hermes-ui pair` (or the "Pair device"
-  dialog), open the `https://<ui>/#iroh=…` link, or paste it. The device key lives in the Android
-  Keystore / iOS Keychain, so the gateway keeps recognising the phone across updates.
-- **Push (FCM).** Without Firebase the app notifies while it runs, and in the background through an
-  optional keep-alive service. For push with the app closed, build with
-  `GOOGLE_SERVICES_JSON=/path/to/google-services.json` and start the backend with
-  `HERMES_UI_FCM_SERVICE_ACCOUNT=/path/to/service-account.json`; details in
-  [`mobile-app/README.md`](mobile-app/README.md#push-with-the-app-closed-fcm).
-
-### CLI
-
-```
-hermes-ui serve [options]   start the backend (default)
-hermes-ui pair              print a pairing link + QR code
-hermes-ui status            backend, remote and device status
-hermes-ui help
-```
-
-## Configuration
-
-Settings come from CLI flags, then environment variables, then `.env`, then the defaults. The former `KANBAN_*` names (from when the project was called hermes-kanban) still work as aliases, and `hermes-kanban` is still accepted as the CLI name.
-
-| Env var | Flag | Default | Purpose |
-|---|---|---|---|
-| `HERMES_UI_PORT` | `--port` | `8787` | Local port. The host is always `127.0.0.1`. |
-| `HERMES_UI_TOKEN` | `--token` | generated | Login token for local browsers. |
-| `HERMES_UI_SERVE_UI` | `--ui` | `on` | `off` = headless, API only. |
-| `HERMES_UI_DIR` | `--ui-dir` | `web/dist` | Built UI to serve. |
-| `HERMES_UI_URL` | `--ui-url` | – | Public URL of the static UI, used in iroh pairing links. |
-| `HERMES_UI_REMOTE` | `--remote` | `off` | `off` \| `iroh` \| `tailscale-funnel` \| `tailscale-serve` \| `cloudflare`. |
-| `HERMES_UI_LANG` | `--lang` | `en` | Language of server-generated texts (`en`, `de`). The UI follows the browser; change it in ⌘K. |
-| `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state, inbox history, VAPID keys and push subscriptions. |
-| `HERMES_UI_IMAGE_ROOTS` | `--image-roots` | – | Extra directories (separated by `:`) whose images transcripts may show. Always allowed: Hermes' image cache, `PASEO_HOME` and Paseo's `paseo-attachments-*` temp dirs. |
-| `PASEO_HOME` | `--paseo-home` | `~/.paseo` | Paseo home, allowed as an image root. |
-| `HERMES_HOME` | `--hermes-home` | `~/.hermes` | Hermes data dir: `state.db`, `gateway.sock`. |
-| `HERMES_UI_PASEO` | `--paseo` | `auto` | `off` disables the Paseo integration. |
-| `HERMES_UI_PASEO_SOURCE` | `--paseo-source` | `auto` | `mcp` (paseo-mcp ≥ 0.4.0 events), `daemon` (direct connection) or `auto` (mcp when available, otherwise daemon). |
-| `PASEO_MCP_COMMAND` | `--paseo-mcp-command` | `paseo-mcp` if it is on `PATH` | stdio command for paseo-mcp. The event subscription runs with `PASEO_MCP_READONLY=1`; only an answer to a permission from the inbox starts a second, short-lived client without it. |
-| `PASEO_MCP_URL`, `PASEO_MCP_TOKEN` | `--paseo-mcp-url`, `--paseo-mcp-token` | – | Paseo plugin's Streamable HTTP endpoint instead of stdio. Use a token with the `read` scope. |
-| `PASEO_MCP_WRITE_TOKEN` | `--paseo-mcp-write-token` | – | HTTP only: a token allowed to call `paseo_respond_permission`. |
-| `HERMES_UI_PASEO_RESPOND` | `--paseo-respond` | `on` | `off` = the inbox shows Paseo permissions but cannot answer them. |
-| `HERMES_UI_PUSH` | `--push` | `on` | `off` disables Web Push. |
-| `HERMES_UI_PUSH_SUBJECT` | `--push-subject` | `HERMES_UI_URL` if https | VAPID subject (`mailto:` or `https:`); Apple rejects anything else. |
-| `HERMES_UI_FCM_SERVICE_ACCOUNT` | `--fcm-service-account` | – | Firebase service-account JSON: push to the native Android app through FCM, next to Web Push. See [mobile-app/README.md](mobile-app/README.md). |
-| `HERMES_UI_INBOX_DAYS`, `HERMES_UI_INBOX_MAX` | `--inbox-days`, `--inbox-max` | `30`, `1000` | How long / how many inbox entries are kept. |
-| `PASEO_DAEMON_URL` | `--paseo-url` | from `PASEO_MCP_CONFIG`, else `ws://127.0.0.1:6767/ws` | Paseo daemon. |
-| `PASEO_MCP_CONFIG` | `--paseo-mcp-config` | `~/.config/paseo-mcp/config.json` | Where the daemon URL is read from. |
-| `PASEO_OPS_FILE` | `--paseo-ops-file` | `$HERMES_HOME/ops-loop/paseo.json` | Optional agent goal / phase file. |
-| `IROH_GATEWAY_BIN` | `--iroh-gateway-bin` | auto-download | Path to an `iroh-gateway` binary. |
-| `IROH_RELAY_URL` / `IROH_RELAY_TOKEN` | `--iroh-relay` | n0 public relays | Your own [iroh-relay](https://github.com/irohkit/iroh-bridge/blob/main/deploy/relay/README.md). |
-| `TS_AUTHKEY`, `TS_HOSTNAME` | `--ts-authkey` | – / `hermes-ui` | Tailscale modes. |
-| `CLOUDFLARED_BIN`, `TAILSCALE_BIN`, `TAILSCALED_BIN` | – | from `PATH` | Tunnel binaries. |
-
-### Remote modes compared
-
-| Mode | Account needed | App on the phone | Stable address | Notes |
-|---|---|---|---|---|
-| **`iroh`** (recommended) | none | no; the UI runs in the browser (WASM) | yes: the endpoint id plus a static UI URL | End-to-end encrypted through a relay (n0's public relays or your own). The gateway allow-lists paired devices. The UI has to be hosted somewhere static once. |
-| `tailscale-funnel` | Tailscale (free) | no | yes: `https://<host>.<tailnet>.ts.net` | Runs its own userspace `tailscaled` (state in the data dir). Public URL, protected by device cookies. |
-| `tailscale-serve` | Tailscale | Tailscale app | yes | Reachable only inside the tailnet. |
-| `cloudflare` (fallback) | none | no | no: a new `trycloudflare.com` URL on every start | Quick tunnels have no SLA, and Cloudflare documents no SSE support for them. Kept as a fallback only. |
-
-In every mode the backend stays on `127.0.0.1`:
-
-- New devices can only be paired from the host.
-- Failed logins are rate-limited.
-- iroh requests are authorised by the gateway-verified `X-Iroh-Remote-Id`. It is trusted only from the local gateway child, and tokens and cookies are ignored for these requests.
-
-### Autostart (macOS)
-
-```bash
-node scripts/launchd-plist.mjs --remote iroh > ~/Library/LaunchAgents/io.github.hermes-ui.plist
-launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
-```
-
-`examples/io.github.hermes-ui.plist` shows the shape of the plist.
-
-## Features
-
-- **Board:** drag & drop (dnd-kit). On a phone it switches to tabs per column.
-- **Column rules:**
-  - Doing: Hermes is running a turn, or a Paseo agent the session owns is still running ("Paseo running (n)").
-  - Waiting: the turn has finished and nothing of the session runs any more, or there is an open approval or clarify prompt.
-  - Done: **only you** set it, and it sticks until you write in that session again.
-  - Finished cron, webhook and one-shot runs go to Done; they are visible behind the "Cron/system" filter.
-- **Thread panel:**
-  - Full transcript with tool calls (collapsible) and images, live streaming, stop button.
-  - Composer with text, images (paste or drag & drop) and voice messages. Voice is recorded with MediaRecorder and transcribed by Hermes' own STT.
-- **Approvals and questions:** shown on the card and inline in the thread.
-  - Approval: approve with the options Hermes offers (once / session / always) or deny.
-  - Clarify: answer with buttons, multi-select or free text, or skip. A countdown shows when Hermes gives a time limit.
-- **Paseo agents (optional; read-only except answering permissions from the inbox):**
-  - The board finds a session's agents from the session's own `paseo_*` tool calls and shows them as chips with their live state.
-  - The live state comes from [paseo-mcp](https://github.com/MaxGierlachowski/paseo-mcp) events (≥ 0.4.0): a subscription to the `paseo://agents` resource, with no polling. A direct daemon connection is the fallback. When the daemon is reachable it also provides richer transcripts and the app deep link.
-  - The "Paseo agents" tab lists them; a transcript view shows each one read-only, updating live while the agent runs.
-  - A deep link (`paseo://h/<server>/agent/<id>`) opens the agent in the Paseo app.
-  - Images that agents reference by local path (`file:///…`, `/Users/…`) are served read-only by `/api/file`: image types only, only below the allowed roots (see `HERMES_UI_IMAGE_ROOTS`), checked on the real path. Missing files show a placeholder; a click opens a lightbox.
-  - Files Hermes attaches to a reply with `MEDIA:<path>` (what Slack shows as attachments) appear under the message: images, audio players, other files by name. Only exactly those referenced files become readable, the tags never show up in the text, not even while streaming.
-- **Tabs:** Board and Inbox, in the header on a desktop and as a bottom tab bar on a phone. The tab is part of the URL (`#/board`, `#/inbox`, `#/inbox/<session>`), so a reload or a link keeps it. `g b` / `g i` switch.
-- **Inbox (across all chats):**
-  - *Needs you:* every open Hermes approval and clarify question of every followed session, answerable in place with the same controls and countdown as in the thread, and every Paseo agent with a pending permission (agent, tool, command or description), answerable with Allow / Deny via paseo-mcp's `paseo_respond_permission`. Each entry names its chat and links to the thread.
-  - *History:* requests and how they were answered (here, elsewhere, expired), finished chats, errors, Paseo agents that finished, failed or hit a usage limit. Read/unread, "mark all read", filters by kind and source, grouped by day. Stored in `<data-dir>/inbox.json` (30 days / 1000 entries by default).
-  - A Hermes chat counts as *done* only when Hermes' turn is over **and** none of the Paseo agents it started or steers is still running or waiting for a permission (the same rule as the columns). A Paseo agent finishing is its own entry.
-- **In-app notifications:** toasts for new requests and finished chats while the app is visible (a click opens the thread or the inbox), a badge on the Inbox tab and on the app icon (Badging API where available).
-- **Push notifications (Web Push, see below).**
-- **Search (⌘K, `/` or the search field):** full text over the titles and content of all chats, using Hermes' own FTS5 index (`messages_fts`, read-only; user and Hermes messages, no tool output). Results show title, source, column, last activity, message and Paseo-agent counts and a snippet with the hit marked; Enter opens the thread at the matching message. Archived chats on request. Also: new chat (N), theme, language, cron/system filter, remote access.
-- **Light and dark mode**, English and German, a mobile layout, and installable as a PWA.
-- **Phones and tablets:** every control is at least 44 × 44 px to hit (Apple HIG; checked by a test), fields use 16 px text so iOS does not zoom in, and nothing changes for a mouse.
-  - The thread opens as a bottom sheet: drag it down to close. The composer is one row (attach · text · one round button that is the mic, send, or stop), Enter makes a new line, and it stays above the keyboard on iOS too.
-  - Board: column tabs, swipe sideways to switch columns, long-press a card to move it. Column choice, new chat, notifications and remote access open as bottom sheets; search is full screen.
-  - Images (thread, attachments, Paseo transcripts) open full screen: pinch or double-tap to zoom the image only (the app itself never zooms), drag to pan, swipe down to close.
-
-## Push notifications
-
-Standard Web Push with VAPID. The backend generates its key pair on first start (`<data-dir>/vapid.json`, never part of the repo) and sends outgoing HTTPS requests to whatever push service the browser uses (Apple, Google, Mozilla). No server of your own and no inbound port is needed, also not in iroh mode.
-
-- **Enable** in Inbox → bell icon (or ⌘K → Notifications). Browsers only ask for permission after a click.
-- **iPhone / iPad:** push works only in the app added to the Home Screen (iOS / iPadOS 16.4 or later): Safari → Share → *Add to Home Screen*, open it from there, then enable. The settings dialog explains this when it runs in plain Safari.
-- **Per device:** which kinds push (approvals and questions, done, errors and limits, Paseo agents at all), optional quiet hours (in the device's time zone) and "don't push while the app is open and visible" (the UI reports its visibility; then only the in-app toast appears).
-- **Payload:** only the chat title and the kind ("Approval needed", "Done", "Error"). A click opens the thread or the inbox. On browsers with reliable notification actions (not Apple's push service) Hermes approvals get *Allow …* / *Deny …*; these open the app with a confirmation dialog and never answer by themselves.
-- **Lifecycle:** subscriptions belong to a paired device and are deleted when it is unpaired or signs out; subscriptions the push service reports as gone (404/410) are removed.
-- **Service worker:** `web/public/sw.js` is the one worker for the UI's scope. It imports iroh-fetch's `iroh-sw.js` (media over iroh) and adds the `push` and `notificationclick` handlers.
-
-## How it talks to Hermes
-
-- **Read:** `$HERMES_HOME/state.db`, opened read-only (`node:sqlite`) and polled every 1.5 s, plus the Hermes gateway's event stream.
-- **Write:** like the Hermes desktop app does it. The backend gets a single-use ticket from `gateway.sock`, then uses the gateway WebSocket with JSON-RPC `session.create`, `prompt.submit`, `session.resume`, `session.interrupt`, `approval.respond` and `clarify.respond`. Images go through `/api/chat/image-upload`, voice through `/api/audio/transcribe`.
-- **Never:** it writes nothing under `$HERMES_HOME`, never restarts the Hermes gateway, and sends no commands to the Paseo daemon. The one write to Paseo is your own answer to a permission request from the inbox, through paseo-mcp.
-
-## Development
-
-```bash
-npm start                 # terminal 1: backend (+ built UI)
-npm run dev               # terminal 2: Vite dev server for web/ on :5173, proxies /api to :8787
-npm run check             # syntax check of the backend
-npm test                  # backend unit tests
-npm run test:ui           # build the UI, then the Playwright UI tests (web/e2e)
-```
-
-The UI tests run the built bundle with every `/api` request answered from synthetic fixtures (`web/e2e/fixtures.ts`), so they need no backend and never touch Hermes. They cover three phones (390 × 844, 375 × 667, 412 × 915, touch) and a desktop:
-
-- `touch-targets`: every interactive element on every screen must be hittable over 44 × 44 px (measured by hit-testing, so an enlarged hit area counts and an overlapping neighbour fails), and no field may be below 16 px.
-- `mobile-behaviour`: sheet swipe-to-close, long-press, column swipe, Enter in the composer, the keyboard inset, and the image viewer (pinch, double tap, swipe down; the page scale must stay 1).
-- `desktop-regression`: pixel comparison at 1440 × 900, light and dark, against `web/e2e/__screenshots__/`. Touch styles live behind `pointer: coarse` (Tailwind variant `touch:`) or `max-md:`, so a desktop with a mouse must not change by a single pixel. After an intended desktop change, update the images with `npx playwright test desktop --update-snapshots` (in `web/`) and review them. The images are rendered on macOS; other systems render fonts differently.
-- `SHOTS_DIR=<dir> npx playwright test screenshots` writes one screenshot per screen, phone and theme.
-
-Once per machine: `npx playwright install chromium` in `web/`.
-
-Layout:
-
-- `server.mjs`: HTTP API and SSE.
-- `src/`: Hermes gateway client, state.db reader, Paseo adapter (`paseo.mjs`, `paseo-mcp-source.mjs`), inbox history (`inbox.mjs`), Web Push (`push.mjs`), iroh, tunnels, devices, config.
-- `bin/`: CLI.
-- `web/`: React + Vite + Tailwind + shadcn/ui.
-
-## Licenses
-
-Hermes UI is released under the **MIT** license (see `LICENSE`). The components it uses are all free and open source:
 
 | Component | Use | License |
 |---|---|---|
