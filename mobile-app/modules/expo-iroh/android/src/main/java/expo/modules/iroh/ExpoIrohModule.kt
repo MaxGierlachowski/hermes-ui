@@ -172,6 +172,8 @@ class ExpoIrohModule : Module() {
       Unit
     }
 
+    Function("keepAliveRunning") { KeepAliveService.running }
+
     Function("stopKeepAlive") {
       appContext.reactContext?.let { it.stopService(Intent(it, KeepAliveService::class.java)) }
       Unit

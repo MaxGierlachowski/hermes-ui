@@ -33,7 +33,9 @@ const ratios = new Map<string, number>()
 export function MediaImage({ url, onOpen }: { url: string; onOpen: (uri: string) => void }) {
   const { uri, error } = useMediaFile(url)
   const [ratio, setRatio] = useState(() => ratios.get(url) ?? 4 / 3)
-  if (error) return <View className="h-24 w-40 flex-row items-center justify-center gap-2 rounded-lg border border-border"><Icon as={ImageOff} size={16} tone="muted-foreground" /><Text className="text-xs text-muted-foreground">{t('Bild nicht verfügbar')}</Text></View>
+  // A file that arrived but does not decode shows the same hint as a failed download, not an empty box.
+  const [broken, setBroken] = useState(false)
+  if (error || broken) return <View className="h-24 w-40 flex-row items-center justify-center gap-2 rounded-lg border border-border"><Icon as={ImageOff} size={16} tone="muted-foreground" /><Text className="text-xs text-muted-foreground">{t('Bild nicht verfügbar')}</Text></View>
   // The placeholder has the size the image will most likely have: no jump when it arrives.
   if (!uri) return <View className="items-center justify-center rounded-[10px] bg-muted" style={{ width: 240, aspectRatio: ratio }}><ActivityIndicator /></View>
   return (
@@ -42,8 +44,7 @@ export function MediaImage({ url, onOpen }: { url: string; onOpen: (uri: string)
         source={{ uri }}
         style={{ width: 240, aspectRatio: ratio, borderRadius: 10 }}
         contentFit="cover"
-        recyclingKey={url}
-        transition={ratios.has(url) ? 0 : 120}
+        onError={(e) => { console.warn(`[hermes-ui] image ${url}: ${e.error}`); setBroken(true) }}
         onLoad={(e) => {
           if (!e.source.width) return
           const r = Math.max(0.5, Math.min(2, e.source.width / e.source.height))

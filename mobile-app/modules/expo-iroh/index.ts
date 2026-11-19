@@ -156,4 +156,6 @@ export const KeepAlive = {
   start: (title: string, text: string) => Native.startKeepAlive?.(title, text) ?? false,
   update: (title: string, text: string) => Native.updateKeepAlive?.(title, text),
   stop: () => Native.stopKeepAlive?.(),
+  /** False once the system stopped it (e.g. Android 15's 6-hour limit for dataSync services). */
+  isRunning: () => Native.keepAliveRunning?.() ?? false,
 }

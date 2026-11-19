@@ -1,40 +1,29 @@
 {
-  "name": "hermes-ui",
-  "version": "0.2.0",
-  "description": "Kanban board for Hermes Agent sessions: headless backend + standalone UI, remote access over iroh.",
+  "name": "hermes-ui-monorepo",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Hermes UI: a Kanban board for Hermes Agent sessions. Backend (server/), web UI (web/), mobile app (mobile-app/), shared TypeScript (shared/).",
   "type": "module",
-  "engines": {
-    "node": ">=24"
-  },
+  "license": "MIT",
+  "engines": { "node": ">=24" },
+  "workspaces": ["shared", "server", "web"],
   "scripts": {
-    "postinstall": "npm --prefix web install --no-audit --no-fund",
-    "build": "npm --prefix web run build",
+    "build": "npm -w web run build",
     "prestart": "npm run build",
     "start": "node bin/hermes-ui.mjs serve",
     "serve": "node bin/hermes-ui.mjs serve",
-    "dev": "npm --prefix web run dev",
-    "check": "node --check server.mjs && node --check src/store.mjs && node --check src/board.mjs && node --check src/hermes-ws.mjs && node --check src/remote.mjs && node --check src/devices.mjs && node --check src/config.mjs && node --check src/iroh.mjs && node --check src/paseo.mjs && node --check src/paseo-mcp-source.mjs && node --check src/local-files.mjs && node --check src/media-tags.mjs && node --check src/inbox.mjs && node --check src/push.mjs && node --check src/push-fcm.mjs && node --check src/user-markers.mjs && node --check src/outbox.mjs && node --check src/paseo-calls.mjs && node --check bin/hermes-ui.mjs",
     "pair": "node bin/hermes-ui.mjs pair",
-    "test": "node --test \"test/*.test.mjs\"",
-    "test:ui": "npm run build && npm --prefix web run test:ui"
-  },
-  "dependencies": {
-    "@getpaseo/client": "0.15.0",
-    "@modelcontextprotocol/sdk": "1.32.2",
-    "qrcode": "^1.5.4",
-    "web-push": "4.0.0"
-  },
-  "license": "MIT",
-  "bin": {
-    "hermes-ui": "bin/hermes-ui.mjs",
-    "hermes-kanban": "bin/hermes-ui.mjs"
-  },
-  "files": [
-    "bin/",
-    "src/",
-    "server.mjs",
-    "web/dist/",
-    "README.md",
-    "LICENSE"
-  ]
+    "dev": "npm -w web run dev",
+    "check": "npm -w server run check",
+    "test": "npm -w server test",
+    "typecheck": "npm -w web run typecheck && npm --prefix mobile-app run typecheck",
+    "lint": "npm -w web run lint",
+    "test:ui": "npm run build && npm -w web run test:ui",
+    "app:install": "npm --prefix mobile-app ci",
+    "app:start": "npm --prefix mobile-app start",
+    "app:iroh:android": "npm --prefix mobile-app run iroh:android",
+    "app:iroh:ios": "npm --prefix mobile-app run iroh:ios",
+    "app:release:android": "npm --prefix mobile-app run release:android",
+    "verify": "npm run check && npm test && npm run typecheck && npm run build"
+  }
 }

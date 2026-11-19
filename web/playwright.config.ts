@@ -20,6 +20,6 @@ export default defineConfig({
     { name: 'iphone-15', use: phone(390, 844, UA.iphone), testIgnore: /desktop/ },
     { name: 'iphone-se', use: phone(375, 667, UA.iphone, 2), testIgnore: /desktop/ },
     { name: 'pixel-9', use: phone(412, 915, UA.android, 2.625), testIgnore: /desktop/ },
-    { name: 'desktop', use: { viewport: { width: 1440, height: 900 } }, testMatch: /desktop/ },
+    { name: 'desktop', use: { viewport: { width: 1440, height: 900 } }, testMatch: /desktop|long-text/ },
   ],
 })

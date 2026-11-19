@@ -19,6 +19,9 @@ for target in aarch64-apple-ios aarch64-apple-ios-sim; do
 done
 
 # Bindings from the host build's metadata (library mode), same as for Android.
+# The host library is never shipped: built unstripped, because stripping removes the UniFFI metadata
+# symbols on Linux (CI) and bindgen then finds nothing.
+export CARGO_PROFILE_RELEASE_STRIP=false
 cargo build --release --lib --target-dir target/host
 host_lib=target/host/release/libhermes_iroh.dylib
 gen="$MOD/ios/Generated"

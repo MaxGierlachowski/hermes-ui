@@ -6,7 +6,7 @@
 //   - this device's iroh secret key, so its endpoint id (what the gateway allow-lists) never changes.
 import * as SecureStore from 'expo-secure-store'
 import { Directory, File, Paths } from 'expo-file-system'
-import { IrohBackend, IrohError, type Gateway } from 'expo-iroh'
+import { IrohBackend, IrohError, type ConnectionPath, type Gateway } from 'expo-iroh'
 import { Platform } from 'react-native'
 
 const GATEWAY_KEY = 'hermes-ui.gateway'
@@ -19,8 +19,25 @@ export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message) }
 }
 
-let backend: IrohBackend | null = null
+/** What the app needs from a connection: the iroh backend, or the demo mode's stand-in (demo.ts). */
+export type Backend = {
+  readonly gateway: Gateway
+  /** This device's endpoint id. */
+  readonly endpointId: string
+  fetch(path: string, init?: { method?: string; json?: unknown; timeoutMs?: number; signal?: AbortSignal }): Promise<{ status: number; ok: boolean; text(): Promise<string>; cancel(): void }>
+  events(path: string, onEvent: (event: string, data: string) => void, onState?: (open: boolean) => void): () => void
+  download(path: string, fileUri: string): Promise<{ status: number }>
+  connectionInfo(): ConnectionPath | null
+  relayProblem(): string | null | undefined
+}
+
+let backend: Backend | null = null
 export const getBackend = () => backend
+/** Demo mode: a stand-in answers instead of a backend (nothing is stored in the keystore). */
+export function setDemoBackend(b: (Backend & { close(): void }) | null) {
+  if (backend && 'close' in backend && backend !== b) (backend as { close(): void }).close()
+  backend = b
+}
 
 export async function savedGateway(): Promise<Gateway | null> {
   try { return JSON.parse((await SecureStore.getItemAsync(GATEWAY_KEY)) || 'null') } catch { return null }

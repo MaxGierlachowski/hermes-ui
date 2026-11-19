@@ -18,8 +18,12 @@ Pod::Spec.new do |s|
   s.vendored_frameworks = 'HermesIrohFFI.xcframework'
   s.source_files = 'ExpoIrohModule.swift', 'Generated/hermes_iroh.swift'
   s.frameworks = 'SystemConfiguration', 'Security', 'CoreFoundation'
+  # The XCFramework has arm64 slices only (devices, Apple-silicon simulators): a simulator build that
+  # also targets x86_64 (Release, generic destination) would find no Rust library for that slice.
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'SWIFT_COMPILATION_MODE' => 'wholemodule',
+    'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'x86_64',
   }
+  s.user_target_xcconfig = { 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'x86_64' }
 end

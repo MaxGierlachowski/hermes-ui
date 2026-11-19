@@ -1,0 +1,26 @@
+{
+  "name": "hermes-ui",
+  "version": "0.3.0",
+  "description": "Headless backend and CLI of Hermes UI, a Kanban board for Hermes Agent sessions with remote access over iroh.",
+  "type": "module",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/MaxGierlachowski/hermes-ui.git", "directory": "server" },
+  "engines": { "node": ">=24" },
+  "bin": {
+    "hermes-ui": "bin/hermes-ui.mjs",
+    "hermes-kanban": "bin/hermes-ui.mjs"
+  },
+  "scripts": {
+    "serve": "node bin/hermes-ui.mjs serve",
+    "pair": "node bin/hermes-ui.mjs pair",
+    "check": "for f in server.mjs bin/*.mjs src/*.mjs scripts/*.mjs; do node --check \"$f\" || exit 1; done",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "dependencies": {
+    "@getpaseo/client": "0.15.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "qrcode": "^1.5.4",
+    "web-push": "4.0.0"
+  },
+  "files": ["bin/", "src/", "scripts/", "server.mjs"]
+}

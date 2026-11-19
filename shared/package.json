@@ -1,0 +1,9 @@
+{
+  "name": "@hermes-ui/shared",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Types, SSE parser, pairing links, media-tag rules and English texts shared by the web UI and the mobile app. TypeScript sources, imported directly (no build step).",
+  "type": "module",
+  "license": "MIT",
+  "exports": { "./*": "./*.ts" }
+}

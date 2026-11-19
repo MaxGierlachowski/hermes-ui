@@ -3,9 +3,9 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } f
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Clipboard from 'expo-clipboard'
-import { ClipboardPaste, QrCode } from 'lucide-react-native'
+import { ClipboardPaste, PlayCircle, QrCode } from 'lucide-react-native'
 import { parsePairingLink } from '@shared/pairing'
-import { pair, useStore } from '@/lib/store'
+import { pair, startDemo, useStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
@@ -77,6 +77,13 @@ export default function PairScreen() {
               </Button>
             </View>
             {!!(error || storeError) && <Text className="text-sm text-destructive">{error || storeError}</Text>}
+          </View>
+          <View className="gap-2 border-t border-border pt-5">
+            <Button variant="ghost" disabled={busy} onPress={async () => { await startDemo(); router.replace('/') }} accessibilityHint={t('Zeigt die App mit Beispieldaten, ohne Backend.')}>
+              <Icon as={PlayCircle} size={18} />
+              <Text>{t('Demo ansehen')}</Text>
+            </Button>
+            <Text className="text-center text-xs text-muted-foreground">{t('Ohne eigenes Backend: Beispieldaten, nichts verlässt das Gerät.')}</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

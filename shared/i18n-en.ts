@@ -325,4 +325,12 @@ export const EN: Record<string, string> = {
   'Während Hermes arbeitet': 'While Hermes works',
   'Immer': 'Always',
   'Android friert Apps im Hintergrund nach Sekunden ein. Eine dezente Daueranzeige hält die Verbindung offen, damit Antworten ankommen. „Immer“ kostet mehr Akku.': 'Android freezes background apps within seconds. A quiet ongoing notification keeps the connection open so replies arrive. "Always" costs more battery.',
+  // Demo mode (mobile app)
+  'Demo ansehen': 'Try the demo',
+  'Zeigt die App mit Beispieldaten, ohne Backend.': 'Shows the app with sample data, without a backend.',
+  'Ohne eigenes Backend: Beispieldaten, nichts verlässt das Gerät.': 'No backend needed: sample data, nothing leaves the device.',
+  'Demo': 'Demo',
+  'beenden': 'exit',
+  'Demo beenden': 'Exit demo',
+  'Demo beenden und koppeln': 'Exit the demo and pair',
 }

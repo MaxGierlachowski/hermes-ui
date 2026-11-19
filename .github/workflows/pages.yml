@@ -5,7 +5,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ['web/**', '.github/workflows/pages.yml']
+    paths: ['web/**', 'shared/**', 'site/**', 'package-lock.json', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -26,11 +26,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: web/package-lock.json
       - run: npm ci
-        working-directory: web
       - run: npm run build
-        working-directory: web
+      # Static pages next to the UI: privacy policy and support (site/), linked from the store listings.
+      - run: cp -R site/. web/dist/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
