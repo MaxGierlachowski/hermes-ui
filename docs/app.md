@@ -1,6 +1,6 @@
-# Mobile app (Android / iOS)
+# App (Android, iOS, web, desktop)
 
-The app in [`mobile-app/`](../mobile-app). Related: [releasing.md](releasing.md) ·
+The app in [`app/`](../app). Related: [releasing.md](releasing.md) ·
 [development.md](development.md) · [architecture.md](architecture.md) · [security.md](security.md).
 
 A React Native app (Expo SDK 58, New Architecture, Expo Router) for the hermes-ui backend. It is not a
@@ -55,7 +55,7 @@ Requirements (all installed / checked by `scripts/bootstrap.sh --mobile`, versio
 27.1 (React Native) and 28.2 (iroh library), Rust from `rust-toolchain.toml` via rustup, `cargo-ndk`.
 
 ```bash
-cd mobile-app
+cd app
 npm ci
 npm run release:android     # iroh library → prebuild → AAB + one APK per ABI in dist/
 ```
@@ -69,14 +69,14 @@ APK for the phone's ABI (`arm64-v8a` for every current phone, `x86_64` for emula
 
 ### Signing
 
-Release builds are signed with a local keystore that is **never committed** (`mobile-app/.secrets/`
+Release builds are signed with a local keystore that is **never committed** (`app/.secrets/`
 is git-ignored). It is the Play **upload key** ([releasing.md](releasing.md)). Create one once:
 
 ```bash
 mkdir -p .secrets && keytool -genkeypair -storetype PKCS12 -keystore .secrets/release.keystore \
   -alias hermes-ui -keyalg RSA -keysize 4096 -validity 10000
 cat > .secrets/keystore.properties <<EOF
-storeFile=/absolute/path/to/mobile-app/.secrets/release.keystore
+storeFile=/absolute/path/to/app/.secrets/release.keystore
 storePassword=…
 keyAlias=hermes-ui
 keyPassword=…
@@ -90,9 +90,9 @@ same key.
 
 ### Configuration
 
-Build-time settings come from `mobile-app/.env` (see [`.env.example`](../mobile-app/.env.example)):
+Build-time settings come from `app/.env` (see [`.env.example`](../app/.env.example)):
 app name and id, URL scheme, pairing-link hosts, Apple team id, EAS project id, ABIs, foreground-service
-type, Firebase files. Version and build number: [`version.json`](../mobile-app/version.json).
+type, Firebase files. Version and build number: [`version.json`](../app/version.json).
 
 ## Web and desktop builds
 
@@ -147,7 +147,7 @@ then. Two ways around it:
    ([releasing.md](releasing.md#foreground-service-android)).
 2. **FCM (closed app, no ongoing notification):** create a Firebase project with an Android app for the
    package name, then
-   - build the app with `GOOGLE_SERVICES_JSON=/path/to/google-services.json` (in `mobile-app/.env`),
+   - build the app with `GOOGLE_SERVICES_JSON=/path/to/google-services.json` (in `app/.env`),
    - start the backend with `HERMES_UI_FCM_SERVICE_ACCOUNT=/path/to/service-account.json` (Firebase →
      Project settings → Service accounts → Generate new private key),
    - in the app: Settings → "Enable push (FCM)". The backend then sends to FCM (HTTP v1) everything it

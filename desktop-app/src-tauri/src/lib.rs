@@ -1,6 +1,6 @@
 //! Hermes UI desktop shell (Tauri 2).
 //!
-//! The window shows the universal app's web build (mobile-app → `expo export -p web`). This file adds
+//! The window shows the universal app's web build (app → `expo export -p web`). This file adds
 //! what a web page cannot do on its own:
 //!
 //! - **Backend**: either the bundled backend as a sidecar ("everything in one app": the Node binary

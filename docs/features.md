@@ -1,6 +1,6 @@
 # Features
 
-What the board, the thread panel and the inbox do, in detail. The mobile app: [mobile-app.md](mobile-app.md).
+What the board, the thread panel and the inbox do, in detail. The mobile app: [app.md](app.md).
 
 
 - **Board:** drag & drop (dnd-kit). On a phone it switches to tabs per column.

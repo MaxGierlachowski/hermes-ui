@@ -264,7 +264,7 @@ export const EN: Record<string, string> = {
   'Zum Board': 'Go to Board',
   'Zur Inbox': 'Go to Inbox',
   'Benachrichtigungen …': 'Notifications …',
-  // Native app (mobile-app/)
+  // Native app (app/)
   'Einstellungen': 'Settings',
   'Aktualisiere …': 'Updating …',
   'Offline, Stand von {when}': 'Offline, as of {when}',

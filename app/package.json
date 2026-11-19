@@ -1,5 +1,5 @@
 {
-  "name": "hermes-ui-mobile",
+  "name": "@hermes-ui/app",
   "version": "0.3.0",
   "main": "expo-router/entry",
   "dependencies": {

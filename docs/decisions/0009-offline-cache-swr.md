@@ -12,7 +12,7 @@ showed only an error page.
 
 ## Decision
 
-- Keep what the screens showed last in a persistent cache (`mobile-app/src/lib/cache.ts`): small JSON
+- Keep what the screens showed last in a persistent cache (`app/src/lib/cache.ts`): small JSON
   files in the app's documents directory, read synchronously so the first frame already has content.
   - board and inbox,
   - the newest 80 messages of the 40 most recently opened chats,

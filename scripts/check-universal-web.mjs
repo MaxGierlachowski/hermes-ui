@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Interaction check of the universal app's wide (desktop) layout in the demo mode: ⌘K palette, keyboard
 // navigation, Esc, text selection, Enter to send, new chat, right-click menu, drag & drop between columns,
-// split resize; lightbox, voice message, image paste. Serve mobile-app/dist-web on :8811 first (static, index.html fallback).
+// split resize; lightbox, voice message, image paste. Serve app/dist-web on :8811 first (static, index.html fallback).
 //   node scripts/check-universal-web.mjs [chromium|webkit]
 import { chromium, webkit } from '@playwright/test'
 const engine = process.argv[2] || 'chromium'

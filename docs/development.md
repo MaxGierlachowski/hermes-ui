@@ -1,7 +1,7 @@
 # Development
 
 From a fresh clone to a running setup on a new Mac. Related: [architecture.md](architecture.md) ·
-[mobile-app.md](mobile-app.md) · [secrets-and-state.md](secrets-and-state.md) · [releasing.md](releasing.md).
+[app.md](app.md) · [secrets-and-state.md](secrets-and-state.md) · [releasing.md](releasing.md).
 
 ## One command
 
@@ -30,7 +30,7 @@ Pinned in the repo; `bootstrap.sh` checks or installs them.
 | JDK | 17 (Temurin) | `mise.toml`, `Brewfile` | `brew install --cask temurin@17` |
 | Android SDK | platform 37 (compileSdk), build-tools 37.0.0, platform-tools | `scripts/bootstrap.sh` | Android Studio or `brew install --cask android-commandlinetools` |
 | Android NDK | 27.1.12297006 (React Native) and 28.2.13676358 (iroh library) | `scripts/bootstrap.sh` | `sdkmanager "ndk;…"` |
-| Rust | 1.100.0, targets `aarch64-linux-android`, `x86_64-linux-android`, `aarch64-apple-ios`, `aarch64-apple-ios-sim` | `mobile-app/modules/expo-iroh/rust/rust-toolchain.toml` | rustup (`brew install rustup`); installs the pin on first use |
+| Rust | 1.100.0, targets `aarch64-linux-android`, `x86_64-linux-android`, `aarch64-apple-ios`, `aarch64-apple-ios-sim` | `app/modules/expo-iroh/rust/rust-toolchain.toml` | rustup (`brew install rustup`); installs the pin on first use |
 | cargo-ndk | 4.1.2 | `scripts/bootstrap.sh` | `cargo install cargo-ndk --locked` |
 | uniffi-bindgen | from the crate itself (`--features bindgen`) | `Cargo.lock` | nothing to install |
 | Xcode | 26 or later (App Store uploads need the iOS 26 SDK) | — | App Store |
@@ -47,14 +47,14 @@ Pinned in the repo; `bootstrap.sh` checks or installs them.
 server/       backend + CLI (Node, no build step); package "hermes-ui"
 web/          React UI (Vite); built to web/dist, served by the backend or any static host
 shared/       TypeScript shared by web and app (types, SSE parser, pairing links, texts)
-mobile-app/   Expo app + native iroh module (own lockfile, not an npm workspace)
+app/   Expo app + native iroh module (own lockfile, not an npm workspace)
 docs/         this manual            store/   listing texts, review notes, graphics, screenshots
 site/         static pages next to the UI on GitHub Pages (privacy, support)
 scripts/      bootstrap, secrets backup        bin/   `node bin/hermes-ui.mjs` entry point
 data/, .env   local state and secrets (git-ignored; docs/secrets-and-state.md)
 ```
 
-npm workspaces (`server`, `web`, `shared`) share one `package-lock.json` at the root. `mobile-app/` keeps
+npm workspaces (`server`, `web`, `shared`) share one `package-lock.json` at the root. `app/` keeps
 its own: Expo pins React / React Native exactly and its native autolinking expects its own tree.
 
 ## Everyday commands
@@ -65,9 +65,9 @@ npm run dev               # Vite dev server on :5173, proxies /api to the backen
 npm run verify            # backend syntax check + unit tests, typecheck web + app, web build
 npm run test:ui           # Playwright UI tests (phones + desktop pixel baselines; macOS fonts)
 npm run lint              # oxlint (web)
-cd mobile-app && npx expo run:android   # dev client on an emulator / phone
-cd mobile-app && npm run web            # the same app in the browser (Expo web, :8081)
-cd mobile-app && npm run web:export     # static web build → mobile-app/dist-web
+cd app && npx expo run:android   # dev client on an emulator / phone
+cd app && npm run web            # the same app in the browser (Expo web, :8081)
+cd app && npm run web:export     # static web build → app/dist-web
 cd desktop-app && npm ci && npm run build   # macOS desktop app (.app + .dmg), see desktop-app.md
 node scripts/measure-ui.mjs             # shadcn vs universal web build, same data (serve both first)
 node scripts/check-universal-web.mjs    # desktop-layout interaction check (dist-web on :8811)
@@ -87,14 +87,14 @@ It gets its own token, iroh identity and devices in that data dir.
 - `npm run test:ui`: the built UI with every `/api` request answered from fixtures (`web/e2e/`); touch
   targets, mobile gestures, long-text overflow, desktop pixel comparison. Once per machine:
   `npx playwright install chromium` in `web/`.
-- `npm --prefix mobile-app run typecheck`; `npm --prefix mobile-app run iroh:test` pairs the Rust client
-  with a running backend (see [mobile-app.md](mobile-app.md#tests)).
+- `npm --prefix app run typecheck`; `npm --prefix app run iroh:test` pairs the Rust client
+  with a running backend (see [app.md](app.md#tests)).
 - CI (`.github/workflows/ci.yml`) runs all of these without secrets.
 
 ## Conventions
 
 English in code, comments and docs; the UI is English and German (German source strings, English in
-`shared/i18n-en.ts`). Conventional commit messages (`feat(mobile-app): …`). No personal data, company
+`shared/i18n-en.ts`). Conventional commit messages (`feat(app): …`). No personal data, company
 names or real chat content in fixtures, tests or screenshots. See [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## UI tests in detail

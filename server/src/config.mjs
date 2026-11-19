@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 // The backend package (server/). In a checkout of the repository, ROOT is the repository root: `.env`,
-// `data/` and the built UI (`web/dist`) live there, next to server/, web/ and mobile-app/.
+// `data/` and the built UI (`web/dist`) live there, next to server/, web/ and app/.
 export const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repo = path.dirname(PKG);
 export const ROOT = fs.existsSync(path.join(repo, 'web', 'package.json')) && fs.existsSync(path.join(repo, 'server', 'package.json')) ? repo : PKG;

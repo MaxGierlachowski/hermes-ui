@@ -6,9 +6,9 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "web": "npm --prefix ../mobile-app run web:export && rm -rf dist-web && cp -R ../mobile-app/dist-web dist-web",
+    "web": "npm --prefix ../app run web:export && rm -rf dist-web && cp -R ../app/dist-web dist-web",
     "sidecar": "node scripts/prepare-sidecar.mjs",
-    "icons": "tauri icon ../mobile-app/assets/images/icon.png -o src-tauri/icons",
+    "icons": "tauri icon ../app/assets/images/icon.png -o src-tauri/icons",
     "dev": "npm run sidecar && tauri dev",
     "build": "npm run web && npm run sidecar && tauri build --bundles app,dmg",
     "tauri": "tauri"

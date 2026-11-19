@@ -9,7 +9,7 @@ the user impact if the task is deferred or interrupted, and link a video.
 | Item | Value |
 |---|---|
 | Permission | `android.permission.FOREGROUND_SERVICE_DATA_SYNC` (plus `FOREGROUND_SERVICE`, `POST_NOTIFICATIONS`) |
-| Service | `expo.modules.iroh.KeepAliveService`, `android:foregroundServiceType="dataSync"` (`mobile-app/modules/expo-iroh/android/src/main/AndroidManifest.xml`; `HERMES_UI_FGS_TYPE` overrides it at build time, see below) |
+| Service | `expo.modules.iroh.KeepAliveService`, `android:foregroundServiceType="dataSync"` (`app/modules/expo-iroh/android/src/main/AndroidManifest.xml`; `HERMES_UI_FGS_TYPE` overrides it at build time, see below) |
 | Time limit | Android 15+ allows `dataSync` 6 h per 24 h: at the limit the system calls `onTimeout()`, the service stops itself, and the app starts it again the next time it is in the foreground |
 | Started | only from the foreground (the app checks `AppState === 'active'` before it starts the service), never at boot, never from a background broadcast |
 | Stopped | 30 seconds after the agent's last turn finished (mode "While Hermes works"), immediately when the user switches the setting to "Off", and when the connection ends (e.g. "Forget connection" or exiting the demo) |
@@ -85,7 +85,7 @@ Tips:
 `dataSync` is the default because Play documents it for "transfer data between a device and the
 network" and it needs no special justification. Its Android 15+ limit (6 h per 24 h) matters only for
 "Always"; "While Hermes works" stops 30 seconds after each turn. Alternatives, selected with
-`HERMES_UI_FGS_TYPE` in `mobile-app/.env` (config plugin `plugins/with-keepalive-type.js`; the service
+`HERMES_UI_FGS_TYPE` in `app/.env` (config plugin `plugins/with-keepalive-type.js`; the service
 reads its type from the manifest, so no code changes):
 
 1. **`remoteMessaging`** (`FOREGROUND_SERVICE_REMOTE_MESSAGING`): no time limit. Google describes it as
@@ -97,7 +97,7 @@ reads its type from the manifest, so no code changes):
    justification more strictly.
 3. **No foreground service (FCM only):** set "Off" as default and remove the setting from a store build;
    the app then notifies only while it is open, unless the user builds it with their own Firebase project
-   (`GOOGLE_SERVICES_JSON` + `HERMES_UI_FCM_SERVICE_ACCOUNT`, see `docs/mobile-app.md`). Simplest for
+   (`GOOGLE_SERVICES_JSON` + `HERMES_UI_FCM_SERVICE_ACCOUNT`, see `docs/app.md`). Simplest for
    review, weakest for users.
 
 If Google rejects the declaration: appeal with more context first (self-hosted peer-to-peer, no

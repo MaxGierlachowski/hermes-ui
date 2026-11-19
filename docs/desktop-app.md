@@ -1,9 +1,9 @@
 # Desktop app (macOS, Tauri 2)
 
 The app in [`desktop-app/`](../desktop-app). Related: [decisions/0012-universal-app.md](decisions/0012-universal-app.md) ·
-[mobile-app.md](mobile-app.md) · [releasing.md](releasing.md#desktop-app-macos) · [security.md](security.md).
+[app.md](app.md) · [releasing.md](releasing.md#desktop-app-macos) · [security.md](security.md).
 
-The desktop app is the universal app's web build (`mobile-app`, `expo export -p web`) in a Tauri 2
+The desktop app is the universal app's web build (`app`, `expo export -p web`) in a Tauri 2
 window, plus what a browser tab cannot do: a menu bar, a tray icon, a global shortcut, the macOS
 Keychain, launch at login, and optionally the backend itself, so one app contains everything.
 
@@ -84,10 +84,10 @@ npm run build     # web build of the app → dist-web, sidecar (esbuild bundle +
 open "src-tauri/target/release/bundle/dmg/"
 ```
 
-- `npm run web` exports the app (`mobile-app` → `dist-web`), `npm run sidecar` bundles `server/` with
+- `npm run web` exports the app (`app` → `dist-web`), `npm run sidecar` bundles `server/` with
   esbuild into `src-tauri/resources/server/hermes-ui.mjs` and copies the running Node binary to
   `src-tauri/binaries/node-<target>`. Both are build output (git-ignored).
-- `npm run dev` runs the shell against the Expo web dev server (`npm --prefix ../mobile-app run web`, port 8081).
+- `npm run dev` runs the shell against the Expo web dev server (`npm --prefix ../app run web`, port 8081).
 - The Node binary needs the JIT entitlement under the hardened runtime (`src-tauri/Entitlements.plist`);
   without it the sidecar dies at start with "Failed to reserve virtual memory for CodeRange".
 - The bundle is Apple silicon only for now (`aarch64`); a universal binary needs

@@ -1,7 +1,7 @@
 // Config plugin: release signing from a local, git-ignored keystore and one ABI list for everything.
 //
 // Signing: android/app/build.gradle gets a `release` signing config read from
-// mobile-app/.secrets/keystore.properties (storeFile, storePassword, keyAlias, keyPassword), or from the
+// app/.secrets/keystore.properties (storeFile, storePassword, keyAlias, keyPassword), or from the
 // file named by HERMES_UI_KEYSTORE_PROPERTIES. Without that file, release builds stay debug-signed
 // (Expo's default), so a fresh clone still builds.
 //
@@ -11,7 +11,7 @@
 const { withAppBuildGradle, withGradleProperties } = require('expo/config-plugins')
 
 const SIGNING = `
-    // with-android-release: local keystore, never committed (mobile-app/.secrets/).
+    // with-android-release: local keystore, never committed (app/.secrets/).
     def hermesKeystoreProps = new Properties()
     def hermesKeystoreFile = file(System.getenv('HERMES_UI_KEYSTORE_PROPERTIES') ?: "\${rootDir}/../.secrets/keystore.properties")
     if (hermesKeystoreFile.exists()) { hermesKeystoreFile.withInputStream { hermesKeystoreProps.load(it) } }

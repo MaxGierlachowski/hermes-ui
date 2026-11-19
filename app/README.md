@@ -1,7 +1,7 @@
 # Hermes UI – mobile app (Android / iOS)
 
 A React Native app (Expo SDK 58) for the hermes-ui backend, with native screens and a native iroh client
-(`modules/expo-iroh`, Rust through UniFFI). The manual is **[docs/mobile-app.md](../docs/mobile-app.md)**;
+(`modules/expo-iroh`, Rust through UniFFI). The manual is **[docs/app.md](../docs/app.md)**;
 store releases: [docs/releasing.md](../docs/releasing.md).
 
 ```bash

@@ -1,9 +1,17 @@
 # Changelog
 
-All notable changes. The backend + web UI and the mobile app share one repository; mobile releases are
-tagged `mobile-app-vX.Y.Z` (version and build number in `mobile-app/version.json`).
+All notable changes. The backend + web UI and the app share one repository; app releases are tagged
+`app-vX.Y.Z` (version and build number in `app/version.json`; up to 0.3.0: `mobile-app-vX.Y.Z`).
 
 ## Unreleased – universal spike
+
+### Renamed: `mobile-app/` → `app/`
+- The app is no longer only the mobile app, so its folder is `app/` (package `@hermes-ui/app`). App id,
+  bundle id and signing are unchanged. Release tags: `app-vX.Y.Z`.
+- **Migration** (once, in the checkout with the keystore): move `mobile-app/.secrets` and `mobile-app/.env`
+  into `app/` and fix `storeFile` in `keystore.properties`; commands and a signature check in
+  [docs/secrets-and-state.md](docs/secrets-and-state.md#after-the-rename-of-mobile-app-to-app-2026-11).
+  Old secrets backups restore into `app/` automatically.
 
 ### App: one codebase for phone, web and desktop (spike, ADR 0012)
 - The app also builds for the web (react-native-web): platform layers for transport (local HTTP or

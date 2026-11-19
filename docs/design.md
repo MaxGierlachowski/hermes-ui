@@ -43,7 +43,7 @@ Todoist). What was taken from them:
 ## Colour
 
 Web tokens are CSS variables in `web/src/index.css` (OKLCH). The app uses the same values as hex in
-`mobile-app/src/lib/theme.ts` and its global CSS.
+`app/src/lib/theme.ts` and its global CSS.
 
 | Token | Light | Dark |
 |---|---|---|
@@ -99,7 +99,7 @@ primitives) on Tailwind 4, plus:
 Touch sizing is built into the base components ([ADR 0011](decisions/0011-touch-sizing-desktop-unchanged.md)),
 so there is no separate mobile component set.
 
-**App (`mobile-app/`):** NativeWind 4 (Tailwind classes in React Native) with the same tokens, a small
+**App (`app/`):** NativeWind 4 (Tailwind classes in React Native) with the same tokens, a small
 set of own primitives (button, input, badge, text, icon), lucide icons, react-native-marked for
 Markdown, FlashList for lists, a native pager for the board columns, and Reanimated for motion.
 

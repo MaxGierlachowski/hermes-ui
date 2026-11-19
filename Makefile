@@ -13,10 +13,10 @@ verify:         ## checks, unit tests, typecheck, web build
 	npm run verify
 test-ui:
 	npm run test:ui
-android:        ## release AAB + APKs in mobile-app/dist
-	npm --prefix mobile-app run release:android
+android:        ## release AAB + APKs in app/dist
+	npm --prefix app run release:android
 ios:            ## iroh XCFramework + prebuild + pods
-	npm --prefix mobile-app run iroh:ios && cd mobile-app && npx expo prebuild --platform ios --clean && cd ios && pod install
+	npm --prefix app run iroh:ios && cd app && npx expo prebuild --platform ios --clean && cd ios && pod install
 licenses:       ## regenerate THIRD-PARTY-NOTICES.md
 	node scripts/licenses.mjs
 backup:         ## encrypted backup of secrets and state

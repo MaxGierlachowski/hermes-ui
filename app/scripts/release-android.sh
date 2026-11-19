@@ -2,8 +2,8 @@
 # Release build for Android: the iroh library (Rust), a clean prebuild, then the Play bundle (AAB) and
 # one APK per ABI for direct installation. Output: dist/hermes-ui-<version>-<build>.aab / -<abi>.apk.
 #
-# Signing: mobile-app/.secrets/keystore.properties or the file in HERMES_UI_KEYSTORE_PROPERTIES (see
-# docs/mobile-app.md). Without one the artifacts are debug-signed: fine to try, not for the store.
+# Signing: app/.secrets/keystore.properties or the file in HERMES_UI_KEYSTORE_PROPERTIES (see
+# docs/app.md). Without one the artifacts are debug-signed: fine to try, not for the store.
 # SKIP_IROH=1 reuses the library from the last run.
 set -euo pipefail
 cd "$(dirname "$0")/.."

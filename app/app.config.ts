@@ -105,7 +105,7 @@ const config: ExpoConfig = {
     ['expo-share-intent', { androidIntentFilters: ['text/*', 'image/*'], disableIOS: true }],
     // targetSdk 36 = Google Play's requirement for new apps and updates since 31 Aug 2026.
     ['expo-build-properties', { android: { minSdkVersion: 24, targetSdkVersion: 36 }, ios: { deploymentTarget: '16.4' } }],
-    // Release signing from mobile-app/.secrets (never committed) and the ABIs the iroh library is built for.
+    // Release signing from app/.secrets (never committed) and the ABIs the iroh library is built for.
     ['./plugins/with-android-release', { abis: env('HERMES_UI_ABIS', 'arm64-v8a,x86_64').split(',') }],
     // Foreground service type of "Stay connected in the background" (dataSync unless overridden).
     ['./plugins/with-keepalive-type', { type: env('HERMES_UI_FGS_TYPE', 'dataSync') }],

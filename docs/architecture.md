@@ -6,10 +6,10 @@ Kanban board. It has three clients and one backend:
 - **Backend** (`server/`): a headless Node 24 process on `127.0.0.1:8787`. It reads Hermes, writes
   through the Hermes gateway, and serves an HTTP API plus a live event stream.
 - **Web UI** (`web/`): a static React PWA. The backend can serve it, or any static host can.
-- **Mobile app** (`mobile-app/`): a React Native (Expo) app with native screens and a native iroh client.
+- **Mobile app** (`app/`): a React Native (Expo) app with native screens and a native iroh client.
 
 Related documents: [security.md](security.md), [self-hosting.md](self-hosting.md),
-[mobile-app.md](mobile-app.md), [development.md](development.md), [design.md](design.md),
+[app.md](app.md), [development.md](development.md), [design.md](design.md),
 [mobile-audit.md](mobile-audit.md) and the [decision records](decisions/README.md).
 
 ## Overview
@@ -141,7 +141,7 @@ How the web UI finds its backend (`web/src/lib/backend.ts`), in order:
 3. an endpoint remembered from an earlier pairing,
 4. otherwise a screen that asks for a pairing link.
 
-**Mobile app.** `mobile-app/modules/expo-iroh` wraps iroh-bridge's own Rust client (`client-core`,
+**Mobile app.** `app/modules/expo-iroh` wraps iroh-bridge's own Rust client (`client-core`,
 the one inside `iroh-fetch`) in a small crate and exposes it through UniFFI to Kotlin and Swift, and
 from there to JavaScript as a fetch-like API with streaming bodies, SSE and file downloads. The
 protocol is therefore the same as the browser's. The native client hole-punches a direct UDP path and
@@ -201,7 +201,7 @@ and anything in `HERMES_UI_IMAGE_ROOTS`. Details in [security.md](security.md#fi
 |---|---|
 | `server/` | Backend: `server.mjs` (HTTP API, SSE, column logic), `src/` (Hermes client, `state.db` reader, Paseo adapter, inbox, push, iroh, tunnels, devices, config), `bin/` (CLI), `scripts/` (LaunchAgent generator), `examples/`, `test/` (unit tests). |
 | `web/` | React 19 + Vite + Tailwind 4 + shadcn/ui PWA. `e2e/` holds the Playwright tests (touch targets, mobile behaviour, desktop pixel regression). |
-| `mobile-app/` | Expo SDK 58 app (Expo Router, NativeWind) for iOS, Android and, through react-native-web, the web and the desktop app. Platform layers are `*.web.ts` files next to their native versions. `modules/expo-iroh/` is the native iroh client (Rust + UniFFI, Kotlin, Swift). |
+| `app/` | Expo SDK 58 app (Expo Router, NativeWind) for iOS, Android and, through react-native-web, the web and the desktop app. Platform layers are `*.web.ts` files next to their native versions. `modules/expo-iroh/` is the native iroh client (Rust + UniFFI, Kotlin, Swift). |
 | `desktop-app/` | Tauri 2 shell (Rust) around the app's web build: menu, tray, Keychain, the backend as a sidecar ([desktop-app.md](desktop-app.md), [ADR 0012](decisions/0012-universal-app.md)). |
 | `shared/` | TypeScript used by web and app: types, SSE parser, pairing links, media-tag rules, English texts. |
 | `docs/` | This documentation and the [decision records](decisions/README.md). |

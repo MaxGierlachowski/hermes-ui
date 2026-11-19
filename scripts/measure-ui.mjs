@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Measures the two web UIs side by side with identical data: the shadcn web UI (web/dist) and the
-// universal app's web build (mobile-app/dist-web). Every /api request is answered in the browser from
+// universal app's web build (app/dist-web). Every /api request is answered in the browser from
 // generated data (no backend, no latency), so the numbers compare rendering, not the network.
 //
 //   node scripts/measure-ui.mjs --shadcn http://127.0.0.1:8812 --universal http://127.0.0.1:8811 [--engine chromium|webkit] [--runs 3]
