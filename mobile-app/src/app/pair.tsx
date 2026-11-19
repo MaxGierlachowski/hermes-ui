@@ -52,7 +52,7 @@ export default function PairScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
-        <ScrollView contentContainerClassName="flex-grow justify-center gap-6 p-6" keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerClassName="w-full max-w-[560px] flex-grow justify-center gap-6 self-center p-6" keyboardShouldPersistTaps="handled">
           <View className="flex-row items-center gap-3">
             <View className="h-12 w-12 items-center justify-center rounded-xl bg-primary"><Text className="text-xl font-bold text-primary-foreground">H</Text></View>
             <View>

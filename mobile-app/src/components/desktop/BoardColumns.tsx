@@ -47,7 +47,8 @@ const BoardColumn = memo(function BoardColumn({ col, list, width, selected, open
   const over = useColumnDrop(ref, (id) => setColumn(id, col))
   const meta = COLUMNS.find((c) => c.id === col)!
   return (
-    <View ref={ref} className={cn('flex-1 rounded-xl border border-border bg-muted/40', over && 'border-primary bg-primary/5')} style={width ? { width, flex: 0 } : undefined}>
+    // Fixed width when the columns scroll sideways (tablet); flex-1 would shrink them to nothing there.
+    <View ref={ref} className={cn('rounded-xl border border-border bg-muted/40', !width && 'flex-1', over && 'border-primary bg-primary/5')} style={width ? { width } : undefined}>
       <View className="h-10 flex-row items-center gap-2 px-3">
         <View className={cn('h-2 w-2 rounded-full', COLUMN_COLOR[col])} />
         <Text className="text-[13px] font-semibold">{meta.label}</Text>
@@ -73,7 +74,7 @@ export function BoardColumns({ lists, visible, selection, openId }: { lists: Rec
   ))
   if (visible === 4) return <View className="flex-1 flex-row gap-3 p-3">{cols}</View>
   return (
-    <ScrollView horizontal snapToInterval={(win - 36) / 2 + 12} decelerationRate="fast" showsHorizontalScrollIndicator={false} contentContainerClassName="gap-3 p-3">
+    <ScrollView horizontal snapToInterval={(win - 36) / 2 + 12} decelerationRate="fast" showsHorizontalScrollIndicator={false} contentContainerClassName="flex-grow gap-3 p-3">
       {cols}
     </ScrollView>
   )
