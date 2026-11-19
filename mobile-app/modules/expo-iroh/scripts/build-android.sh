@@ -27,6 +27,9 @@ cargo ndk "${args[@]}" -P 24 -o "$MOD/android/src/main/jniLibs" build --release 
 find "$MOD/android/src/main/jniLibs" -name '*.so' ! -name 'libhermes_iroh.so' -delete
 
 # Bindings come from the compiled library's metadata (library mode), so they always match it.
+# The host library is never shipped: built unstripped, because stripping removes the UniFFI metadata
+# symbols on Linux (CI) and bindgen then finds nothing.
+export CARGO_PROFILE_RELEASE_STRIP=false
 cargo build --release --lib --target-dir target/host
 host_lib=target/host/release/libhermes_iroh.so
 [[ -f target/host/release/libhermes_iroh.dylib ]] && host_lib=target/host/release/libhermes_iroh.dylib
