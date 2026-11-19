@@ -345,4 +345,8 @@ export const EN: Record<string, string> = {
   'Direkt über HTTP, ohne iroh. Das Backend muss diese Oberfläche per HERMES_UI_CORS_ORIGINS zulassen; die Desktop-App ist immer zugelassen.': 'Plain HTTP, no iroh. The backend has to allow this page in HERMES_UI_CORS_ORIGINS; the desktop app is always allowed.',
   'Eingebautes Backend starten': 'Start built-in backend',
   'Startet das Backend in dieser App (eigener Datenordner, Port 8799). Hermes muss auf diesem Rechner laufen.': 'Runs the backend inside this app (own data folder, port 8799). Hermes has to run on this machine.',
+  'Kamera nicht erlaubt': 'Camera not allowed',
+  'Systemeinstellungen öffnen': 'Open System Settings',
+  'Erlaube den Zugriff in den Website-Einstellungen des Browsers und lade die Seite neu.': 'Allow it in the browser\'s site settings and reload the page.',
+  'Solange die App läuft (auch nur im Tray), kommen neue Inbox-Einträge als Systembenachrichtigung; ein Klick öffnet den Chat.': 'While the app runs (also in the tray only), new inbox entries arrive as system notifications; a click opens the chat.',
 }

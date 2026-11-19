@@ -7,7 +7,7 @@
 //!   and `resources/server/hermes-ui.mjs`, own data dir, port 8799 by default) or a backend that is
 //!   already running (URL + token). The page asks `local_backend` and talks to it over plain HTTP.
 //! - **Keychain**: `secret_get/set/delete` keep the pairing (and with it the token) in the macOS
-//!   Keychain instead of localStorage.
+//!   Keychain instead of localStorage (service = the bundle identifier).
 //! - **Native chrome**: menu bar (with the shortcuts), tray icon, closing hides to the tray, a global
 //!   shortcut to show / hide the window, launch at login, window size and position remembered,
 //!   system notifications, a single instance.
@@ -34,7 +34,9 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt as _};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_shell::{process::CommandChild, process::CommandEvent, ShellExt};
 
-const KEYCHAIN_SERVICE: &str = "io.github.hermes-ui.desktop";
+#[cfg(target_os = "macos")]
+mod macos_notify;
+
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default, rename_all = "camelCase")]
@@ -246,27 +248,70 @@ async fn set_backend_mode(app: AppHandle, mode: String, url: Option<String>, tok
     local_backend(app).await
 }
 
-fn entry(key: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, key).map_err(|e| e.to_string())
+// Keychain items belong to the app's identifier (service = bundle identifier), so a build with
+// another identifier (tests, forks) never touches them. The calls run off the main thread: while
+// macOS asks for access (e.g. after a re-signed build), the window and Quit keep working.
+fn entry(app: &AppHandle, key: &str) -> Result<keyring::Entry, String> {
+  keyring::Entry::new(&app.config().identifier, key).map_err(|e| e.to_string())
+}
+async fn keychain<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+  tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
 }
 #[tauri::command]
-fn secret_get(key: String) -> Result<Option<String>, String> {
-    match entry(&key)?.get_password() {
-        Ok(v) => Ok(Some(v)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+async fn secret_get(app: AppHandle, key: String) -> Result<Option<String>, String> {
+  keychain(move || match entry(&app, &key)?.get_password() {
+    Ok(v) => Ok(Some(v)),
+    Err(keyring::Error::NoEntry) => Ok(None),
+    Err(e) => Err(e.to_string()),
+  }).await
 }
 #[tauri::command]
-fn secret_set(key: String, value: String) -> Result<(), String> {
-    entry(&key)?.set_password(&value).map_err(|e| e.to_string())
+async fn secret_set(app: AppHandle, key: String, value: String) -> Result<(), String> {
+  keychain(move || entry(&app, &key)?.set_password(&value).map_err(|e| e.to_string())).await
 }
 #[tauri::command]
-fn secret_delete(key: String) -> Result<(), String> {
-    match entry(&key)?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+async fn secret_delete(app: AppHandle, key: String) -> Result<(), String> {
+  keychain(move || match entry(&app, &key)?.delete_credential() {
+    Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+    Err(e) => Err(e.to_string()),
+  }).await
+}
+
+/// Notification permission: "granted", "denied", "prompt" or "unsupported" (then the page uses the
+/// notification plugin). `request`: show the system dialog if the user has not decided yet.
+#[tauri::command]
+async fn notification_permission(request: bool) -> String {
+  #[cfg(target_os = "macos")]
+  { macos_notify::permission(request).await }
+  #[cfg(not(target_os = "macos"))]
+  { let _ = request; "unsupported".into() }
+}
+
+/// A system notification; a click on it opens the chat (`notification-click` event). False if the
+/// platform path is not available (then the page uses the notification plugin).
+#[tauri::command]
+fn notify(title: String, body: String, session_id: Option<String>) -> bool {
+  #[cfg(target_os = "macos")]
+  { macos_notify::notify(&title, &body, session_id.as_deref()) }
+  #[cfg(not(target_os = "macos"))]
+  { let _ = (title, body, session_id); false }
+}
+
+/// Opens the system settings page where a refused permission can be turned on again.
+#[tauri::command]
+fn open_privacy_settings(kind: String) -> Result<(), String> {
+  #[cfg(target_os = "macos")]
+  {
+    let url = match kind.as_str() {
+      "microphone" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+      "camera" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
+      "notifications" => "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+      _ => return Err(format!("unknown permission {kind}")),
+    };
+    std::process::Command::new("open").arg(url).status().map(|_| ()).map_err(|e| e.to_string())
+  }
+  #[cfg(not(target_os = "macos"))]
+  { Err(format!("not available here: {kind}")) }
 }
 
 fn show_window(app: &AppHandle) {
@@ -378,7 +423,14 @@ pub fn run() {
                 .with_handler(|app, _shortcut, event| { if event.state() == ShortcutState::Pressed { toggle_window(app) } })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![local_backend, set_backend_mode, secret_get, secret_set, secret_delete])
+        // The window shows only the bundled UI: microphone (voice messages) and camera (photos) are
+        // allowed for it without WebKit's own per-page prompt. macOS still asks once (TCC), with the
+        // texts from Info.plist.
+        .on_permission_request(|_webview, kind| match kind {
+            tauri::webview::PermissionKind::Microphone | tauri::webview::PermissionKind::Camera => tauri::webview::PermissionResponse::Allow,
+            _ => tauri::webview::PermissionResponse::Default,
+        })
+        .invoke_handler(tauri::generate_handler![local_backend, set_backend_mode, secret_get, secret_set, secret_delete, notification_permission, notify, open_privacy_settings])
         .setup(|app| {
             let handle = app.handle().clone();
             let config = load_config(&handle);
@@ -391,6 +443,8 @@ pub fn run() {
                 id => action(app, id),
             });
             build_tray(&handle)?;
+            #[cfg(target_os = "macos")]
+            macos_notify::install(&handle);
             // Development / screenshots: open a route at start, e.g. HERMES_UI_DESKTOP_ROUTE=/demo.
             if let Ok(route) = std::env::var("HERMES_UI_DESKTOP_ROUTE") {
                 if let Some(w) = app.get_webview_window("main") {

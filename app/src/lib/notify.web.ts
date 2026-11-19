@@ -1,24 +1,33 @@
 // Web / desktop notifications. Same API as notify.ts:
-//   - desktop app: the system notification centre through Tauri's notification plugin,
+//   - desktop app (macOS): UNUserNotificationCenter through the shell (`notification_permission`,
+//     `notify`): the system asks once, a click opens the chat. Elsewhere Tauri's notification plugin,
 //   - browser: the Notification API while the tab is open (Web Push like the shadcn UI is not wired
 //     up here yet, see docs/decisions/0012-universal-app.md).
 import type { InboxItem } from '@shared/types'
-import { isDesktop } from './desktop.web'
+import { invoke, isDesktop } from './desktop.web'
 
 export const CHANNEL = 'hermes'
 
 async function plugin() { return import('@tauri-apps/plugin-notification') }
 
-export async function setupNotifications(ask: boolean) {
+export type NotificationPermission = 'granted' | 'denied' | 'prompt' | 'unsupported'
+
+/** The current decision; with `ask` the system dialog appears if the user has not decided yet. */
+export async function notificationPermission(ask: boolean): Promise<NotificationPermission> {
   if (isDesktop) {
+    const native = await invoke<NotificationPermission>('notification_permission', { request: ask })
+    if (native && native !== 'unsupported') return native
     const n = await plugin()
-    if (await n.isPermissionGranted()) return true
-    return ask ? (await n.requestPermission()) === 'granted' : false
+    if (await n.isPermissionGranted()) return 'granted'
+    return ask ? ((await n.requestPermission()) === 'granted' ? 'granted' : 'denied') : 'prompt'
   }
-  if (typeof Notification === 'undefined') return false
-  if (Notification.permission === 'granted' || !ask) return Notification.permission === 'granted'
-  return (await Notification.requestPermission()) === 'granted'
+  if (typeof Notification === 'undefined') return 'unsupported'
+  if (Notification.permission !== 'default' || !ask) return Notification.permission === 'default' ? 'prompt' : Notification.permission
+  const r = await Notification.requestPermission()
+  return r === 'default' ? 'prompt' : r
 }
+
+export const setupNotifications = async (ask: boolean) => (await notificationPermission(ask)) === 'granted'
 
 /** On the desktop a window that is open but not focused counts as "in the background". */
 export const appInBackground = () => typeof document !== 'undefined' && (document.hidden || !document.hasFocus())
@@ -26,7 +35,11 @@ export const appInBackground = () => typeof document !== 'undefined' && (documen
 export async function notifyInboxItem(item: InboxItem, label: string, title: string) {
   const body = item.text ? (item.text.length > 140 ? `${item.text.slice(0, 139)}…` : item.text) : ''
   try {
-    if (isDesktop) { (await plugin()).sendNotification({ title: `${label} · ${title}`, body }); return }
+    if (isDesktop) {
+      if (await invoke<boolean>('notify', { title: `${label} · ${title}`, body, sessionId: item.sessionId ?? null })) return
+      ;(await plugin()).sendNotification({ title: `${label} · ${title}`, body })
+      return
+    }
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(`${label} · ${title}`, { body, tag: item.id })
   } catch { /* no permission */ }
 }

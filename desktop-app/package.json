@@ -10,8 +10,9 @@
     "sidecar": "node scripts/prepare-sidecar.mjs",
     "icons": "tauri icon ../app/assets/images/icon.png -o src-tauri/icons",
     "dev": "npm run sidecar && tauri dev",
-    "build": "npm run web && npm run sidecar && tauri build --bundles app,dmg",
-    "tauri": "tauri"
+    "build": "npm run web && npm run sidecar && tauri build --bundles app && scripts/sign-adhoc.sh",
+    "tauri": "tauri",
+    "sign": "scripts/sign-adhoc.sh"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.6",

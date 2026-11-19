@@ -7,3 +7,4 @@ export const localBackend = async (): Promise<LocalBackend | null> => null
 export const onShellAction = (_fn: (id: string) => void) => () => {}
 export const setBadge = async (_count: number) => {}
 export const nativeMenu = async (_items: unknown[], _onPick: (id: string) => void) => false
+export const onShellEvent = <T,>(_name: string, _fn: (payload: T) => void) => () => {}

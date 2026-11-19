@@ -54,3 +54,12 @@ export async function nativeMenu(items: ({ id: string; text: string; enabled?: b
   await menu.popup()
   return true
 }
+
+/** Any event the shell emits (e.g. "notification-click" with a session id). */
+export function onShellEvent<T>(name: string, fn: (payload: T) => void): () => void {
+  if (!isDesktop) return () => {}
+  let off: (() => void) | null = null
+  let dead = false
+  listen<T>(name, (e) => fn(e.payload)).then((u) => { if (dead) u(); else off = u })
+  return () => { dead = true; off?.() }
+}

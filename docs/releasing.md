@@ -241,9 +241,12 @@ an **unsigned** DMG for Apple silicon. To ship it to others:
 1. **Developer ID**: the Apple Developer Program (same account as for the App Store) → certificate
    "Developer ID Application" in Xcode → Settings → Accounts. Signing identity e.g.
    `Developer ID Application: <Name> (<TEAMID>)`.
-2. **Sign**: `APPLE_SIGNING_IDENTITY="Developer ID Application: …" npm run build` in `desktop-app/`
-   (or `bundle.macOS.signingIdentity` in `tauri.conf.json`, today `-` = ad hoc). The bundled Node binary
-   is signed with the same identity and needs `Entitlements.plist` (JIT).
+2. **Sign**: `APPLE_SIGNING_IDENTITY="Developer ID Application: …"` and `tauri build --bundles app,dmg`
+   in `desktop-app/` (or `bundle.macOS.signingIdentity` in `tauri.conf.json`, today `-` = ad hoc), and
+   drop `scripts/sign-adhoc.sh` from `npm run build`. The bundled Node binary is signed with the same
+   identity; `Entitlements.plist` (JIT, microphone, camera) applies to both. The Developer ID signature
+   replaces the ad-hoc identity: users are asked once more for microphone, camera, notifications and
+   Keychain access; after that the decisions stay across updates (same Team ID + identifier).
 3. **Notarize**: set `APPLE_API_ISSUER`, `APPLE_API_KEY` and `APPLE_API_KEY_PATH` (an App Store Connect
    API key with the Developer role) or `APPLE_ID`, `APPLE_PASSWORD` (app-specific password) and
    `APPLE_TEAM_ID`; `tauri build` notarizes and staples the app and the DMG.

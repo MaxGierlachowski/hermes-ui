@@ -16,6 +16,13 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowBanner: false, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: true }),
 })
 
+export type NotificationPermission = 'granted' | 'denied' | 'prompt' | 'unsupported'
+export async function notificationPermission(ask: boolean): Promise<NotificationPermission> {
+  if (ask) await setupNotifications(true)
+  const p = await Notifications.getPermissionsAsync()
+  return p.granted ? 'granted' : p.canAskAgain ? 'prompt' : 'denied'
+}
+
 export async function setupNotifications(ask: boolean) {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL, {

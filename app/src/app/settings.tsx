@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Pressable, ScrollView, View } from 'react-native'
+import { Platform, Pressable, ScrollView, View } from 'react-native'
 import { router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useColorScheme } from 'nativewind'
@@ -16,7 +16,8 @@ import { exitDemo, setPrefs, unpair, useStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { applyTheme } from '@/lib/theme-mode'
-import { confirm, notice } from '@/lib/confirm'
+import { confirm } from '@/lib/confirm'
+import { PermissionNotice } from '@/components/PermissionNotice'
 import { haptic } from '@/lib/haptics'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -57,6 +58,7 @@ export default function Settings() {
   const [path, setPath] = useState<ConnectionPath | null>(null)
   const [push, setPush] = useState('')
   const [keep, setKeep] = useState<KeepAliveMode>(keepAliveMode())
+  const [notifBlocked, setNotifBlocked] = useState(false)
   const b = getBackend()
 
   useEffect(() => { AsyncStorage.getItem('hk_theme').then((v) => v && setTheme(v as typeof theme)) }, [])
@@ -101,20 +103,29 @@ export default function Settings() {
         </Section>
 
         <Section title={t('Benachrichtigungen')}>
-          <Text className="text-sm text-muted-foreground">{t('Solange die App läuft, kommen neue Inbox-Einträge als Systembenachrichtigung. Push bei geschlossener App braucht FCM (siehe README).')}</Text>
-          <Text className="text-sm">{t('Im Hintergrund verbunden bleiben')}</Text>
-          <Choice
-            options={[{ id: 'auto', label: t('Während Hermes arbeitet') }, { id: 'always', label: t('Immer') }, { id: 'off', label: t('Aus') }]}
-            value={keep}
-            onChange={(v) => { setKeep(v); setKeepAliveMode(v) }}
-          />
-          <Text className="text-xs text-muted-foreground">{t('Android friert Apps im Hintergrund nach Sekunden ein. Eine dezente Daueranzeige hält die Verbindung offen, damit Antworten ankommen. „Immer“ kostet mehr Akku.')}</Text>
-          <Button variant="outline" onPress={async () => { const ok = await setupNotifications(true); if (ok) await testNotification(); else notice(t('Benachrichtigungen sind aus'), t('Erlaube sie in den Android-Einstellungen der App.')) }}>
+          {Platform.OS === 'web' ? (
+            <Text className="text-sm text-muted-foreground">{t('Solange die App läuft (auch nur im Tray), kommen neue Inbox-Einträge als Systembenachrichtigung; ein Klick öffnet den Chat.')}</Text>
+          ) : (
+            <>
+              <Text className="text-sm text-muted-foreground">{t('Solange die App läuft, kommen neue Inbox-Einträge als Systembenachrichtigung. Push bei geschlossener App braucht FCM (siehe README).')}</Text>
+              <Text className="text-sm">{t('Im Hintergrund verbunden bleiben')}</Text>
+              <Choice
+                options={[{ id: 'auto', label: t('Während Hermes arbeitet') }, { id: 'always', label: t('Immer') }, { id: 'off', label: t('Aus') }]}
+                value={keep}
+                onChange={(v) => { setKeep(v); setKeepAliveMode(v) }}
+              />
+              <Text className="text-xs text-muted-foreground">{t('Android friert Apps im Hintergrund nach Sekunden ein. Eine dezente Daueranzeige hält die Verbindung offen, damit Antworten ankommen. „Immer“ kostet mehr Akku.')}</Text>
+            </>
+          )}
+          {notifBlocked && <PermissionNotice kind="notifications" />}
+          <Button variant="outline" onPress={async () => { const ok = await setupNotifications(true); setNotifBlocked(!ok); if (ok) await testNotification() }}>
             <Text>{t('Test-Benachrichtigung')}</Text>
           </Button>
-          <Button variant="outline" onPress={async () => setPush(await registerRemotePush())}>
-            <Text>{t('Push (FCM) aktivieren')}</Text>
-          </Button>
+          {Platform.OS !== 'web' && (
+            <Button variant="outline" onPress={async () => setPush(await registerRemotePush())}>
+              <Text>{t('Push (FCM) aktivieren')}</Text>
+            </Button>
+          )}
           {!!push && <Text className="text-xs text-muted-foreground">{push === 'on' ? t('Push ist aktiv.') : push === 'unavailable' ? t('Diese App-Version wurde ohne Firebase gebaut (google-services.json fehlt) – nur lokale Benachrichtigungen.') : push === 'denied' ? t('Benachrichtigungen sind nicht erlaubt.') : t('Das Backend kennt noch keinen nativen Push (Backend aktualisieren).')}</Text>}
         </Section>
 

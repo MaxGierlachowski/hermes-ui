@@ -21,6 +21,14 @@ All notable changes. The backend + web UI and the app share one repository; app 
 - Web cold start 431 → 157 ms (one bundle, tree shaking); measurements in `scripts/measure-ui.mjs`.
 - Fixed: Esc in the lightbox no longer also closes the chat; tablet columns keep their width.
 
+### Desktop app: permissions (`desktop-spike-2`)
+- macOS now asks for the microphone, the camera and notifications (usage texts in `Info.plist`,
+  hardened-runtime entitlements, notifications through `UNUserNotificationCenter`); a click on a
+  notification opens its chat. A refused permission shows "Open System Settings".
+- Camera in the desktop composer (live preview, the photo becomes an attachment).
+- Stable ad-hoc signature (`scripts/sign-adhoc.sh`): permission decisions survive rebuilds.
+- Keychain entries per bundle identifier; Keychain calls no longer block the window.
+
 ### Desktop app (new, `desktop-app/`, unsigned spike)
 - Tauri 2 shell for macOS: overlay title bar, menu bar, tray, launch at login, global shortcut,
   Keychain, notifications, the backend as a built-in sidecar or a connection to a running one.

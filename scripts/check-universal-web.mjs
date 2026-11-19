@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Interaction check of the universal app's wide (desktop) layout in the demo mode: ⌘K palette, keyboard
 // navigation, Esc, text selection, Enter to send, new chat, right-click menu, drag & drop between columns,
-// split resize; lightbox, voice message, image paste. Serve app/dist-web on :8811 first (static, index.html fallback).
+// split resize; lightbox, voice message, image paste, camera, refused permissions. Serve app/dist-web on :8811 first (static, index.html fallback).
 //   node scripts/check-universal-web.mjs [chromium|webkit]
 import { chromium, webkit } from '@playwright/test'
 const engine = process.argv[2] || 'chromium'
@@ -89,4 +89,26 @@ await mp.evaluate(async () => {
 })
 await mp.waitForTimeout(600)
 ok('pasted image becomes an attachment', await mp.locator('[aria-label="Remove image"]').count() === 1)
+if (engine !== 'webkit') {
+  // Camera: live preview (fake device), the shot becomes a second attachment.
+  await mctx.grantPermissions(['microphone', 'camera'])
+  await mp.locator('[aria-label="Take photo"]').first().click(); await mp.waitForTimeout(1500)
+  await mp.getByRole('button', { name: 'Take photo' }).last().click(); await mp.waitForTimeout(800)
+  ok('camera photo becomes an attachment', await mp.locator('[aria-label="Remove image"]').count() === 2)
+}
 await mb.close()
+
+// Refused microphone / camera: a notice with the way to the settings instead of a silent failure.
+if (engine !== 'webkit') {
+  const db = await chromium.launch({ args: ['--use-fake-device-for-media-stream'] })
+  const dctx = await db.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-GB' })
+  const dp = await dctx.newPage()
+  await dp.goto('http://127.0.0.1:8811/demo?thread=demo-site', { waitUntil: 'networkidle' }); await dp.waitForTimeout(1500)
+  await dp.addInitScript(() => {})
+  await dp.evaluate(() => { navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError')) })
+  await dp.locator('[aria-label="Voice message"]').click(); await dp.waitForTimeout(800)
+  ok('refused microphone shows a notice', await dp.getByText('Microphone not allowed').isVisible())
+  await dp.locator('[aria-label="Take photo"]').first().click(); await dp.waitForTimeout(800)
+  ok('refused camera shows a notice', await dp.getByText('Camera not allowed').isVisible())
+  await db.close()
+}

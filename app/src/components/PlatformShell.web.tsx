@@ -4,7 +4,10 @@
 // menu actions are handled by DesktopHome, where the state they act on lives.
 import { useEffect, type ReactNode } from 'react'
 import { badgeCount, useStore } from '@/lib/store'
-import { isDesktop, setBadge } from '@/lib/desktop'
+import { isDesktop, onShellEvent, setBadge } from '@/lib/desktop'
+import { setupNotifications } from '@/lib/notify'
+import { setTab } from '@/lib/store'
+import { showThread } from '@/lib/nav'
 
 const CSS = `
 html, body, #root { height: 100%; overscroll-behavior: none; }
@@ -22,6 +25,12 @@ ${isDesktop ? 'html { cursor: default; } a, [role="button"], [role="tab"] { curs
 
 export function PlatformShell({ children }: { children: ReactNode }) {
   const badge = useStore((s) => badgeCount(s))
+  const auth = useStore((s) => s.auth)
+  // Desktop app: ask for notifications once there is something to notify about (first connection);
+  // macOS shows its dialog only the first time, later calls just read the decision.
+  useEffect(() => { if (isDesktop && auth === 'ok') setupNotifications(true).catch(() => {}) }, [auth === 'ok'])
+  // A click on a system notification: its chat, or the inbox.
+  useEffect(() => onShellEvent<string>('notification-click', (session) => { if (session) showThread(session); else setTab('inbox') }), [])
   useEffect(() => {
     const el = document.createElement('style')
     el.textContent = CSS

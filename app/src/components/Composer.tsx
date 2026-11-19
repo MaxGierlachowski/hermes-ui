@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ComponentRef } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from 'react-native'
+import { ActivityIndicator, Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
 import { Image } from 'expo-image'
 import * as ImagePicker from 'expo-image-picker'
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio'
@@ -15,6 +15,9 @@ import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
 import { toast } from '@/lib/store'
 import { isWebDesktop, useComposerKeys } from '@/lib/web-input'
+import { CameraCapture } from './CameraCapture'
+import { PermissionNotice } from './PermissionNotice'
+import type { PermissionKind } from '@/lib/permissions'
 
 export type Picked = { uri: string; upload: Upload }
 
@@ -52,6 +55,9 @@ export function Composer({ onSend, running, onStop, initial, placeholder, autoFo
   const [text, setTextState] = useState(initial?.text || (draftKey ? drafts.get(draftKey) : '') || '')
   const setText = (v: string) => { setTextState(v); if (draftKey) { if (v) drafts.set(draftKey, v); else drafts.delete(draftKey) } }
   const box = useRef<ComponentRef<typeof View>>(null)
+  // A refused microphone / camera: a notice with the way to the settings instead of a silent failure.
+  const [blocked, setBlocked] = useState<PermissionKind | null>(null)
+  const [camera, setCamera] = useState(false)
   const [images, setImages] = useState<Picked[]>(initial?.images || [])
   const [busy, setBusy] = useState(false)
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
@@ -84,10 +90,18 @@ export function Composer({ onSend, running, onStop, initial, placeholder, autoFo
       return
     }
     const perm = await requestRecordingPermissionsAsync()
-    if (!perm.granted) { toast(`${t('Mikrofon nicht erlaubt')}: ${t('Erlaube das Mikrofon in den Android-Einstellungen der App.')}`, 'error'); return }
-    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true })
-    await recorder.prepareToRecordAsync()
-    recorder.record()
+    if (!perm.granted) { setBlocked('microphone'); return }
+    setBlocked(null)
+    try {
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true })
+      await recorder.prepareToRecordAsync()
+      recorder.record()
+    } catch (e) {
+      // The browser / WebKit refuses with NotAllowedError when the system denied the microphone.
+      if (e instanceof Error && /NotAllowed|Permission|denied/i.test(`${e.name} ${e.message}`)) setBlocked('microphone')
+      else toast(e instanceof Error ? e.message : String(e), 'error')
+      return
+    }
     haptic('warning')
   }
 
@@ -98,6 +112,8 @@ export function Composer({ onSend, running, onStop, initial, placeholder, autoFo
   const secs = Math.floor((rec.durationMillis || 0) / 1000)
   return (
     <View ref={box} className="gap-2 border-t border-border bg-background px-3 pb-2 pt-2">
+      {blocked && <PermissionNotice kind={blocked} onClose={() => setBlocked(null)} />}
+      <CameraCapture open={camera} onClose={() => setCamera(false)} onPhoto={(p) => setImages((x) => [...x, p].slice(0, 6))} onDenied={() => setBlocked('camera')} />
       {images.length > 0 && (
         <ScrollView horizontal contentContainerClassName="gap-2">
           {images.map((img, i) => (
@@ -132,11 +148,19 @@ export function Composer({ onSend, running, onStop, initial, placeholder, autoFo
         <Pressable disabled={rec.isRecording} onPress={async () => { const p = await pickImage('library'); if (p.length) setImages((x) => [...x, ...p].slice(0, 6)) }} className={cn('items-center justify-center rounded-full active:bg-accent web:hover:bg-accent', isWebDesktop ? 'h-9 w-9' : 'h-12 w-12')} accessibilityLabel={t('Bild anhängen')}>
           <Icon as={ImagePlus} tone="muted-foreground" />
         </Pressable>
-        {!isWebDesktop && (
-          <Pressable disabled={rec.isRecording} onPress={async () => { const p = await pickImage('camera'); if (p.length) setImages((x) => [...x, ...p].slice(0, 6)) }} className="h-12 w-12 items-center justify-center rounded-full active:bg-accent" accessibilityLabel={t('Foto aufnehmen')}>
-            <Icon as={Camera} tone="muted-foreground" />
-          </Pressable>
-        )}
+        <Pressable
+          disabled={rec.isRecording}
+          onPress={async () => {
+            // Desktop / web: the live camera preview; phones: the system camera.
+            if (Platform.OS === 'web') { setCamera(true); return }
+            const p = await pickImage('camera')
+            if (p.length) setImages((x) => [...x, ...p].slice(0, 6))
+          }}
+          className={cn('items-center justify-center rounded-full active:bg-accent web:hover:bg-accent', BTN)}
+          accessibilityLabel={t('Foto aufnehmen')}
+        >
+          <Icon as={Camera} tone="muted-foreground" />
+        </Pressable>
         {isWebDesktop && <Text className="ml-1 text-xs text-muted-foreground">{t('↵ senden · ⇧↵ neue Zeile · Bilder per Einfügen oder Drag & Drop')}</Text>}
         <View className="flex-1" />
         {!canSend && (
