@@ -66,6 +66,11 @@ npm run verify            # backend syntax check + unit tests, typecheck web + a
 npm run test:ui           # Playwright UI tests (phones + desktop pixel baselines; macOS fonts)
 npm run lint              # oxlint (web)
 cd mobile-app && npx expo run:android   # dev client on an emulator / phone
+cd mobile-app && npm run web            # the same app in the browser (Expo web, :8081)
+cd mobile-app && npm run web:export     # static web build → mobile-app/dist-web
+cd desktop-app && npm ci && npm run build   # macOS desktop app (.app + .dmg), see desktop-app.md
+node scripts/measure-ui.mjs             # shadcn vs universal web build, same data (serve both first)
+node scripts/check-universal-web.mjs    # desktop-layout interaction check (dist-web on :8811)
 ```
 
 Run a second backend next to one that is already running (e.g. your daily one on 8787):

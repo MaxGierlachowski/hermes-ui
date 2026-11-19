@@ -31,6 +31,7 @@ flowchart LR
     igw -->|HTTP /api + X-Iroh-Remote-Id| backend
   end
   local["Local browser"] -->|http://127.0.0.1:8787<br/>token / cookie| backend
+  desk["Desktop app (Tauri)<br/>universal web build"] -->|HTTP + token<br/>CORS tauri://localhost| backend
   relay(["iroh relay<br/>(public or your own)"])
   web["Web UI (static PWA)<br/>iroh-fetch WASM"]
   app["Mobile app<br/>expo-iroh (Rust)"]
@@ -200,7 +201,8 @@ and anything in `HERMES_UI_IMAGE_ROOTS`. Details in [security.md](security.md#fi
 |---|---|
 | `server/` | Backend: `server.mjs` (HTTP API, SSE, column logic), `src/` (Hermes client, `state.db` reader, Paseo adapter, inbox, push, iroh, tunnels, devices, config), `bin/` (CLI), `scripts/` (LaunchAgent generator), `examples/`, `test/` (unit tests). |
 | `web/` | React 19 + Vite + Tailwind 4 + shadcn/ui PWA. `e2e/` holds the Playwright tests (touch targets, mobile behaviour, desktop pixel regression). |
-| `mobile-app/` | Expo SDK 58 app (Expo Router, NativeWind). `modules/expo-iroh/` is the native iroh client (Rust + UniFFI, Kotlin, Swift). |
+| `mobile-app/` | Expo SDK 58 app (Expo Router, NativeWind) for iOS, Android and, through react-native-web, the web and the desktop app. Platform layers are `*.web.ts` files next to their native versions. `modules/expo-iroh/` is the native iroh client (Rust + UniFFI, Kotlin, Swift). |
+| `desktop-app/` | Tauri 2 shell (Rust) around the app's web build: menu, tray, Keychain, the backend as a sidecar ([desktop-app.md](desktop-app.md), [ADR 0012](decisions/0012-universal-app.md)). |
 | `shared/` | TypeScript used by web and app: types, SSE parser, pairing links, media-tag rules, English texts. |
 | `docs/` | This documentation and the [decision records](decisions/README.md). |
 | `store/` | App store listing texts and form drafts. |

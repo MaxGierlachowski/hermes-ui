@@ -231,3 +231,27 @@ custom domain can. Then set `HERMES_UI_VERIFIED_LINK_HOST`.
 - [ ] Demo mode checked on a phone (pairing screen → Try the demo)
 - [ ] Tag `mobile-app-vX.Y.Z`, push; pre-release with APKs + AAB + SHA-256 list
 - [ ] Play: internal → closed → production; App Store: TestFlight → review
+
+## Desktop app (macOS)
+
+The desktop app ([desktop-app.md](desktop-app.md)) is a spike: its pre-releases (`desktop-spike-N`) carry
+an **unsigned** DMG for Apple silicon. To ship it to others:
+
+1. **Developer ID**: the Apple Developer Program (same account as for the App Store) → certificate
+   "Developer ID Application" in Xcode → Settings → Accounts. Signing identity e.g.
+   `Developer ID Application: <Name> (<TEAMID>)`.
+2. **Sign**: `APPLE_SIGNING_IDENTITY="Developer ID Application: …" npm run build` in `desktop-app/`
+   (or `bundle.macOS.signingIdentity` in `tauri.conf.json`, today `-` = ad hoc). The bundled Node binary
+   is signed with the same identity and needs `Entitlements.plist` (JIT).
+3. **Notarize**: set `APPLE_API_ISSUER`, `APPLE_API_KEY` and `APPLE_API_KEY_PATH` (an App Store Connect
+   API key with the Developer role) or `APPLE_ID`, `APPLE_PASSWORD` (app-specific password) and
+   `APPLE_TEAM_ID`; `tauri build` notarizes and staples the app and the DMG.
+4. **Check**: `spctl -a -vvv -t install "Hermes UI.app"` says "Notarized Developer ID";
+   `codesign -dv --verbose=4 "Hermes UI.app/Contents/MacOS/node"` shows the hardened runtime.
+5. **Universal binary** (Intel + Apple silicon): `rustup target add x86_64-apple-darwin`,
+   `tauri build --target universal-apple-darwin`, and a universal Node binary for the sidecar
+   (`lipo -create` of the arm64 and x64 builds).
+6. **Updates** (later): Tauri's updater plugin with a signed `latest.json` on GitHub Releases.
+
+Until then: right-click → Open on first launch (see [desktop-app.md](desktop-app.md#install-unsigned-beta)).
+

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Alert, Pressable, ScrollView, View } from 'react-native'
+import { Pressable, ScrollView, View } from 'react-native'
 import { router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useColorScheme } from 'nativewind'
@@ -16,6 +16,7 @@ import { exitDemo, setPrefs, unpair, useStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { applyTheme } from '@/lib/theme-mode'
+import { confirm, notice } from '@/lib/confirm'
 import { haptic } from '@/lib/haptics'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -108,7 +109,7 @@ export default function Settings() {
             onChange={(v) => { setKeep(v); setKeepAliveMode(v) }}
           />
           <Text className="text-xs text-muted-foreground">{t('Android friert Apps im Hintergrund nach Sekunden ein. Eine dezente Daueranzeige hält die Verbindung offen, damit Antworten ankommen. „Immer“ kostet mehr Akku.')}</Text>
-          <Button variant="outline" onPress={async () => { const ok = await setupNotifications(true); if (ok) await testNotification(); else Alert.alert(t('Benachrichtigungen sind aus'), t('Erlaube sie in den Android-Einstellungen der App.')) }}>
+          <Button variant="outline" onPress={async () => { const ok = await setupNotifications(true); if (ok) await testNotification(); else notice(t('Benachrichtigungen sind aus'), t('Erlaube sie in den Android-Einstellungen der App.')) }}>
             <Text>{t('Test-Benachrichtigung')}</Text>
           </Button>
           <Button variant="outline" onPress={async () => setPush(await registerRemotePush())}>
@@ -123,10 +124,11 @@ export default function Settings() {
               <Text>{t('Demo beenden und koppeln')}</Text>
             </Button>
           ) : (
-            <Button variant="destructive" onPress={() => Alert.alert(t('Verbindung vergessen'), t('Die App vergisst das Backend. Die Geräte-Identität bleibt, neu koppeln geht jederzeit.'), [
-              { text: t('Abbrechen'), style: 'cancel' },
-              { text: t('Vergessen'), style: 'destructive', onPress: async () => { await unpair(); router.replace('/pair') } },
-            ])}>
+            <Button variant="destructive" onPress={async () => {
+              if (!(await confirm(t('Verbindung vergessen'), t('Die App vergisst das Backend. Die Geräte-Identität bleibt, neu koppeln geht jederzeit.'), t('Vergessen')))) return
+              await unpair()
+              router.replace('/pair')
+            }}>
               <Text>{t('Verbindung vergessen')}</Text>
             </Button>
           )}

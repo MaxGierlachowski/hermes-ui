@@ -1,6 +1,6 @@
 # 0004: Tauri 2 as an option (desktop and universal app)
 
-- **Status:** Open, under evaluation
+- **Status:** Open; spike done, results and recommendation in [ADR 0012](0012-universal-app.md)
 - **Date:** 2026-11
 
 ## Context

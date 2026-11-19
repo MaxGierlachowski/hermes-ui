@@ -3,6 +3,24 @@
 All notable changes. The backend + web UI and the mobile app share one repository; mobile releases are
 tagged `mobile-app-vX.Y.Z` (version and build number in `mobile-app/version.json`).
 
+## Unreleased – universal spike
+
+### App: one codebase for phone, web and desktop (spike, ADR 0012)
+- The app also builds for the web (react-native-web): platform layers for transport (local HTTP or
+  iroh-fetch WASM), Keychain / localStorage, IndexedDB cache, notifications, media, voice.
+- Wide layouts: two columns on tablets, four columns + resizable chat pane on desktops; ⌘K palette,
+  keyboard navigation, drag & drop between columns, right-click menus, Enter to send, desktop density.
+- Web cold start 431 → 157 ms (one bundle, tree shaking); measurements in `scripts/measure-ui.mjs`.
+- Fixed: Esc in the lightbox no longer also closes the chat; tablet columns keep their width.
+
+### Desktop app (new, `desktop-app/`, unsigned spike)
+- Tauri 2 shell for macOS: overlay title bar, menu bar, tray, launch at login, global shortcut,
+  Keychain, notifications, the backend as a built-in sidecar or a connection to a running one.
+
+### Backend
+- `HERMES_UI_CORS_ORIGINS`: CORS for the desktop app (`tauri://localhost`, always) and listed origins,
+  Bearer token only.
+
 ## 0.3.0 – 2026-11-19
 
 ### Mobile app (0.3.0, build 3)

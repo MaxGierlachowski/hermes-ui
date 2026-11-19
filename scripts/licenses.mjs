@@ -47,6 +47,11 @@ try {
   const meta = JSON.parse(execFileSync('cargo', ['metadata', '--format-version', '1', '--locked'], { cwd: path.join(root, 'mobile-app/modules/expo-iroh/rust'), encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] }))
   for (const p of meta.packages) if (p.source) add(p.name, p.version, p.license, 'mobile-app (Rust)')
 } catch { console.error('cargo metadata failed: Rust crates not listed') }
+// Cargo: the desktop shell (desktop-app/src-tauri; Tauri and its plugins, all platforms).
+try {
+  const meta = JSON.parse(execFileSync('cargo', ['metadata', '--format-version', '1', '--locked'], { cwd: path.join(root, 'desktop-app/src-tauri'), encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] }))
+  for (const p of meta.packages) if (p.source) add(p.name, p.version, p.license, 'desktop-app (Rust)')
+} catch { console.error('cargo metadata failed: desktop crates not listed') }
 
 const byLicense = new Map()
 for (const r of rows.values()) {

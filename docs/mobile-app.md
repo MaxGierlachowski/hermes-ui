@@ -94,7 +94,29 @@ Build-time settings come from `mobile-app/.env` (see [`.env.example`](../mobile-
 app name and id, URL scheme, pairing-link hosts, Apple team id, EAS project id, ABIs, foreground-service
 type, Firebase files. Version and build number: [`version.json`](../mobile-app/version.json).
 
+## Web and desktop builds
+
+The same app builds for the web (`npm run web`, `npm run web:export`) and runs in the desktop app
+([desktop-app.md](desktop-app.md)). Where a native module has no web version, a `*.web.ts(x)` file next to
+the native one takes its place, with the same exports; Metro picks it for the web build, TypeScript checks
+both:
+
+| Native | Web / desktop |
+|---|---|
+| `lib/transport.ts` (expo-iroh) | `lib/transport.web.ts` (HTTP to 127.0.0.1 with the token, or iroh-fetch WASM) |
+| `lib/cache.ts` (files) | `lib/cache.web.ts` (IndexedDB) |
+| `lib/media.ts`, `lib/upload.ts` | `lib/media.web.ts`, `lib/upload.web.ts` |
+| `lib/notify.ts`, `lib/haptics.ts`, `lib/keepalive.ts` | `.web.ts` (Tauri notifications / Notification API, no-ops) |
+| `lib/desktop.ts`, `lib/web-input.ts` (no-ops) | `.web.ts` (Tauri bridge; keyboard, paste / drop, drag & drop, resize) |
+| `components/Pager.tsx`, `PlatformShell.tsx`, `thread/ThreadList.tsx` | `.web.tsx` (scroll snap; shell; a natively scrolling thread) |
+
+The layout follows the window width (`lib/nav.ts`): phone (< 700), tablet (two columns), desktop (≥ 1024:
+four columns, chat in a split pane). The web export uses one bundle (`asyncRoutes` off) and tree shaking;
+`public/vendor/` (iroh-fetch for the browser) is copied by `scripts/web-vendor.mjs`.
+
 ## Demo mode
+
+`/demo?long=450` (web) or `hermesui://demo?long=450` adds a chat with 450 messages for measurements.
 
 "Try the demo" on the pairing screen starts the app without a backend. `src/lib/demo.ts` stands in for
 the iroh connection: it answers the same API paths and sends the same live events, from made-up sample

@@ -333,4 +333,16 @@ export const EN: Record<string, string> = {
   'beenden': 'exit',
   'Demo beenden': 'Exit demo',
   'Demo beenden und koppeln': 'Exit the demo and pair',
+  // Universal app: desktop layout, desktop app
+  'Spalte automatisch': 'Column automatic',
+  'Titel kopieren': 'Copy title',
+  'Session-ID kopieren': 'Copy session id',
+  'Kopiert': 'Copied',
+  'Kopieren fehlgeschlagen': 'Copy failed',
+  'Breite ändern': 'Resize',
+  'Backend auf diesem Rechner': 'Backend on this machine',
+  'Lokal verbinden': 'Connect locally',
+  'Direkt über HTTP, ohne iroh. Das Backend muss diese Oberfläche per HERMES_UI_CORS_ORIGINS zulassen; die Desktop-App ist immer zugelassen.': 'Plain HTTP, no iroh. The backend has to allow this page in HERMES_UI_CORS_ORIGINS; the desktop app is always allowed.',
+  'Eingebautes Backend starten': 'Start built-in backend',
+  'Startet das Backend in dieser App (eigener Datenordner, Port 8799). Hermes muss auf diesem Rechner laufen.': 'Runs the backend inside this app (own data folder, port 8799). Hermes has to run on this machine.',
 }
