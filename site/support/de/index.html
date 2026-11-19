@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="de">
+<head>
+<!-- Static, self-contained page: no external fonts, scripts, trackers or cookies. The app name appears
+     only in <title> and in the header (marked APP NAME). Placeholders: {{PROVIDER_NAME}},
+     {{PROVIDER_ADDRESS}}, {{CONTACT_EMAIL}}. -->
+<title>Support · Hermes UI</title>
+<meta name="description" content="Hilfe, FAQ und Kontakt für den inoffiziellen, quelloffenen mobilen Client für Hermes Agent.">
+<link rel="alternate" hreflang="en" href="../">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="index,follow">
+<style>
+  :root { --bg:#fafafa; --fg:#18181b; --muted:#52525b; --line:#e4e4e7; --card:#fff; --primary:#615fff; --code:#f4f4f5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#09090b; --fg:#f4f4f5; --muted:#a1a1aa; --line:#27272a; --card:#18181b; --primary:#7c86ff; --code:#27272a; }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin:0; background:var(--bg); color:var(--fg); font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header { display:flex; align-items:center; gap:.75rem; margin-bottom:2rem; flex-wrap:wrap; }
+  header svg { width:40px; height:40px; flex:none; }
+  header .name { font-weight:600; font-size:1.05rem; }
+  header nav { margin-left:auto; display:flex; gap:1rem; font-size:.9rem; }
+  h1 { font-size:2rem; line-height:1.2; letter-spacing:-.02em; margin:.25rem 0 .5rem; }
+  h2 { font-size:1.25rem; letter-spacing:-.01em; margin:2.25rem 0 .5rem; padding-top:.5rem; border-top:1px solid var(--line); }
+  h3 { font-size:1.05rem; margin:1.5rem 0 .25rem; }
+  p, ul, ol, table { margin:.6rem 0; }
+  ul, ol { padding-left:1.3rem; }
+  li { margin:.25rem 0; }
+  a { color:var(--primary); text-underline-offset:2px; }
+  .muted { color:var(--muted); }
+  .lead { font-size:1.08rem; color:var(--muted); }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:1rem 1.25rem; margin:1.25rem 0; }
+  .box ul { margin:.25rem 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.9em; background:var(--code); padding:.1em .35em; border-radius:5px; overflow-wrap:anywhere; }
+  table { border-collapse:collapse; width:100%; font-size:.95rem; }
+  th, td { text-align:left; vertical-align:top; padding:.5rem .6rem; border-bottom:1px solid var(--line); }
+  th { font-weight:600; }
+  details { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:.75rem 1rem; margin:.6rem 0; }
+  summary { cursor:pointer; font-weight:600; }
+  details[open] summary { margin-bottom:.4rem; }
+  footer { margin-top:3rem; padding-top:1rem; border-top:1px solid var(--line); font-size:.9rem; color:var(--muted); }
+  address { font-style:normal; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#6366f1"/><path d="M10 9v14M22 9v14M10 16h12" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none"/></svg>
+  <span class="name"><!-- APP NAME -->Hermes UI</span>
+  <nav><a href="../../privacy/de/">Datenschutz</a><a href="../" hreflang="en" lang="en">English</a></nav>
+</header>
+
+<h1>Support</h1>
+<p class="lead">Ein mobiler Client für Hermes Agent, den du selbst hostest: jeder Hermes-Chat als Karte auf einem Live-Board, mit Antworten in Echtzeit, Freigaben, Rückfragen und einer Inbox. Open Source (MIT). Inoffiziell: keine Verbindung zu Nous Research und nicht von Nous Research unterstützt.</p>
+
+<div class="box">
+  <strong>Hilfe bekommen</strong>
+  <ul>
+    <li>Fehler und Fragen: <a href="https://github.com/MaxGierlachowski/hermes-ui/issues">GitHub Issues</a> (gern auf Deutsch)</li>
+    <li>Sicherheitslücken: <a href="https://github.com/MaxGierlachowski/hermes-ui/security/advisories/new">vertraulich melden</a> (nicht als öffentliches Issue)</li>
+    <li>Alles andere: <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a></li>
+  </ul>
+</div>
+
+<h2 id="voraussetzungen">Was du brauchst</h2>
+<ul>
+  <li><strong>Hermes Agent</strong> auf deinem Rechner (die Desktop-App oder <code>hermes gateway run</code>).</li>
+  <li><strong>Node.js 24</strong> oder neuer auf demselben Rechner.</li>
+  <li>Das <strong>hermes-ui-Backend</strong> aus dem <a href="https://github.com/MaxGierlachowski/hermes-ui">Projekt auf GitHub</a>, kostenlos und quelloffen.</li>
+  <li>Die App auf deinem Handy. Ein Konto brauchst du nirgends.</li>
+</ul>
+<p>Schritt für Schritt: <a href="https://github.com/MaxGierlachowski/hermes-ui/blob/main/docs/self-hosting.md">Anleitung zum Selbst-Hosten</a> (Englisch). Kurzfassung:</p>
+<ol>
+  <li><code>git clone https://github.com/MaxGierlachowski/hermes-ui.git &amp;&amp; cd hermes-ui &amp;&amp; npm install</code></li>
+  <li><code>HERMES_UI_REMOTE=iroh npm start</code> startet das Backend mit Fernzugriff über iroh.</li>
+  <li><code>npx hermes-ui pair</code> zeigt einen QR-Code.</li>
+  <li>In der App: <em>QR-Code scannen</em>. Fertig.</li>
+</ol>
+
+<h2 id="faq">Häufige Fragen</h2>
+
+<details id="demo">
+  <summary>Kann ich die App ohne Backend ausprobieren?</summary>
+  <p>Ja. Tipp auf dem ersten Bildschirm auf <em>Demo ansehen</em>. Die App läuft dann mit Beispieldaten, die auf dem Gerät entstehen – mit Antworten in Echtzeit, einer Freigabe, einer Rückfrage, Coding-Agenten und der Inbox. Dabei wird nichts gesendet. Beenden kannst du die Demo über das Abzeichen <em>Demo · beenden</em> oben oder in den Einstellungen.</p>
+</details>
+
+<details id="koppeln">
+  <summary>Wie funktioniert das Koppeln?</summary>
+  <p>Der QR-Code von <code>hermes-ui pair</code> (oder <em>Fernzugriff → Gerät koppeln</em> in der Weboberfläche auf deinem Rechner) enthält die Adresse deines Backends und einen Einmal-Code. Du kannst den Link auch ins Feld auf dem Kopplungsbildschirm einfügen oder ihn auf dem Handy öffnen. Der Code gilt nur ein paar Minuten und nur einmal; klappt das Koppeln nicht, erzeug einfach einen neuen.</p>
+  <p>Danach lässt dein Backend nur noch gekoppelte Geräte zu. Im Fernzugriff-Dialog auf deinem Rechner kannst du ein Gerät jederzeit wieder entfernen.</p>
+</details>
+
+<details id="sicherheit">
+  <summary>Ist die Verbindung sicher? Muss ich einen Port öffnen?</summary>
+  <p>Einen Port musst du nicht öffnen. App und Backend verbinden sich Ende-zu-Ende-verschlüsselt über iroh (QUIC mit TLS 1.3): direkt, wenn es geht, sonst über ein Relay, das nur verschlüsselte Pakete weiterreicht. Standardmäßig nutzt dein Backend die öffentlichen Relays von n0; du kannst stattdessen ein eigenes Relay betreiben (<code>IROH_RELAY_URL</code>). Mehr dazu in der <a href="../../privacy/de/#relays">Datenschutzerklärung</a>.</p>
+</details>
+
+<details id="nicht-verbunden">
+  <summary>Die App zeigt „Nicht verbunden“ oder verbindet sich endlos</summary>
+  <ul>
+    <li>Läuft das Backend mit Fernzugriff? <code>npx hermes-ui status</code> auf deinem Rechner zeigt Backend, Fernzugriff und Geräte.</li>
+    <li>Wurde das Gerät entfernt oder das Datenverzeichnis des Backends zurückgesetzt? Dann neu koppeln (Einstellungen → <em>Verbindung vergessen</em>, danach einen neuen Code scannen).</li>
+    <li>Manche Netze (Firmen-WLAN, einige Mobilfunkanbieter) sperren UDP. Dann nimmt die App das Relay; ist auch das gesperrt, probier ein anderes Netz.</li>
+    <li>Offline zeigt die App den letzten Stand aus dem Cache („Stand …“) und verbindet sich von selbst neu.</li>
+  </ul>
+</details>
+
+<details id="langsam">
+  <summary>Die Verbindung ist langsam</summary>
+  <p>In den Einstellungen siehst du den aktuellen Weg: <em>direkt</em> oder <em>Relay</em>. Im selben WLAN sollte die Verbindung direkt sein. Unter iOS erlaube der App das <em>Lokale Netzwerk</em> (iOS-Einstellungen → Datenschutz &amp; Sicherheit → Lokales Netzwerk). Manche Router verhindern direkte Wege; ein Relay in deiner Nähe (oder ein eigenes) hilft.</p>
+</details>
+
+<details id="benachrichtigungen">
+  <summary>Ich bekomme keine Benachrichtigungen</summary>
+  <ul>
+    <li>Erlaube der App Mitteilungen in den Systemeinstellungen und prüf die Benachrichtigungsoptionen in den Einstellungen der App.</li>
+    <li>Die App benachrichtigt, solange sie läuft. Android stoppt Apps im Hintergrund nach wenigen Sekunden: Schalte Einstellungen → <em>Im Hintergrund verbunden bleiben</em> ein („Während Hermes arbeitet“ oder „Immer“). Eine dezente Daueranzeige hält dann die Verbindung offen. Bleiben die Benachrichtigungen trotzdem aus, nimm die App von der Akku-Optimierung aus.</li>
+    <li>Unter iOS kommen Benachrichtigungen, solange die App offen ist oder gerade benutzt wurde; iOS pausiert Apps im Hintergrund.</li>
+    <li>Push bei geschlossener App braucht ein eigenes Firebase-Projekt und eine selbst gebaute App; siehe <a href="https://github.com/MaxGierlachowski/hermes-ui/blob/main/docs/mobile-app.md#push-with-the-app-closed-fcm">README der mobilen App</a> (Englisch).</li>
+  </ul>
+</details>
+
+<details id="medien">
+  <summary>Bilder oder Sprachnachrichten funktionieren nicht</summary>
+  <ul>
+    <li>Erlaube Kamera, Mikrofon oder Fotos, wenn die App fragt (oder später in den Systemeinstellungen).</li>
+    <li>Sprachnachrichten transkribiert Hermes Agent selbst; die Spracherkennung muss dort eingerichtet sein.</li>
+    <li>Bilder, auf die Agenten mit einem lokalen Pfad verweisen, zeigt das Backend nur aus freigegebenen Ordnern (<code>HERMES_UI_IMAGE_ROOTS</code>).</li>
+  </ul>
+</details>
+
+<details id="paseo">
+  <summary>Was sind die Paseo-Agenten?</summary>
+  <p>Wenn du die Coding-Agenten-App Paseo nutzt, zeigt das Board die Agenten, die ein Hermes-Chat gestartet hat, mit Transkripten zum Mitlesen, und du kannst ihre Berechtigungsanfragen aus der Inbox beantworten. Ohne Paseo bleibt dieser Teil einfach leer.</p>
+</details>
+
+<details id="daten">
+  <summary>Welche Daten erhebt die App?</summary>
+  <p>Für den Entwickler keine: kein Konto, keine Analyse, keine Werbung, kein Tracking. Deine Daten gehen nur zwischen deinem Handy und deinem eigenen Backend hin und her. Mehr in der <a href="../../privacy/de/">Datenschutzerklärung</a>.</p>
+</details>
+
+<details id="offiziell">
+  <summary>Ist das eine offizielle App von Hermes Agent?</summary>
+  <p>Nein. Es ist ein unabhängiges Open-Source-Projekt, das in keiner Verbindung zu Nous Research steht und von Nous Research weder unterstützt noch gesponsert wird.</p>
+</details>
+
+<h2 id="melden">Ein Problem melden</h2>
+<p>Leg ein Issue auf <a href="https://github.com/MaxGierlachowski/hermes-ui/issues">GitHub</a> an und schreib dazu:</p>
+<ul>
+  <li>die App-Version (unten in den Einstellungen) und die Systemversion deines Handys,</li>
+  <li>die Backend-Version und was <code>npx hermes-ui status</code> anzeigt,</li>
+  <li>was du gemacht hast, was du erwartet hast und was passiert ist; Screenshots helfen.</li>
+</ul>
+<p><strong>Niemals posten</strong>: Kopplungslinks, QR-Codes, Tokens oder den Inhalt von <code>.env</code> oder dem Datenverzeichnis des Backends – damit bekommt man Zugriff auf dein Backend.</p>
+<p><strong>Sicherheitslücken</strong> bitte vertraulich über die <a href="https://github.com/MaxGierlachowski/hermes-ui/security/advisories/new">private Schwachstellenmeldung von GitHub</a> melden.</p>
+
+<footer>
+  <p><a href="../../privacy/de/">Datenschutzerklärung</a> · <a href="../" hreflang="en">Support in English</a> · <a href="https://github.com/MaxGierlachowski/hermes-ui">Quellcode (MIT)</a></p>
+  <p>Anbieter: {{PROVIDER_NAME}}, {{PROVIDER_ADDRESS}}, <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a></p>
+  <p>Inoffizielle App. Keine Verbindung zu Nous Research und nicht von Nous Research unterstützt. „Hermes Agent“ wird nur genannt, um die Kompatibilität zu beschreiben.</p>
+</footer>
+</main>
+</body>
+</html>

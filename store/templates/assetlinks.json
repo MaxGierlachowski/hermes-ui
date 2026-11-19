@@ -1,0 +1,19 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation_extensions": {
+      "delegate_permission/common.handle_all_urls": {
+        "dynamic_app_deep_link_components": [
+          { "/": "/", "#": "iroh=*", "comments": "Pairing link of a UI hosted at the domain root: https://<host>/#iroh=…" },
+          { "/": "/hermes-ui/*", "#": "iroh=*", "comments": "Pairing link of a UI hosted below /hermes-ui/: https://<host>/hermes-ui/#iroh=…" },
+          { "/": "*", "exclude": true, "comments": "Everything else on the host stays in the browser." }
+        ]
+      }
+    },
+    "target": {
+      "namespace": "android_app",
+      "package_name": "{{ANDROID_PACKAGE}}",
+      "sha256_cert_fingerprints": ["{{SHA256_CERT_FINGERPRINT}}"]
+    }
+  }
+]

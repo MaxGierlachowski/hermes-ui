@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["{{APPLE_TEAM_ID}}.{{IOS_BUNDLE_ID}}"],
+        "components": [
+          { "/": "/", "#": "iroh=*", "comment": "Pairing link of a UI hosted at the domain root: https://<host>/#iroh=…" },
+          { "/": "/hermes-ui/*", "#": "iroh=*", "comment": "Pairing link of a UI hosted below /hermes-ui/: https://<host>/hermes-ui/#iroh=…" }
+        ]
+      }
+    ]
+  }
+}

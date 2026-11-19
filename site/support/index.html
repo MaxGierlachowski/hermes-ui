@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- Static, self-contained page: no external fonts, scripts, trackers or cookies. The app name appears
+     only in <title> and in the header (marked APP NAME). Placeholders: {{PROVIDER_NAME}},
+     {{PROVIDER_ADDRESS}}, {{CONTACT_EMAIL}}. -->
+<title>Support · Hermes UI</title>
+<meta name="description" content="Help, FAQ and contact for the unofficial, open-source mobile client for Hermes Agent.">
+<link rel="alternate" hreflang="de" href="de/">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="index,follow">
+<style>
+  :root { --bg:#fafafa; --fg:#18181b; --muted:#52525b; --line:#e4e4e7; --card:#fff; --primary:#615fff; --code:#f4f4f5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#09090b; --fg:#f4f4f5; --muted:#a1a1aa; --line:#27272a; --card:#18181b; --primary:#7c86ff; --code:#27272a; }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin:0; background:var(--bg); color:var(--fg); font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header { display:flex; align-items:center; gap:.75rem; margin-bottom:2rem; flex-wrap:wrap; }
+  header svg { width:40px; height:40px; flex:none; }
+  header .name { font-weight:600; font-size:1.05rem; }
+  header nav { margin-left:auto; display:flex; gap:1rem; font-size:.9rem; }
+  h1 { font-size:2rem; line-height:1.2; letter-spacing:-.02em; margin:.25rem 0 .5rem; }
+  h2 { font-size:1.25rem; letter-spacing:-.01em; margin:2.25rem 0 .5rem; padding-top:.5rem; border-top:1px solid var(--line); }
+  h3 { font-size:1.05rem; margin:1.5rem 0 .25rem; }
+  p, ul, ol, table { margin:.6rem 0; }
+  ul, ol { padding-left:1.3rem; }
+  li { margin:.25rem 0; }
+  a { color:var(--primary); text-underline-offset:2px; }
+  .muted { color:var(--muted); }
+  .lead { font-size:1.08rem; color:var(--muted); }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:1rem 1.25rem; margin:1.25rem 0; }
+  .box ul { margin:.25rem 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.9em; background:var(--code); padding:.1em .35em; border-radius:5px; overflow-wrap:anywhere; }
+  table { border-collapse:collapse; width:100%; font-size:.95rem; }
+  th, td { text-align:left; vertical-align:top; padding:.5rem .6rem; border-bottom:1px solid var(--line); }
+  th { font-weight:600; }
+  details { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:.75rem 1rem; margin:.6rem 0; }
+  summary { cursor:pointer; font-weight:600; }
+  details[open] summary { margin-bottom:.4rem; }
+  footer { margin-top:3rem; padding-top:1rem; border-top:1px solid var(--line); font-size:.9rem; color:var(--muted); }
+  address { font-style:normal; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#6366f1"/><path d="M10 9v14M22 9v14M10 16h12" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none"/></svg>
+  <span class="name"><!-- APP NAME -->Hermes UI</span>
+  <nav><a href="../privacy/">Privacy</a><a href="de/" hreflang="de" lang="de">Deutsch</a></nav>
+</header>
+
+<h1>Support</h1>
+<p class="lead">A mobile client for Hermes Agent that you host yourself: every Hermes chat as a card on a live board, with streaming replies, approvals, questions and an inbox. Open source (MIT). Unofficial: not affiliated with or endorsed by Nous Research.</p>
+
+<div class="box">
+  <strong>Get help</strong>
+  <ul>
+    <li>Bugs and questions: <a href="https://github.com/MaxGierlachowski/hermes-ui/issues">GitHub Issues</a></li>
+    <li>Security vulnerabilities: <a href="https://github.com/MaxGierlachowski/hermes-ui/security/advisories/new">report privately</a> (not as a public issue)</li>
+    <li>Everything else: <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a></li>
+  </ul>
+</div>
+
+<h2 id="need">What you need</h2>
+<ul>
+  <li><strong>Hermes Agent</strong> running on your computer (the desktop app, or <code>hermes gateway run</code>).</li>
+  <li><strong>Node.js 24</strong> or newer on the same computer.</li>
+  <li>The <strong>hermes-ui backend</strong> from the <a href="https://github.com/MaxGierlachowski/hermes-ui">project on GitHub</a>, free and open source.</li>
+  <li>The app on your phone. No account anywhere.</li>
+</ul>
+<p>Step-by-step guide: <a href="https://github.com/MaxGierlachowski/hermes-ui/blob/main/docs/self-hosting.md">Self-hosting guide</a>. The short version:</p>
+<ol>
+  <li><code>git clone https://github.com/MaxGierlachowski/hermes-ui.git &amp;&amp; cd hermes-ui &amp;&amp; npm install</code></li>
+  <li><code>HERMES_UI_REMOTE=iroh npm start</code> starts the backend with remote access over iroh.</li>
+  <li><code>npx hermes-ui pair</code> prints a QR code.</li>
+  <li>In the app: <em>Scan QR code</em>. Done.</li>
+</ol>
+
+<h2 id="faq">Frequently asked questions</h2>
+
+<details id="demo">
+  <summary>Can I try the app without a backend?</summary>
+  <p>Yes. Tap <em>Try the demo</em> on the first screen. The app then runs on sample data generated on the device, including streamed replies, an approval, a question, coding agents and the inbox. Nothing is sent anywhere. Leave it with the <em>Demo · exit</em> badge in the header or in Settings.</p>
+</details>
+
+<details id="pairing">
+  <summary>How does pairing work?</summary>
+  <p>The QR code of <code>hermes-ui pair</code> (or <em>Remote access → Pair device</em> in the web interface on your computer) contains your backend's address and a one-time code. You can also paste the link into the field on the pairing screen, or open it on the phone. The code is valid for a few minutes and only once; if pairing fails, create a new one.</p>
+  <p>After pairing, your backend admits only your paired devices. You can revoke a device in the remote-access dialog on your computer.</p>
+</details>
+
+<details id="secure">
+  <summary>Is the connection secure? Do I need to open a port?</summary>
+  <p>No port needs to be opened. The app and your backend connect end-to-end encrypted over iroh (QUIC with TLS 1.3): directly when possible, otherwise through a relay that only forwards encrypted packets. By default your backend uses n0's public relays; you can run your own relay instead (<code>IROH_RELAY_URL</code>). Details in the <a href="../privacy/#relays">privacy policy</a>.</p>
+</details>
+
+<details id="not-connected">
+  <summary>The app says “Not connected” or keeps connecting</summary>
+  <ul>
+    <li>Is the backend running with remote access? <code>npx hermes-ui status</code> on your computer shows the backend, remote and device state.</li>
+    <li>Was the device revoked, or the backend's data directory reset? Then pair again (Settings → <em>Forget connection</em>, then scan a new code).</li>
+    <li>Some networks (company Wi-Fi, some mobile carriers) block UDP. The app then uses the relay; if that is blocked too, try another network.</li>
+    <li>The app shows the last state from its cache while offline (“as of …”) and reconnects by itself.</li>
+  </ul>
+</details>
+
+<details id="slow">
+  <summary>The connection is slow</summary>
+  <p>Settings shows the current path: <em>direct</em> or <em>relay</em>. On the same Wi-Fi the connection should be direct. On iOS, allow <em>Local Network</em> for the app (iOS Settings → Privacy &amp; Security → Local Network). Some routers prevent direct paths; a relay close to you (or your own) helps.</p>
+</details>
+
+<details id="notifications">
+  <summary>I don't get notifications</summary>
+  <ul>
+    <li>Allow notifications for the app in the system settings, and check the notification options in the app's Settings.</li>
+    <li>The app notifies while it is running. Android stops apps in the background within seconds: turn on Settings → <em>Stay connected in the background</em> (“While Hermes works” or “Always”). A quiet ongoing notification then keeps the connection open. If notifications still stop, exempt the app from battery optimisation.</li>
+    <li>On iOS, notifications arrive while the app is open or was just used; iOS suspends apps in the background.</li>
+    <li>Push with the app closed needs your own Firebase project and a self-built app; see the <a href="https://github.com/MaxGierlachowski/hermes-ui/blob/main/docs/mobile-app.md#push-with-the-app-closed-fcm">mobile-app README</a>.</li>
+  </ul>
+</details>
+
+<details id="media">
+  <summary>Images or voice messages don't work</summary>
+  <ul>
+    <li>Allow camera, microphone or photos when the app asks (or later in the system settings).</li>
+    <li>Voice messages are transcribed by Hermes Agent itself; speech-to-text must be set up there.</li>
+    <li>Images that agents reference by a local path are only shown from allowed folders (<code>HERMES_UI_IMAGE_ROOTS</code> on the backend).</li>
+  </ul>
+</details>
+
+<details id="paseo">
+  <summary>What are the Paseo agents?</summary>
+  <p>If you use the Paseo coding-agent app, the board shows the agents a Hermes chat started, with read-only transcripts, and lets you answer their permission requests from the inbox. Without Paseo this part simply stays empty.</p>
+</details>
+
+<details id="data">
+  <summary>What data does the app collect?</summary>
+  <p>None for the developer: no account, no analytics, no ads, no tracking. Your data goes only between your phone and your own backend. See the <a href="../privacy/">privacy policy</a>.</p>
+</details>
+
+<details id="official">
+  <summary>Is this an official Hermes Agent app?</summary>
+  <p>No. It is an independent open-source project and not affiliated with, endorsed by or sponsored by Nous Research.</p>
+</details>
+
+<h2 id="report">Reporting a problem</h2>
+<p>Open an issue on <a href="https://github.com/MaxGierlachowski/hermes-ui/issues">GitHub</a> and include:</p>
+<ul>
+  <li>the app version (bottom of Settings) and your phone's system version,</li>
+  <li>the backend version and what <code>npx hermes-ui status</code> reports,</li>
+  <li>what you did, what you expected and what happened; screenshots help.</li>
+</ul>
+<p><strong>Never post</strong> pairing links, QR codes, tokens or the contents of <code>.env</code> or the backend's data directory: they grant access to your backend.</p>
+<p><strong>Security issues</strong> please report privately through <a href="https://github.com/MaxGierlachowski/hermes-ui/security/advisories/new">GitHub's private vulnerability reporting</a>.</p>
+
+<footer>
+  <p><a href="../privacy/">Privacy policy</a> · <a href="de/" hreflang="de">Support auf Deutsch</a> · <a href="https://github.com/MaxGierlachowski/hermes-ui">Source code (MIT)</a></p>
+  <p>Provider: {{PROVIDER_NAME}}, {{PROVIDER_ADDRESS}}, <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a></p>
+  <p>Unofficial app. Not affiliated with or endorsed by Nous Research. “Hermes Agent” is used only to describe compatibility.</p>
+</footer>
+</main>
+</body>
+</html>

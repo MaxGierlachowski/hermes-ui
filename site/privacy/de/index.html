@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="de">
+<head>
+<!-- Static, self-contained page: no external fonts, scripts, trackers or cookies. The app name appears
+     only in <title> and in the header (marked APP NAME). Placeholders: {{PROVIDER_NAME}},
+     {{PROVIDER_ADDRESS}}, {{CONTACT_EMAIL}}. -->
+<title>Datenschutzerklärung · Hermes UI</title>
+<meta name="description" content="Datenschutzerklärung des inoffiziellen, quelloffenen mobilen Clients für Hermes Agent.">
+<link rel="alternate" hreflang="en" href="../">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="index,follow">
+<style>
+  :root { --bg:#fafafa; --fg:#18181b; --muted:#52525b; --line:#e4e4e7; --card:#fff; --primary:#615fff; --code:#f4f4f5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#09090b; --fg:#f4f4f5; --muted:#a1a1aa; --line:#27272a; --card:#18181b; --primary:#7c86ff; --code:#27272a; }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin:0; background:var(--bg); color:var(--fg); font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header { display:flex; align-items:center; gap:.75rem; margin-bottom:2rem; flex-wrap:wrap; }
+  header svg { width:40px; height:40px; flex:none; }
+  header .name { font-weight:600; font-size:1.05rem; }
+  header nav { margin-left:auto; display:flex; gap:1rem; font-size:.9rem; }
+  h1 { font-size:2rem; line-height:1.2; letter-spacing:-.02em; margin:.25rem 0 .5rem; }
+  h2 { font-size:1.25rem; letter-spacing:-.01em; margin:2.25rem 0 .5rem; padding-top:.5rem; border-top:1px solid var(--line); }
+  h3 { font-size:1.05rem; margin:1.5rem 0 .25rem; }
+  p, ul, ol, table { margin:.6rem 0; }
+  ul, ol { padding-left:1.3rem; }
+  li { margin:.25rem 0; }
+  a { color:var(--primary); text-underline-offset:2px; }
+  .muted { color:var(--muted); }
+  .lead { font-size:1.08rem; color:var(--muted); }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:1rem 1.25rem; margin:1.25rem 0; }
+  .box ul { margin:.25rem 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.9em; background:var(--code); padding:.1em .35em; border-radius:5px; overflow-wrap:anywhere; }
+  table { border-collapse:collapse; width:100%; font-size:.95rem; }
+  th, td { text-align:left; vertical-align:top; padding:.5rem .6rem; border-bottom:1px solid var(--line); }
+  th { font-weight:600; }
+  details { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:.75rem 1rem; margin:.6rem 0; }
+  summary { cursor:pointer; font-weight:600; }
+  details[open] summary { margin-bottom:.4rem; }
+  footer { margin-top:3rem; padding-top:1rem; border-top:1px solid var(--line); font-size:.9rem; color:var(--muted); }
+  address { font-style:normal; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#6366f1"/><path d="M10 9v14M22 9v14M10 16h12" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none"/></svg>
+  <span class="name"><!-- APP NAME -->Hermes UI</span>
+  <nav><a href="../../support/de/">Support</a><a href="../" hreflang="en" lang="en">English</a></nav>
+</header>
+
+<h1>Datenschutzerklärung</h1>
+<p class="muted">Stand: 19. November 2026</p>
+
+<div class="box">
+  <strong>Kurz gesagt</strong>
+  <ul>
+    <li>Der Entwickler erhebt über die App <strong>keine</strong> personenbezogenen Daten: kein Konto, keine Analyse, keine Werbung, kein Tracking.</li>
+    <li>Deine Chats, Bilder und Sprachnachrichten gehen nur zwischen deinem Handy und <strong>deinem eigenen</strong> Backend hin und her, Ende-zu-Ende-verschlüsselt.</li>
+    <li>Was die App speichert, speichert sie auf deinem Gerät. Du kannst es jederzeit löschen.</li>
+    <li>Die App ist inoffiziell und quelloffen. Sie steht in keiner Verbindung zu Nous Research, den Machern von Hermes Agent, und wird von ihnen nicht unterstützt.</li>
+  </ul>
+</div>
+
+<h2 id="geltungsbereich">1. Geltungsbereich</h2>
+<p>Diese Erklärung gilt für die mobile App für Android und iOS („die App“), für die Web-Version der Oberfläche, die auf diesen Seiten liegt, und für diese Webseiten selbst. Die App ist ein Client für das quelloffene hermes-ui-Backend, das <em>du</em> auf deinem eigenen Rechner neben Hermes Agent installierst und betreibst. Backend und Hermes Agent stehen unter deiner Kontrolle; der Entwickler der App hat darauf keinen Zugriff.</p>
+
+<h2 id="verantwortlicher">2. Verantwortlicher und Anbieter</h2>
+<p>Verantwortlich im Sinne der Datenschutz-Grundverordnung (DSGVO) für diese Seiten und die App sowie Anbieter im Sinne von §&nbsp;5 DDG:</p>
+<address class="box">{{PROVIDER_NAME}}<br>{{PROVIDER_ADDRESS}}<br>E-Mail: <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a></address>
+<p>Der Anbieter ist eine Privatperson und veröffentlicht die App kostenlos als Open-Source-Projekt. Einen Datenschutzbeauftragten gibt es nicht; er ist auch nicht vorgeschrieben.</p>
+
+<h2 id="keine-erhebung">3. Keine Datenerhebung durch den Entwickler</h2>
+<p>Der Entwickler betreibt keinen Server für die App. Die App enthält keine Analyse-, Absturzberichts-, Werbe- oder Attributionssoftware und verfolgt dich nicht über Apps oder Websites hinweg. Nichts, was du in der App schreibst, aufnimmst oder anhängst, wird an den Entwickler gesendet.</p>
+<p>Beim Herunterladen der App verarbeiten Apple (App Store) bzw. Google (Google Play) Daten nach ihren eigenen Datenschutzbestimmungen. Die Stores stellen dem Entwickler zusammengefasste, anonyme Statistiken bereit (etwa die Zahl der Downloads) und, wenn du das in den Einstellungen deines Geräts erlaubt hast, Absturzberichte. Dich erkennen kann der Entwickler daraus nicht.</p>
+
+<h2 id="geraet">4. Daten auf deinem Gerät</h2>
+<table>
+  <tr><th>Was</th><th>Wo</th><th>Wozu</th></tr>
+  <tr><td>Kopplungsdaten (Endpoint-ID und Relay deines Backends) und der eigene Geräteschlüssel der App</td><td>Android Keystore / iOS-Schlüsselbund</td><td>Damit dein Backend dein Handy wiedererkennt und die Verbindung verschlüsselt ist</td></tr>
+  <tr><td>Ein Cache von Board, Inbox, den neuesten Nachrichten der letzten Chats, Bildern und Sprachnachrichten (höchstens 200&nbsp;MB Medien, älteste zuerst gelöscht)</td><td>Privater Speicher der App</td><td>Damit die App sofort öffnet und offline den letzten Stand zeigt</td></tr>
+  <tr><td>Einstellungen (Design, Board-Ansicht, Benachrichtigungen, Hintergrund)</td><td>Privater Speicher der App</td><td>Damit deine Auswahl erhalten bleibt</td></tr>
+</table>
+<p>Die Web-Version speichert das Entsprechende (Geräteschlüssel, Kopplung, Einstellungen) im Speicher deines Browsers.</p>
+
+<h2 id="backend">5. Datenaustausch mit deinem eigenen Backend</h2>
+<p>Nachdem du die App mit deinem Backend gekoppelt hast (per QR-Code oder Kopplungslink), tauscht sie mit ihm aus, wofür du die App nutzt: Chats und ihre Nachrichten, Bilder und Sprachnachrichten, die du sendest, deine Antworten auf Freigaben und Rückfragen, Suchanfragen, Gelesen-Markierungen und Benachrichtigungseinstellungen. Dein Backend gibt deine Eingaben an Hermes Agent und, falls du ihn nutzt, an den Paseo-Daemon auf deinem Rechner weiter. Das Backend läuft auf deinem Rechner; wohin deine Daten von dort aus gehen, hängt davon ab, wie du Hermes Agent eingerichtet hast (etwa welchen Anbieter von KI-Modellen er nutzt). Das liegt außerhalb dieser App und außerhalb des Einflusses des Entwicklers.</p>
+<p>Die Verbindung zwischen App und Backend ist Ende-zu-Ende-verschlüsselt (QUIC mit TLS&nbsp;1.3). Dein Backend lässt nur Geräte zu, die du gekoppelt hast.</p>
+
+<h2 id="relays">6. Verbindung: iroh-Relays und Adresssuche</h2>
+<p>Die App verbindet sich über <a href="https://www.iroh.computer/">iroh</a>, eine Peer-to-Peer-Netzwerkbibliothek, mit deinem Backend. Wo es geht, nutzt sie eine direkte Verbindung. Bis dahin, oder wenn kein direkter Weg möglich ist, laufen die verschlüsselten Daten über einen Relay-Server. Welches Relay genutzt wird, legt dein Backend fest: standardmäßig die öffentlichen Relays von n0, den Entwicklern von iroh, oder ein Relay, das du selbst betreibst.</p>
+<ul>
+  <li>Der Betreiber des Relays sieht die <strong>Endpoint-IDs</strong> (zufällige öffentliche Schlüssel, nicht mit deinem Namen oder deiner Hardware verknüpft) von Handy und Backend, ihre <strong>IP-Adressen</strong> sowie Zeitpunkt und Menge der Daten.</li>
+  <li>Den Inhalt kann das Relay <strong>nicht</strong> lesen: Es reicht nur verschlüsselte Pakete weiter.</li>
+  <li>Damit sich beide Seiten finden, kann iroh außerdem Adressangaben (Endpoint-ID, Relay, eventuell IP-Adressen) über den Discovery-Dienst von n0 veröffentlichen und abfragen und deinen Router um eine Portfreigabe für die direkte Verbindung bitten.</li>
+</ul>
+<p>Diese Dienste sind Teil der Verbindung zwischen deinen eigenen Geräten. Der Entwickler hat keinen Zugriff darauf und keinen Vertrag mit ihren Betreibern. Wenn du die Infrastruktur von n0 nicht nutzen möchtest, betreibe ein eigenes Relay und trage es in deinem Backend ein (siehe Projektdokumentation).</p>
+
+<h2 id="benachrichtigungen">7. Benachrichtigungen</h2>
+<ul>
+  <li><strong>Lokale Benachrichtigungen</strong>: Solange die App läuft, erzeugt sie Benachrichtigungen direkt auf dem Gerät. Dafür wird nichts an einen Push-Dienst gesendet.</li>
+  <li><strong>Android, „Im Hintergrund verbunden bleiben“</strong>: Auf Wunsch hält ein Hintergrunddienst die Verbindung zu deinem Backend offen und zeigt dabei eine dezente Daueranzeige. Weitere Dienste nutzt er nicht.</li>
+  <li><strong>Optional Push über dein eigenes Firebase-Projekt</strong>: Wenn du die App selbst mit deinem eigenen Firebase-Projekt baust und dein Backend dafür einrichtest, schickt dein Backend Benachrichtigungen über Firebase Cloud Messaging (FCM) von Google. Die App erhält dann ein Geräte-Token von Google und gibt es an dein Backend weiter. Die Benachrichtigung enthält nur den Titel des Chats und einen kurzen Hinweis wie „Freigabe nötig“ oder „Fertig“ und läuft über Server von Google; dafür gelten die Bedingungen von Google. Die Store-Version ist ohne Firebase gebaut.</li>
+  <li><strong>Web-Version, Web Push</strong>: Wenn du in der Web-Version Push einschaltest, sendet dein Backend Benachrichtigungen über den Push-Dienst deines Browsers (etwa von Apple, Google oder Mozilla). Der Inhalt ist für deinen Browser verschlüsselt.</li>
+</ul>
+
+<h2 id="berechtigungen">8. Berechtigungen</h2>
+<p>Die App fragt erst, wenn du die jeweilige Funktion nutzt:</p>
+<ul>
+  <li><strong>Kamera</strong>: um den Kopplungs-QR-Code zu scannen und Fotos für einen Chat aufzunehmen.</li>
+  <li><strong>Mikrofon</strong>: um Sprachnachrichten aufzunehmen.</li>
+  <li><strong>Fotos</strong>: um Bilder an einen Chat anzuhängen (Android nutzt dafür die Fotoauswahl des Systems, die keine Speicherberechtigung braucht).</li>
+  <li><strong>Mitteilungen</strong>: um dir zu sagen, wenn eine Antwort da ist oder der Agent dich braucht.</li>
+  <li><strong>Lokales Netzwerk</strong> (iOS): um dich direkt mit deinem Backend zu verbinden, wenn es im selben Netzwerk ist.</li>
+</ul>
+<p>Fotos, Aufnahmen und Kamerabilder gehen nur an dein eigenes Backend, und nur, wenn du sie sendest.</p>
+
+<h2 id="demo">9. Demo-Modus</h2>
+<p>„Demo ansehen“ zeigt die App mit Beispieldaten, die auf dem Gerät erzeugt werden. Dabei wird nichts gesendet, und die Beispieldaten werden gelöscht, wenn du die Demo beendest.</p>
+
+<h2 id="webseiten">10. Diese Webseiten (GitHub Pages)</h2>
+<p>Diese Seiten und die Web-Version der Oberfläche liegen bei GitHub Pages, einem Dienst der GitHub, Inc., 88 Colin P. Kelly Jr. St, San Francisco, CA 94107, USA. Beim Aufruf verarbeitet GitHub technische Daten wie deine IP-Adresse, Datum und Uhrzeit, die aufgerufene Seite und die Kennung deines Browsers, um die Seiten auszuliefern und den Dienst abzusichern. Der Entwickler erhält diese Protokolle nicht. Rechtsgrundlage ist unser berechtigtes Interesse, diese Seiten sicher bereitzustellen (Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;f DSGVO). Die Daten können in den USA verarbeitet werden; wie GitHub solche Übermittlungen absichert, steht in der <a href="https://docs.github.com/de/site-policy/privacy-policies/github-general-privacy-statement">Datenschutzerklärung von GitHub</a>.</p>
+<p>Die Seiten verwenden keine Cookies, keine Analyse, keine externen Schriftarten und keine externen Skripte.</p>
+
+<h2 id="rechte">11. Deine Rechte</h2>
+<p>Nach der DSGVO hast du das Recht auf Auskunft (Art.&nbsp;15), Berichtigung (Art.&nbsp;16), Löschung (Art.&nbsp;17), Einschränkung der Verarbeitung (Art.&nbsp;18), Datenübertragbarkeit (Art.&nbsp;20) und Widerspruch (Art.&nbsp;21) sowie das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren, insbesondere in dem EU-Mitgliedstaat, in dem du wohnst oder arbeitest. Da der Entwickler über die App keine personenbezogenen Daten von dir hat, gibt es in der Regel nichts mitzuteilen oder zu löschen; bei Fragen schreib an die Adresse oben.</p>
+
+<h2 id="loeschen">12. Daten löschen</h2>
+<ul>
+  <li>In der App: Einstellungen → „Verbindung vergessen“ entfernt Kopplung und Cache vom Gerät.</li>
+  <li>Wenn du die App deinstallierst, ist alles gelöscht, was sie gespeichert hat, auch ihr Geräteschlüssel.</li>
+  <li>Auf deinem Backend: Gerät im Fernzugriff-Dialog widerrufen; Chats wie gewohnt in Hermes Agent löschen. Beides liegt auf deinem eigenen Rechner.</li>
+</ul>
+
+<h2 id="kinder">13. Kinder</h2>
+<p>Die App ist ein Werkzeug für Menschen, die ihren eigenen KI-Agenten betreiben, und richtet sich nicht an Kinder. Sie verarbeitet wissentlich keine Daten von Kindern.</p>
+
+<h2 id="aenderungen">14. Änderungen</h2>
+<p>Ändern sich die App oder die Rechtslage, wird diese Erklärung hier aktualisiert, mit neuem Datum oben. Der Verlauf dieser Seite ist im <a href="https://github.com/MaxGierlachowski/hermes-ui">GitHub-Repository</a> des Projekts öffentlich einsehbar.</p>
+
+<h2 id="kontakt">15. Kontakt</h2>
+<p>Fragen zum Datenschutz: <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a>. Sicherheitslücken bitte vertraulich über die <a href="https://github.com/MaxGierlachowski/hermes-ui/security/advisories/new">private Schwachstellenmeldung von GitHub</a> melden.</p>
+
+<footer>
+  <p><a href="../../support/de/">Support</a> · <a href="../" hreflang="en">Privacy policy in English</a> · <a href="https://github.com/MaxGierlachowski/hermes-ui">Quellcode (MIT)</a></p>
+  <p>Inoffizielle App. Keine Verbindung zu Nous Research und nicht von Nous Research unterstützt. „Hermes Agent“ wird nur genannt, um die Kompatibilität zu beschreiben.</p>
+</footer>
+</main>
+</body>
+</html>
