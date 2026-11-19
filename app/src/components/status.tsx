@@ -29,7 +29,8 @@ export function StatusDot({ column, running, pending, className }: { column: Col
   const color = pending ? 'bg-amber-500' : COLUMN_COLOR[column]
   return (
     <View className={cn(DOT, 'items-center justify-center', className)}>
-      <Animated.View className={cn('absolute rounded-full', DOT, color)} style={ring} />
+      {/* The Animated.View only pulses; the ring's looks sit on a plain View (NativeWind does not style reanimated's views on the web). */}
+      <Animated.View style={[{ position: 'absolute' }, ring]}><View className={cn('rounded-full', DOT, color)} /></Animated.View>
       <View className={cn('rounded-full', DOT, color)} />
     </View>
   )

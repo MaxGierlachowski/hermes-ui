@@ -89,7 +89,7 @@ function PaseoInline({ m, chips, sessionId }: { m: ThreadMessage; chips: PaseoCh
   )
 }
 
-function Attachments({ atts, onImage }: { atts: Attachment[]; onImage: (uri: string) => void }) {
+function Attachments({ atts, onImage }: { atts: Attachment[]; onImage: (uri: string, source: string) => void }) {
   if (!atts.length) return null
   return (
     <View className="mt-2 items-start gap-2">
@@ -110,7 +110,7 @@ const OUTBOX_LABEL: Record<string, string> = {
 }
 
 /** One transcript entry (web: ThreadView MessageBody). */
-export const MessageView = memo(function MessageView({ m, sessionId, chips, onImage }: { m: ThreadMessage; sessionId: string; chips: PaseoChip[]; onImage: (uri: string) => void }) {
+export const MessageView = memo(function MessageView({ m, sessionId, chips, onImage }: { m: ThreadMessage; sessionId: string; chips: PaseoChip[]; onImage: (uri: string, source: string) => void }) {
   if (m.role === 'tool') return <ToolChip m={m} />
   if (m.role === 'paseo' && m.paseo) return <PaseoInline m={m} chips={chips} sessionId={sessionId} />
   if (m.role === 'event' && m.event) return <EventCard m={m} />

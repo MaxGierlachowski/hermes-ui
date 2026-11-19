@@ -34,7 +34,7 @@ export function useMediaFile(url: string) {
 // Aspect ratio per image, so a thread opened again lays out at the final size in its first frame.
 const ratios = new Map<string, number>()
 
-export function MediaImage({ url, onOpen }: { url: string; onOpen: (uri: string) => void }) {
+export function MediaImage({ url, onOpen }: { url: string; onOpen: (uri: string, source: string) => void }) {
   const { uri, error } = useMediaFile(url)
   const [ratio, setRatio] = useState(() => ratios.get(url) ?? 4 / 3)
   // A file that arrived but does not decode shows the same hint as a failed download, not an empty box.
@@ -43,7 +43,7 @@ export function MediaImage({ url, onOpen }: { url: string; onOpen: (uri: string)
   // The placeholder has the size the image will most likely have: no jump when it arrives.
   if (!uri) return <View className="items-center justify-center rounded-[10px] bg-muted" style={{ width: IMG_W, maxWidth: '100%', aspectRatio: ratio }}><ActivityIndicator /></View>
   return (
-    <Pressable onPress={() => onOpen(uri)} accessibilityLabel={t('Bild vergrößern')} style={{ maxWidth: '100%' }}>
+    <Pressable onPress={() => onOpen(uri, url)} accessibilityLabel={t('Bild vergrößern')} style={{ maxWidth: '100%' }}>
       <Image
         source={{ uri }}
         style={{ width: IMG_W, maxWidth: '100%', aspectRatio: ratio, borderRadius: 10 }}
