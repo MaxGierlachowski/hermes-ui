@@ -1,0 +1,25 @@
+require 'json'
+
+Pod::Spec.new do |s|
+  s.name           = 'ExpoIroh'
+  s.version        = '0.1.0'
+  s.summary        = 'iroh-fetch for React Native: HTTP over iroh to an iroh-bridge gateway, native Rust client (UniFFI)'
+  s.license        = 'MIT'
+  s.author         = 'hermes-ui'
+  s.homepage       = 'https://github.com/MaxGierlachowski/hermes-ui'
+  s.platforms      = { :ios => '16.4' }
+  s.swift_version  = '5.9'
+  s.source         = { git: '' }
+  s.static_framework = true
+
+  s.dependency 'ExpoModulesCore'
+
+  # Rust library + C header from ../scripts/build-ios.sh; the generated Swift bindings are compiled here.
+  s.vendored_frameworks = 'HermesIrohFFI.xcframework'
+  s.source_files = 'ExpoIrohModule.swift', 'Generated/hermes_iroh.swift'
+  s.frameworks = 'SystemConfiguration', 'Security', 'CoreFoundation'
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'SWIFT_COMPILATION_MODE' => 'wholemodule',
+  }
+end

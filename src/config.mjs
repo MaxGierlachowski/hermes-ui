@@ -96,6 +96,8 @@ export function loadConfig(argv = []) {
     push: {
       enabled: get('HERMES_UI_PUSH', 'push', 'on') !== 'off',
       subject: get('HERMES_UI_PUSH_SUBJECT', 'push-subject', ''),
+      // Native app push (Android, FCM): path to the Firebase service-account JSON. Empty = off.
+      fcmServiceAccount: expand(get('HERMES_UI_FCM_SERVICE_ACCOUNT', 'fcm-service-account', '')),
     },
     inbox: {
       maxDays: Number(get('HERMES_UI_INBOX_DAYS', 'inbox-days', 30)),

@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { generateVAPIDKeys, sendNotification } from 'web-push';
+import { FcmSender } from './push-fcm.mjs';
 
 export const DEFAULT_SETTINGS = {
   approval: true, // approvals, clarify questions, Paseo permissions
@@ -45,11 +46,18 @@ function cleanSettings(s = {}, prev = DEFAULT_SETTINGS) {
 }
 
 const isApple = (endpoint) => /(^|\.)push\.apple\.com$/.test(new URL(endpoint).hostname);
+const isNative = (sub) => sub.kind === 'fcm';
+const hostOf = (sub) => (isNative(sub) ? 'fcm' : new URL(sub.endpoint).host);
 
 export class Push {
-  constructor(dir, { subject, log = console.log } = {}) {
+  constructor(dir, { subject, fcmServiceAccount = '', log = console.log } = {}) {
     this.dir = dir;
     this.log = log;
+    // Native app (Android): FCM, only with a service account of the app's Firebase project.
+    this.fcm = null;
+    if (fcmServiceAccount) {
+      try { this.fcm = FcmSender.fromFile(fcmServiceAccount, { log }); log(`push: FCM enabled (project ${this.fcm.account.project_id})`); } catch (err) { log(`push: FCM disabled (${err.message})`); }
+    }
     this.file = path.join(dir, 'push.json');
     fs.mkdirSync(dir, { recursive: true });
     const keyFile = path.join(dir, 'vapid.json');
@@ -103,6 +111,23 @@ export class Push {
     if (this.subs.length !== before) this.save();
   }
 
+  /**
+   * Native app token (FCM). Stored like a Web Push subscription with kind 'fcm'; the endpoint key
+   * `fcm:<token>` keeps one entry per app install. Throws 501 when the backend has no FCM config.
+   */
+  subscribeNative(deviceKey, deviceName, { token, kind = 'fcm', platform = 'android' } = {}, settings) {
+    if (kind !== 'fcm') throw Object.assign(new Error(`native push kind ${kind} is not supported`), { status: 400 });
+    if (!this.fcm) throw Object.assign(new Error('native push not configured (HERMES_UI_FCM_SERVICE_ACCOUNT)'), { status: 501 });
+    if (typeof token !== 'string' || token.length < 20 || token.length > 4096) throw Object.assign(new Error('invalid push token'), { status: 400 });
+    const endpoint = `fcm:${token}`;
+    const prev = this.subs.find((s) => s.endpoint === endpoint);
+    this.subs = this.subs.filter((s) => s.endpoint !== endpoint && !(isNative(s) && s.deviceKey === deviceKey));
+    const entry = { kind: 'fcm', endpoint, token, platform: String(platform).slice(0, 16), deviceKey, deviceName: String(deviceName || '').slice(0, 60), createdAt: prev?.createdAt || Date.now(), settings: cleanSettings(settings, prev?.settings) };
+    this.subs.push(entry);
+    this.save();
+    return { endpoint, settings: entry.settings };
+  }
+
   /** Called when a device is unpaired or signs out: its subscriptions go with it. */
   removeDevice(deviceKey) {
     const before = this.subs.length;
@@ -133,6 +158,16 @@ export class Push {
   }
 
   async sendOne(sub, ev) {
+    if (isNative(sub)) {
+      if (!this.fcm) return false;
+      const r = await this.fcm.send(sub.token, { title: ev.title, body: ev.body, tag: ev.tag, url: ev.url, badge: ev.badge ?? null }, { urgent: ev.category === 'approval', ttl: ev.ttl ?? 3600 });
+      if (r === 'gone') {
+        this.subs = this.subs.filter((s) => s.endpoint !== sub.endpoint);
+        this.save();
+        this.log('push: fcm token gone, removed');
+      }
+      return r === 'ok';
+    }
     const payload = {
       title: ev.title,
       body: ev.body,
@@ -154,8 +189,8 @@ export class Push {
       if (err.statusCode === 404 || err.statusCode === 410) {
         this.subs = this.subs.filter((s) => s.endpoint !== sub.endpoint);
         this.save();
-        this.log(`push: subscription gone (${err.statusCode}), removed ${new URL(sub.endpoint).host}`);
-      } else this.log(`push: send failed (${err.statusCode || err.message}) ${new URL(sub.endpoint).host}`);
+        this.log(`push: subscription gone (${err.statusCode}), removed ${hostOf(sub)}`);
+      } else this.log(`push: send failed (${err.statusCode || err.message}) ${hostOf(sub)}`);
       return false;
     }
   }

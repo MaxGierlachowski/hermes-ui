@@ -50,7 +50,7 @@ const paseo = new Paseo({ url: cfg.paseo.url, opsLoopFile: cfg.paseo.opsLoopFile
 const PASEO_ON = cfg.paseo.mode !== 'off';
 const devices = new Devices(cfg.dataDir);
 const inbox = new Inbox(cfg.dataDir, cfg.inbox);
-const push = cfg.push.enabled ? new Push(cfg.dataDir, { subject: cfg.push.subject || (/^https:/.test(cfg.uiUrl) ? cfg.uiUrl : '') }) : null;
+const push = cfg.push.enabled ? new Push(cfg.dataDir, { subject: cfg.push.subject || (/^https:/.test(cfg.uiUrl) ? cfg.uiUrl : ''), fcmServiceAccount: cfg.push.fcmServiceAccount }) : null;
 const remote = cfg.remote === 'iroh'
   ? new IrohGateway({ port: PORT, dataDir: cfg.dataDir, iroh: cfg.iroh })
   : new Remote({ mode: cfg.remote, port: PORT, dataDir: cfg.dataDir, authKey: cfg.tailscale.authKey, hostname: cfg.tailscale.hostname });
@@ -987,6 +987,10 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/push' && req.method === 'GET') return send(res, 200, { publicKey: push.publicKey, subscriptions: push.forDevice(deviceKey) });
       const body = await readJson(req);
       if (p === '/api/push/subscribe' && req.method === 'POST') return send(res, 200, push.subscribe(deviceKey, deviceName, body.subscription, body.settings));
+      // Native app (mobile-app/): FCM device token instead of a Web Push subscription.
+      if (p === '/api/push/native' && req.method === 'POST') {
+        try { return send(res, 200, push.subscribeNative(deviceKey, deviceName, body, body.settings)); } catch (err) { return send(res, err.status || 400, { error: err.message }); }
+      }
       if (p === '/api/push/settings' && req.method === 'POST') {
         const settings = push.updateSettings(deviceKey, body.endpoint, body.settings || {});
         return settings ? send(res, 200, { settings }) : send(res, 404, { error: 'subscription not found' });

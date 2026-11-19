@@ -1,0 +1,37 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.iroh'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.iroh"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+    // R8 in the app's release build: keep JNA and the generated bindings.
+    consumerProguardFiles 'proguard-rules.pro'
+  }
+  // libhermes_iroh.so per ABI from ../scripts/build-android.sh (cargo-ndk).
+  sourceSets {
+    main {
+      jniLibs.srcDirs = ['src/main/jniLibs']
+    }
+  }
+}
+
+dependencies {
+  // UniFFI's Kotlin bindings call into the Rust library through JNA.
+  implementation "net.java.dev.jna:jna:5.17.0@aar"
+  // NotificationCompat for the keep-alive foreground service.
+  implementation "androidx.core:core-ktx:1.16.0"
+}
+
+// The Rust library and its generated bindings are build output, not sources in git: fail early with a hint.
+afterEvaluate {
+  if (!file('src/main/java/uniffi/hermes_iroh/hermes_iroh.kt').exists()) {
+    throw new GradleException("expo-iroh: run modules/expo-iroh/scripts/build-android.sh first (Rust → libhermes_iroh.so + Kotlin bindings)")
+  }
+}
