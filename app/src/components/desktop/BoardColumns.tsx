@@ -36,7 +36,10 @@ const Card = memo(function Card({ s, selected, open }: { s: Session; selected: b
   const ref = useRef<ComponentRef<typeof View>>(null)
   useCardDrag(ref, s.id, (at) => cardMenu(s, at))
   return (
-    <View ref={ref} className={cn('rounded-xl', selected && 'ring-2 ring-ring ring-offset-0', open && !selected && 'ring-1 ring-primary/50')}>
+    // Selected / open / focus rings are outlines drawn inside the card itself (CSS for data-hk-card in
+    // PlatformShell.web.tsx): the column's scroll area clips anything outside, which cut off the top
+    // card's ring; on this wrapper they would sit under the card's background.
+    <View ref={ref} {...({ dataSet: { hkCard: selected ? 'selected' : open ? 'open' : '' } } as object)} className="rounded-xl">
       <SessionCard s={s} onPress={() => showThread(s.id)} onLongPress={() => prefetchThread(s.id)} />
     </View>
   )

@@ -13,7 +13,11 @@ const CSS = `
 html, body, #root { height: 100%; overscroll-behavior: none; }
 body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 :focus { outline: none; }
-:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; border-radius: 8px; }
+:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+/* Board cards sit at the edge of a clipping scroll area: their rings go inside the card. */
+[data-hk-card] :focus-visible { outline-offset: -2px; }
+[data-hk-card="selected"] > * { outline: 2px solid hsl(var(--ring)); outline-offset: -2px; }
+[data-hk-card="open"] > * { outline: 1px solid hsl(var(--primary) / 0.5); outline-offset: -1px; }
 textarea:focus-visible, input:focus-visible { outline: none; }
 ::selection { background: hsl(var(--primary) / 0.25); }
 .hk-thread, .hk-thread * { -webkit-user-select: text; user-select: text; }
