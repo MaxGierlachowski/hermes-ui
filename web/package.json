@@ -1,11 +1,12 @@
 {
-  "name": "web",
+  "name": "@hermes-ui/web",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "lint": "oxlint",
     "preview": "vite preview",
     "test:ui": "playwright test"

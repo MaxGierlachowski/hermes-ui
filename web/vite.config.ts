@@ -1,5 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -9,7 +10,8 @@ import tailwindcss from '@tailwindcss/vite'
 const irohServiceWorker = (): Plugin => ({
   name: 'iroh-sw',
   buildStart() {
-    fs.copyFileSync(path.resolve(__dirname, 'node_modules/iroh-fetch/src/sw.js'), path.resolve(__dirname, 'public/iroh-sw.js'))
+    // Resolved through Node, so it works whether npm hoisted iroh-fetch to the workspace root or not.
+    fs.copyFileSync(createRequire(import.meta.url).resolve('iroh-fetch/sw.js'), path.resolve(__dirname, 'public/iroh-sw.js'))
   },
 })
 
