@@ -30,7 +30,8 @@ type State = {
   streaming: { id: string; text: string } | null
   pendingFirst: { id: string; text: string; ts: number } | null
   inbox: { open: OpenItem[]; items: InboxItem[]; unread: number; loaded: boolean; paseo: { connected: boolean; canRespond: boolean } }
-  toast: { id: number; kind: 'info' | 'error' | 'success'; text: string; sessionId?: string | null } | null
+  /** In-app notices, newest last (components/Toast.tsx shows up to three as a stack). */
+  toasts: ToastItem[]
   // Stale-while-revalidate: background loads in flight (header progress bar), when the board data
   // shown was loaded (the offline hint says "as of …"), and whether it came from the cache.
   syncing: number
@@ -56,7 +57,7 @@ let state: State = {
   streaming: null,
   pendingFirst: null,
   inbox: { open: [], items: [], unread: 0, loaded: false, paseo: { connected: false, canRespond: false } },
-  toast: null,
+  toasts: [],
   syncing: 0,
   boardAt: null,
   hydrated: false,
@@ -74,11 +75,13 @@ export function useStore<T>(select: (s: State) => T): T {
   return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l) }, () => select(state))
 }
 
+export type ToastItem = { id: number; kind: 'info' | 'error' | 'success'; text: string; description?: string; sessionId?: string | null }
 let toastId = 0
-export function toast(text: string, kind: 'info' | 'error' | 'success' = 'info', sessionId?: string | null) {
-  set({ toast: { id: ++toastId, kind, text, sessionId } })
+/** A notice: `text` is the title, `description` an optional second line; a click opens `sessionId`. */
+export function toast(text: string, kind: 'info' | 'error' | 'success' = 'info', sessionId?: string | null, description?: string) {
+  set((s) => ({ toasts: [...s.toasts, { id: ++toastId, kind, text, description, sessionId }].slice(-5) }))
 }
-export const dismissToast = () => set({ toast: null })
+export const dismissToast = (id?: number) => set((s) => ({ toasts: id == null ? [] : s.toasts.filter((x) => x.id !== id) }))
 
 const handle = (err: unknown, quiet = false) => {
   if (err instanceof Unauthorized) { set({ auth: 'refused' }); return }
@@ -469,7 +472,7 @@ function onNewInboxItem(item: InboxItem) {
   const title = item.source === 'paseo' && item.agentTitle ? item.agentTitle : item.title || 'Hermes'
   if (appInBackground()) { notifyInboxItem(item, kindLabel(item.kind), title); return }
   if ((item.kind === 'done' || item.kind === 'error') && item.sessionId && item.sessionId === state.openId) return
-  toast(`${kindLabel(item.kind)} · ${title}`, item.kind.endsWith('error') ? 'error' : 'info', item.sessionId)
+  toast(kindLabel(item.kind), item.kind.endsWith('error') ? 'error' : item.kind === 'done' || item.kind === 'paseo-done' ? 'success' : 'info', item.sessionId, title)
 }
 
 // Coming back to the foreground: reconnect the stream if it died while the app slept.
