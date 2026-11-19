@@ -162,10 +162,10 @@ test('terminal state: exit code, ended session, pid alive or gone, foreground in
 // ---------- views ----------
 
 test('view: Paseo agent shape with provider hermes; ids round-trip', () => {
-  const c = { kind: 'terminal', query: '$(cat ~/s/gleap4.md)', ts: 100, match: 'time', command: 'hermes -p support chat …' };
+  const c = { kind: 'terminal', query: '$(cat ~/s/task4.md)', ts: 100, match: 'time', command: 'hermes -p support chat …' };
   const v = childView(c, { session: { id: 'local-1', started_at: 101, model: 'm' }, state: 'running', profile: 'support' });
   assert.equal(v.id, 'hermes:support:local-1');
-  assert.deepEqual([v.provider, v.kind, v.state, v.rel, v.account, v.match, v.title], ['hermes', 'terminal', 'running', 'created', 'support', 'time', 'hermes chat · gleap4.md']);
+  assert.deepEqual([v.provider, v.kind, v.state, v.rel, v.account, v.match, v.title], ['hermes', 'terminal', 'running', 'created', 'support', 'time', 'hermes chat · task4.md']);
   assert.deepEqual(parseChildId(v.id), { profile: 'support', ref: 'local-1' });
   assert.deepEqual(parseChildId('hermes:default:abc'), { profile: null, ref: 'abc' });
   assert.equal(parseChildId('8677dc6f-53dc-40e4-9d00-a4239d141cdd'), null);

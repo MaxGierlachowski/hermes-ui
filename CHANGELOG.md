@@ -5,6 +5,19 @@ All notable changes. The backend + web UI and the app share one repository; app 
 
 ## Unreleased – universal spike
 
+### Hermes' own agents next to Paseo agents (ADR 0013)
+- `delegate_task` subagents and terminal runs of `hermes [-p <profile>] chat -q …` show up like Paseo agents:
+  inline where they were started, in the chat's agent list with state and read-only transcript, as chips
+  on the card, and the chat stays in Doing while one runs ("Agents running (n)"). Backend, app and web UI.
+- Subagents are matched by Hermes' ids; terminal runs by prompt or start time, labelled as heuristic.
+
+### Voice messages on the desktop
+- Fixed: in the desktop app nothing happened after recording and pressing send. The CSP refused
+  `fetch(blob:)` and the error was swallowed. The recording now stays a Blob (no fetch), the CSP allows
+  `blob:` / `data:`, and every failure is shown; an undelivered recording is kept with "send again".
+- While a voice message is transcribed, the composer shows a progress state (app and web UI); the
+  backend reports a failed transcription to the client.
+
 ### Renamed: `mobile-app/` → `app/`
 - The app is no longer only the mobile app, so its folder is `app/` (package `@hermes-ui/app`). App id,
   bundle id and signing are unchanged. Release tags: `app-vX.Y.Z`.

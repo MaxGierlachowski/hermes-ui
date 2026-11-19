@@ -5,16 +5,20 @@ What the board, the thread panel and the inbox do, in detail. The mobile app: [a
 
 - **Board:** drag & drop (dnd-kit). On a phone it switches to tabs per column.
 - **Column rules:**
-  - Doing: Hermes is running a turn, or a Paseo agent the session owns is still running ("Paseo running (n)").
+  - Doing: Hermes is running a turn, or an agent the session started is still running: a Paseo agent ("Paseo running (n)") or one of Hermes' own subagents / terminal runs ("Agents running (n)").
   - Waiting: the turn has finished and nothing of the session runs any more, or there is an open approval or clarify prompt.
   - Done: **only you** set it, and it sticks until you write in that session again.
   - Finished cron, webhook and one-shot runs go to Done; they are visible behind the "Cron/system" filter.
 - **Thread panel:**
   - Full transcript with tool calls (collapsible) and images, live streaming, stop button.
   - Composer with text, images (paste or drag & drop) and voice messages. Voice is recorded with MediaRecorder and transcribed by Hermes' own STT.
+  - While a voice message is transcribed and sent, the composer shows "Transcribing voice message …" with an indeterminate bar, the recording's length and the seconds waited (Hermes' STT reports no progress). A recording that could not be sent stays in the composer with *send again* / *discard*; a failed transcription is reported (the message then goes out as an audio file). Nothing about a voice message fails silently.
 - **Approvals and questions:** shown on the card and inline in the thread.
   - Approval: approve with the options Hermes offers (once / session / always) or deny.
   - Clarify: answer with buttons, multi-select or free text, or skip. A countdown shows when Hermes gives a time limit.
+- **Hermes' own agents (read-only):** subagents a chat starts with `delegate_task` and Hermes runs started through the terminal tool (`hermes [-p <profile>] chat -q …`) appear exactly like Paseo agents: inline after the message that started them, in the chat's agent list with state and full transcript, as chips on the card, and they keep the chat in Doing while they run.
+  - Subagents are tied to the chat by Hermes' own ids (`parent_session_id`, subagent id). Terminal runs carry no parent id in Hermes; they are matched by prompt or start time and labelled "matched by prompt / start time (heuristic)".
+  - State comes from Hermes' data: the child session ended, the delegation record, the exit code in Hermes' "process complete" notice, and whether the run's process is still alive. Details: [decisions/0013](decisions/0013-hermes-child-agents.md).
 - **Paseo agents (optional; read-only except answering permissions from the inbox):**
   - The board finds a session's agents from the session's own `paseo_*` tool calls and shows them as chips with their live state.
   - The live state comes from [paseo-mcp](https://github.com/MaxGierlachowski/paseo-mcp) events (≥ 0.4.0): a subscription to the `paseo://agents` resource, with no polling. A direct daemon connection is the fallback. When the daemon is reachable it also provides richer transcripts and the app deep link.

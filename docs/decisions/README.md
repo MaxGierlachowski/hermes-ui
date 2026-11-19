@@ -18,6 +18,7 @@ supersedes it and says so.
 | [0010](0010-inbox-done-rule.md) | A chat is done only when its own Paseo agents are done too | Accepted |
 | [0011](0011-touch-sizing-desktop-unchanged.md) | Touch sizing inside the base components, desktop pixel-identical | Accepted |
 | [0012](0012-universal-app.md) | One codebase for phone, web and desktop (spike result, measurements, parity) | Proposed |
+| [0013](0013-hermes-child-agents.md) | Hermes' own subagents and terminal `hermes chat` runs shown like Paseo agents | Proposed |
 
 ## Adding a record
 
