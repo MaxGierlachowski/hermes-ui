@@ -114,7 +114,11 @@ const persistThread = (id: string, messages: ThreadMessage[]) => writeCache(thre
 // ---------- startup and pairing ----------
 let prefsLoaded = false
 let retryTimer: ReturnType<typeof setTimeout> | undefined
+// Startup marks (DevTools → Performance, scripts/measure-ui.mjs): where the cold start goes.
+const mark = (name: string) => { try { globalThis.performance?.mark?.(`hk:${name}`) } catch { /* not supported */ } }
+
 export async function bootstrap() {
+  mark('bootstrap')
   clearTimeout(retryTimer)
   if (!prefsLoaded) {
     const prefs = JSON.parse((await AsyncStorage.getItem('hk_prefs')) || '{}') as Partial<Pick<State, 'days' | 'system' | 'column'>>
@@ -123,8 +127,11 @@ export async function bootstrap() {
     prefsLoaded = true
   }
   if (state.demo) return
+  mark('prefs')
   await initCache()
+  mark('cache')
   const gw = await activeTarget()
+  mark('target')
   // Not paired: nothing cached is worth keeping (e.g. what a demo left behind).
   if (!gw) { clearCache(); set({ auth: 'unpaired' }); return }
   if (!state.hydrated) hydrate()
@@ -174,11 +181,11 @@ export async function connectLocal(baseUrl: string, token: string) {
 }
 
 /** Demo mode: the app with sample data and no backend, e.g. for a first look or an app review. */
-export async function startDemo() {
+export async function startDemo(opts: { longThread?: number } = {}) {
   clearTimeout(retryTimer)
   stopEvents()
   clearCache()
-  setDemoBackend(new DemoBackend())
+  setDemoBackend(new DemoBackend(opts))
   set({ demo: true, auth: 'connecting', error: null, sessions: {}, openId: null, messages: [], hydrated: false, boardAt: null })
   await start()
 }
@@ -203,6 +210,7 @@ export async function unpair() {
 async function start() {
   const t0 = Date.now()
   await loadSessions(true)
+  mark('sessions')
   console.log(`[hermes-ui] board loaded in ${Date.now() - t0} ms (${Object.keys(state.sessions).length} sessions)`)
   set({ auth: 'ok' })
   connectEvents()

@@ -91,7 +91,9 @@ const config: ExpoConfig = {
     ],
   },
   plugins: [
-    'expo-router',
+    // Web: one bundle instead of lazy route chunks. Lazy routes suspend the first render, and React
+    // holds a revealed Suspense boundary back for up to 300 ms: that was most of the web cold start.
+    ['expo-router', { asyncRoutes: { web: false, default: false } }],
     ['expo-splash-screen', { backgroundColor: '#fafafa', image: './assets/images/splash-icon.png', imageWidth: 96, dark: { backgroundColor: '#09090b', image: './assets/images/splash-icon.png' } }],
     ['expo-camera', { cameraPermission: CAMERA, recordAudioAndroid: false }],
     // Voice messages are recorded in the foreground and played in the app: no background audio mode.

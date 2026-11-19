@@ -28,7 +28,7 @@ import { t } from '@/lib/i18n'
 
 // The macOS window has no title bar (Tauri titleBarStyle "Overlay"): the header is the drag region
 // and leaves room for the traffic lights.
-const TRAFFIC_LIGHTS = isDesktop && isMac ? 76 : 0
+const TRAFFIC_LIGHTS = isDesktop && isMac ? 88 : 0
 const drag = isDesktop ? ({ dataSet: { tauriDragRegion: '' } } as object) : {}
 
 function Header() {

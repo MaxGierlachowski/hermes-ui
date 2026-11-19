@@ -57,7 +57,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "node scripts/web-vendor.mjs && expo start --web",
-    "web:export": "node scripts/web-vendor.mjs && expo export -p web --output-dir dist-web",
+    "web:export": "node scripts/web-vendor.mjs && EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1 EXPO_UNSTABLE_TREE_SHAKING=1 expo export -p web --output-dir dist-web",
     "iroh:android": "modules/expo-iroh/scripts/build-android.sh",
     "iroh:ios": "modules/expo-iroh/scripts/build-ios.sh",
     "iroh:test": "cd modules/expo-iroh/rust && cargo test --release --test e2e -- --ignored --nocapture",

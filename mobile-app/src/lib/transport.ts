@@ -49,3 +49,6 @@ export const closeTransport = () => IrohBackend.close()
 export const isTransportError = (e: unknown) => e instanceof IrohError
 export const deviceName = () => `${Platform.OS === 'ios' ? 'iPhone' : 'Android'} · Hermes UI app`
 export const libraryInfo = () => IrohBackend.libraryInfo()
+
+/** Desktop only (transport.web.ts); native apps have no built-in backend. */
+export async function startBuiltInBackend(): Promise<Target> { throw new Error('not available') }

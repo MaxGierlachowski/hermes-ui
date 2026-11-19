@@ -6,16 +6,16 @@ import { showThread } from '@/lib/nav'
 
 /**
  * <scheme>://demo starts the demo mode without the pairing screen (for reviewers and screenshots).
- * Optional: ?tab=inbox, ?thread=<demo chat id>. Ignored while the app is paired with a backend.
+ * Optional: ?tab=inbox, ?thread=<demo chat id>, ?long=<n> (adds a chat with n messages, id demo-long). Ignored while the app is paired with a backend.
  */
 export default function DemoRoute() {
-  const { tab, thread } = useLocalSearchParams<{ tab?: string; thread?: string }>()
+  const { tab, thread, long } = useLocalSearchParams<{ tab?: string; thread?: string; long?: string }>()
   const auth = useStore((s) => s.auth)
   const demo = useStore((s) => s.demo)
   useEffect(() => {
     if (auth === 'unknown') return
     ;(async () => {
-      if (!demo && auth !== 'ok') await startDemo()
+      if (!demo && auth !== 'ok') await startDemo({ longThread: Number(long) || undefined })
       setTab(tab === 'inbox' ? 'inbox' : 'board')
       router.replace('/')
       if (thread) showThread(thread)

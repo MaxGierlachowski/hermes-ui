@@ -9,11 +9,11 @@
 // Everything above this file (store, screens) only sees paths like /api/sessions.
 import {
   activeTarget, closeTransport, deviceName, forgetTarget, isTransportError, libraryInfo, openTransport,
-  rememberTarget, savedTarget, type Target,
+  rememberTarget, savedTarget, startBuiltInBackend, type Target,
 } from './transport'
 
 export type { Target }
-export { deviceName, libraryInfo }
+export { deviceName, libraryInfo, startBuiltInBackend }
 
 export class Unauthorized extends Error {}
 /** No backend connection yet (still connecting, or offline with cached content on screen). */

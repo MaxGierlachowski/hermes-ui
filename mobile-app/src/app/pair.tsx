@@ -6,6 +6,8 @@ import * as Clipboard from 'expo-clipboard'
 import { ClipboardPaste, Laptop, PlayCircle, QrCode } from 'lucide-react-native'
 import { parsePairingLink } from '@shared/pairing'
 import { connectLocal, pair, startDemo, useStore } from '@/lib/store'
+import { startBuiltInBackend } from '@/lib/connection'
+import { isDesktop } from '@/lib/desktop'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
@@ -104,8 +106,19 @@ function LocalBackend({ busy, setBusy }: { busy: boolean; setBusy: (b: boolean) 
     setBusy(true)
     try { await connectLocal(url.trim(), token.trim()); router.replace('/') } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
+  const builtIn = async () => {
+    setError('')
+    setBusy(true)
+    try { const b = await startBuiltInBackend(); if (b.kind === 'http') await connectLocal(b.baseUrl, b.token); router.replace('/') } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+  }
   return (
     <View className="gap-2 border-t border-border pt-5">
+      {isDesktop && (
+        <View className="gap-2 pb-3">
+          <Button disabled={busy} onPress={builtIn}><Icon as={Laptop} size={16} tone="primary-foreground" /><Text>{t('Eingebautes Backend starten')}</Text></Button>
+          <Text className="text-xs text-muted-foreground">{t('Startet das Backend in dieser App (eigener Datenordner, Port 8799). Hermes muss auf diesem Rechner laufen.')}</Text>
+        </View>
+      )}
       <View className="flex-row items-center gap-2">
         <Icon as={Laptop} size={16} tone="muted-foreground" />
         <Text className="text-sm font-medium">{t('Backend auf diesem Rechner')}</Text>

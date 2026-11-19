@@ -132,13 +132,43 @@ const REPLIES = [
     'Klar, ich kümmere mich darum: Erst schaue ich mir an, was da ist, dann ändere ich es und prüfe es.\n\n- Relevante Dateien lesen\n- Änderung machen\n- Tests laufen lassen\n\nDas ist der **Demo-Modus**: Mit deinem eigenen Backend antwortet hier Hermes Agent.'),
 ]
 
+/** A long conversation for performance measurements: markdown, code, lists, tool calls. */
+function addLongThread(d: Data, n: number) {
+  const T = now()
+  const id = 'demo-long'
+  const blocks = [
+    L('Here is the plan for this step:\n\n1. Read the config\n2. Change the **retry policy**\n3. Run the tests\n\n```ts\nexport const retry = { attempts: 5, backoffMs: 250 }\n```', 'Hier der Plan für diesen Schritt:\n\n1. Config lesen\n2. **Retry-Policy** ändern\n3. Tests laufen lassen\n\n```ts\nexport const retry = { attempts: 5, backoffMs: 250 }\n```'),
+    L('Done. The tests pass (128 of 128). Next I look at the logging, which still writes every request twice.', 'Erledigt. Die Tests laufen durch (128 von 128). Als Nächstes schaue ich mir das Logging an, das jede Anfrage noch doppelt schreibt.'),
+    L('| Check | Result |\n|---|---|\n| Lint | ok |\n| Types | ok |\n| Unit tests | 128 / 128 |', '| Prüfung | Ergebnis |\n|---|---|\n| Lint | ok |\n| Typen | ok |\n| Unit-Tests | 128 / 128 |'),
+  ]
+  const list: ThreadMessage[] = []
+  for (let i = 0; i < n; i++) {
+    const ts = T - (n - i) * 60
+    const k = i % 5
+    if (k === 0) list.push({ id: i + 1, role: 'user', ts, text: L(`Step ${i / 5 + 1}: please continue with the next part.`, `Schritt ${i / 5 + 1}: bitte mit dem nächsten Teil weitermachen.`) })
+    else if (k === 1 || k === 3) list.push({ id: i + 1, role: 'tool', ts, toolName: k === 1 ? 'terminal' : 'read_file', summary: k === 1 ? 'npm test' : 'src/retry.ts', text: k === 1 ? '$ npm test\n128 passing' : '' })
+    else list.push({ id: i + 1, role: 'assistant', ts, text: blocks[i % blocks.length] })
+  }
+  d.messages.set(id, list)
+  d.sessions.set(id, {
+    id, title: L(`Long thread (${n} messages)`, `Langer Thread (${n} Nachrichten)`), source: 'desktop', system: false, column: 'waiting', autoColumn: 'waiting', override: false, running: false,
+    activity: '', initialPrompt: '', createdAt: T - n * 60, updatedAt: T - 5, messageCount: n, test: false, pending: [], paseo: [], paseoNote: '',
+  })
+}
+
 export class DemoBackend implements Backend {
   readonly gateway = { endpointId: 'demo' }
   readonly endpointId = 'demo'
-  private data = build()
+  private data: Data
   private listeners = new Set<(event: string, data: string) => void>()
   private timers = new Set<ReturnType<typeof setTimeout>>()
   private nextId = 1000
+
+  /** `longThread`: adds a chat with that many messages (performance measurements, /demo?long=450). */
+  constructor(opts: { longThread?: number } = {}) {
+    this.data = build()
+    if (opts.longThread) addLongThread(this.data, opts.longThread)
+  }
 
   connectionInfo() { return { kind: 'direct' as const, paths: [{ kind: 'demo', addr: 'demo', selected: true, rttMs: 0 }] } }
   relayProblem() { return null }

@@ -37,16 +37,30 @@ export async function savedTarget(): Promise<Target | null> {
   try { return JSON.parse((await secretGet(KEY)) || 'null') } catch { return null }
 }
 
-/** The saved choice, else the backend the desktop shell runs or knows about. */
+/**
+ * The saved choice, else the backend the desktop shell runs (sidecar) or was configured with. The
+ * shell's answer waits until its sidecar is up, so the first request after launch already succeeds;
+ * its token wins over a saved one for the same URL (the sidecar's data dir may have been reset).
+ */
 export async function activeTarget(): Promise<Target | null> {
-  const saved = await savedTarget()
-  if (saved) return saved
-  const local = await localBackend()
-  return local ? { kind: 'http', baseUrl: local.baseUrl, token: local.token } : null
+  const [saved, local] = await Promise.all([savedTarget(), localBackend()])
+  if (local && (!saved || (saved.kind === 'http' && saved.baseUrl === local.baseUrl))) return { kind: 'http', baseUrl: local.baseUrl, token: local.token }
+  return saved
 }
 
 export const rememberTarget = (t: Target) => secretSet(KEY, JSON.stringify(t))
-export const forgetTarget = () => secretDelete(KEY)
+export async function forgetTarget() {
+  await secretDelete(KEY)
+  // Desktop: stop the built-in backend too, or the next start would connect to it again.
+  if (isDesktop) await invoke('set_backend_mode', { mode: 'off' })
+}
+
+/** Desktop app: start the bundled backend (sidecar) and return how to reach it. */
+export async function startBuiltInBackend(): Promise<Target> {
+  const b = await invoke<{ baseUrl: string; token: string }>('set_backend_mode', { mode: 'sidecar' })
+  if (!b) throw new Error('The built-in backend did not start (see backend.log in the app data folder).')
+  return { kind: 'http', baseUrl: b.baseUrl, token: b.token }
+}
 
 type FetchFn = (url: string, init?: RequestInit) => Promise<Response>
 
@@ -131,10 +145,21 @@ class HttpBackend implements Backend {
   relayProblem() { return null }
 }
 
-// iroh-fetch is loaded as a native ES module from /vendor/iroh-fetch (copied there at build time,
-// see scripts/web-vendor.mjs): it finds its WASM through import.meta.url, which Metro does not bundle.
+// iroh-fetch is loaded as a native ES module from /vendor (copied there at build time, see
+// scripts/web-vendor.mjs): it finds its WASM through import.meta.url, which Metro does not bundle.
+// A <script type="module"> tag rather than import(): no eval, fine under a strict CSP.
 type IrohFetchModule = { createIrohFetch(o: Record<string, unknown>): Promise<{ fetch: FetchFn; objectUrl(u: string): Promise<string>; endpointId: string; close(): Promise<void> }> }
-const nativeImport = new Function('u', 'return import(u)') as (u: string) => Promise<IrohFetchModule>
+let irohModule: Promise<IrohFetchModule> | null = null
+const loadIrohFetch = () => (irohModule ??= new Promise((resolve, reject) => {
+  const w = window as unknown as { __irohFetch?: IrohFetchModule }
+  if (w.__irohFetch) return resolve(w.__irohFetch)
+  window.addEventListener('iroh-fetch-ready', () => resolve(w.__irohFetch!), { once: true })
+  const s = document.createElement('script')
+  s.type = 'module'
+  s.src = new URL('vendor/iroh-loader.mjs', document.baseURI).href
+  s.onerror = () => { irohModule = null; reject(new TransportError('iroh-fetch could not be loaded')) }
+  document.head.appendChild(s)
+}))
 const IROH_ORIGIN = 'https://hermes-ui.iroh'
 let iroh: Awaited<ReturnType<IrohFetchModule['createIrohFetch']>> | null = null
 
@@ -144,7 +169,7 @@ export async function openTransport(target: Target, timeoutMs: number): Promise<
     return new HttpBackend(base, target.token, (u, i) => fetch(u, i), 'HTTP · 127.0.0.1', { endpointId: base })
   }
   await closeTransport()
-  const { createIrohFetch } = await nativeImport(new URL('vendor/iroh-fetch/src/browser.js', document.baseURI).href)
+  const { createIrohFetch } = await loadIrohFetch()
   iroh = await createIrohFetch({
     backends: { [IROH_ORIGIN]: target.relayUrl ? { endpointId: target.endpointId, relayUrl: target.relayUrl } : target.endpointId },
     persistIdentity: true, // stable device id: the gateway's allow-list knows this device
