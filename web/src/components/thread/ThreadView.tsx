@@ -432,7 +432,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
           placeholder={session.draft ? 'Entwurf ergänzen und starten …' : t('Antworten …')}
           onSubmit={async (msg) => {
             if (!confirmForeign()) throw new Error('abgebrochen')
-            await sendMessage(getState().openId!, msg)
+            return sendMessage(getState().openId!, msg)
           }}
         />
       </div>}

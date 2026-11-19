@@ -356,4 +356,10 @@ export const EN: Record<string, string> = {
   'Terminal': 'Terminal',
   'zugeordnet über die Startzeit (Heuristik)': 'matched by start time (heuristic)',
   'zugeordnet über den Prompt (Heuristik)': 'matched by prompt (heuristic)',
+  // Voice messages: progress and errors
+  'Aufnahme fehlgeschlagen': 'Recording failed',
+  'Sprachnachricht ({len}) nicht gesendet': 'Voice message ({len}) not sent',
+  'Sprachnachricht wird transkribiert …': 'Transcribing voice message …',
+  'Aufnahme {len}': 'Recording {len}',
+  'Sprachnachricht nicht transkribiert – als Audiodatei gesendet': 'Voice message not transcribed – sent as an audio file',
 }

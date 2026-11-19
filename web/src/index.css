@@ -183,3 +183,9 @@
 .shiki, .shiki span { color: var(--shiki-light); background-color: var(--shiki-light-bg); }
 .dark .shiki, .dark .shiki span { color: var(--shiki-dark); background-color: var(--shiki-dark-bg); }
 .shiki span { background-color: transparent !important; }
+
+/* Composer: indeterminate progress while a voice message is transcribed. */
+@keyframes voice-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}

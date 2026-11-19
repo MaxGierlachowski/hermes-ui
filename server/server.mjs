@@ -575,15 +575,22 @@ async function sendPrompt(id, { text = '', images = [], audio = null }) {
     attachments.push(await gateway.uploadImage(img));
   }
   let body = text;
+  let voice = null; // what happened to the voice message, reported back to the client
   if (audio) {
     const url = board.saveMedia(id, { ...audio, name: 'voice' });
     media.push({ afterMsgId, kind: 'audio', url });
     let transcript = '';
+    let error = '';
+    const t0 = Date.now();
     try {
       const res = await gateway.transcribe(audio);
       transcript = res.ok !== false ? (res.transcript || '').trim() : '';
-      if (!transcript) console.warn('transcribe: empty', JSON.stringify(res).slice(0, 200));
-    } catch (err) { console.warn('transcribe failed:', err.message); }
+      if (!transcript) {
+        error = res.ok === false ? String(res.error || res.detail || 'transcription failed') : 'empty transcript';
+        console.warn('transcribe: empty', JSON.stringify(res).slice(0, 200));
+      }
+    } catch (err) { error = err.message; console.warn('transcribe failed:', err.message); }
+    voice = { transcribed: !!transcript, ms: Date.now() - t0, ...(error ? { error: clip(error, 300) } : {}) };
     if (transcript) body = body ? `${body}\n\n🎙 ${transcript}` : transcript;
     else {
       const file = board.mediaPath(...url.split('/').slice(-2).map(decodeURIComponent));
@@ -619,7 +626,7 @@ async function sendPrompt(id, { text = '', images = [], audio = null }) {
   reconcileOutbox(id);
   pushCard(id, true);
   broadcast('reload', { id, final: false });
-  return { body, admission, entry: outbox.get(entry.id) || { ...entry, status: 'delivered' } };
+  return { body, admission, voice, entry: outbox.get(entry.id) || { ...entry, status: 'delivered' } };
 }
 
 function sessionRunning(id, row = store.getSession(id)) {
@@ -1141,13 +1148,15 @@ const server = http.createServer(async (req, res) => {
         const newId = await startDraft(id);
         return send(res, 200, { session: cardById(newId) });
       }
+      let sent;
       try {
-        await sendPrompt(id, body);
+        sent = await sendPrompt(id, body);
       } catch (err) {
         // The message stays in the thread as failed, with "send again".
         return send(res, 502, { error: err.message, session: cardById(id), messages: threadMessages(id) });
       }
-      return send(res, 200, { session: cardById(id), messages: threadMessages(id) });
+      // voice: { transcribed, ms, error? } – a failed transcription is sent as an audio file and reported here.
+      return send(res, 200, { session: cardById(id), messages: threadMessages(id), voice: sent.voice });
     }
 
     if ((m = p.match(/^\/api\/outbox\/([0-9a-f-]{36})(\/retry)?$/)) && (req.method === 'DELETE' || (m[2] && req.method === 'POST'))) {

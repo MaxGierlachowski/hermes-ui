@@ -43,7 +43,7 @@ export default function NewChat() {
           placeholder={t('Worum geht es?')}
           onSend={async (msg) => {
             const s = await createChat(msg).catch((e) => { toast(e instanceof Error ? e.message : String(e), 'error'); return null })
-            if (!s) return
+            if (!s) return false
             showThread(s.id, { replace: true })
           }}
         />

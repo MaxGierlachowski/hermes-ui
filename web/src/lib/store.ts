@@ -279,8 +279,9 @@ export async function createChat(msg: OutgoingMessage) {
   return session
 }
 
+/** false when the message was not delivered (already reported); the composer then keeps it. */
 export async function sendMessage(id: string, msg: OutgoingMessage) {
-  let res: { session: Session; messages?: ThreadMessage[] }
+  let res: { session: Session; messages?: ThreadMessage[]; voice?: { transcribed: boolean; error?: string } }
   try {
     res = await api(`/api/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', json: msg })
   } catch (err) {
@@ -288,11 +289,13 @@ export async function sendMessage(id: string, msg: OutgoingMessage) {
     if (err instanceof Unauthorized) throw err
     toast.error(t('Nachricht nicht zugestellt'), { description: err instanceof Error ? err.message : String(err) })
     refreshThread(id)
-    return
+    return false
   }
-  if (res.session && res.session.id !== id) { remove(id); upsert(res.session, true); openThread(res.session.id); return }
+  if (res.voice && !res.voice.transcribed) toast.error(t('Sprachnachricht nicht transkribiert – als Audiodatei gesendet'), { description: res.voice.error })
+  if (res.session && res.session.id !== id) { remove(id); upsert(res.session, true); openThread(res.session.id); return true }
   if (res.session) upsert(res.session)
   if (res.messages && state.openId === id) set({ messages: res.messages })
+  return true
 }
 
 async function outboxAction(sessionId: string, outboxId: string, retry: boolean) {

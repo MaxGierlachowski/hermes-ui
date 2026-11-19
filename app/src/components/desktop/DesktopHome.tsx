@@ -101,7 +101,8 @@ function NewChatDialog() {
         placeholder={t('Worum geht es?')}
         onSend={async (msg) => {
           const s = await createChat({ ...msg, title: title.trim() || undefined, draft }).catch((e) => { toast(e instanceof Error ? e.message : String(e), 'error'); return null })
-          if (s) showThread(s.id)
+          if (!s) return false
+          showThread(s.id)
         }}
       />
       <View className="flex-row items-center gap-2 px-4 pb-4 pt-1">

@@ -308,15 +308,17 @@ export async function createChat(msg: OutgoingMessage) {
 }
 
 export async function sendMessage(id: string, msg: OutgoingMessage) {
-  let res: { session: Session; messages?: ThreadMessage[] }
+  let res: { session: Session; messages?: ThreadMessage[]; voice?: { transcribed: boolean; error?: string } }
   try {
-    res = await api(`/api/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', json: msg, timeoutMs: 120_000 })
+    // A voice message is transcribed before it is sent: give Hermes' speech-to-text time.
+    res = await api(`/api/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', json: msg, timeoutMs: msg.audio ? 300_000 : 120_000 })
   } catch (err) {
     if (err instanceof Unauthorized) { handle(err); return null }
     toast(`${t('Nachricht nicht zugestellt')}: ${err instanceof Error ? err.message : String(err)}`, 'error')
     refreshThread(id)
     return null
   }
+  if (res.voice && !res.voice.transcribed) toast(`${t('Sprachnachricht nicht transkribiert – als Audiodatei gesendet')}${res.voice.error ? `: ${res.voice.error}` : ''}`, 'error')
   if (res.session && res.session.id !== id) { remove(id); upsert(res.session); return res.session.id }
   if (res.session) upsert(res.session)
   if (res.messages) persistThread(id, res.messages)

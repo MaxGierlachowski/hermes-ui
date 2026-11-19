@@ -166,7 +166,8 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
             onStop={() => interrupt(sessionId)}
             onSend={async (msg) => {
               const next = await sendMessage(sessionId, msg)
-              if (next && next !== sessionId) showThread(next, { replace: true })
+              if (!next) return false // not delivered: the composer keeps the message (and a voice take)
+              if (next !== sessionId) showThread(next, { replace: true })
             }}
           />
         </View>
