@@ -21,6 +21,21 @@ All notable changes. The backend + web UI and the app share one repository; app 
 - Web cold start 431 → 157 ms (one bundle, tree shaking); measurements in `scripts/measure-ui.mjs`.
 - Fixed: Esc in the lightbox no longer also closes the chat; tablet columns keep their width.
 
+### UI polish to the web UI's look (`desktop-spike-3`, app `0.4.0-beta`)
+- Design system aligned with the shadcn web UI: Geist on web and desktop, its radius and shadow scales
+  (soft box shadows instead of 35 % RN shadows), focus rings for the keyboard only, tooltips on icon
+  buttons, fade/zoom for dialogs, palette and menus; buttons, inputs, Kbd and Switch in shadcn sizes on
+  the desktop, touch sizes (≥ 44 px) on phones.
+- Board cards, columns and header at the web UI's density (2-line titles); the ⌘K palette with groups,
+  recent chats, match highlights, a meta line and key hints; the new-chat dialog with title and
+  "only create"; the composer as one prompt box (desktop) / one-line pill (phone).
+- Inbox like the web UI: filters, item cards with a header, uniform small buttons, history by day.
+- Thread: header with a meta line, timestamps on hover, short threads start at the top; code blocks with
+  syntax highlighting (Prism, GitHub colours, loaded on demand), inline code, lists, links, tables.
+- Phone: header with logo, column tabs as a pill with status dots, opening in "Waiting".
+- No performance regression against the spike (`scripts/measure-ui.mjs`); findings and deliberate
+  deviations in [docs/ui-audit.md](docs/ui-audit.md).
+
 ### Desktop app: permissions (`desktop-spike-2`)
 - macOS now asks for the microphone, the camera and notifications (usage texts in `Info.plist`,
   hardened-runtime entitlements, notifications through `UNUserNotificationCenter`); a click on a

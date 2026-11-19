@@ -116,7 +116,8 @@ function Overlay() {
   const overlay = useNav((n) => n.overlay)
   if (!overlay) return null
   return (
-    <View className="absolute inset-0 z-40 items-center pt-[12vh]">
+    // The palette sits high like the web UI's command dialog; the new-chat dialog is centred like its Dialog.
+    <View className={cn('absolute inset-0 z-40 items-center', overlay === 'search' ? 'pt-[12vh]' : 'justify-center')}>
       <Pressable {...anim('overlay')} className="absolute inset-0 bg-black/10 web:backdrop-blur-[2px] dark:bg-black/40" onPress={() => setOverlay(null)} accessibilityRole="none" />
       {overlay === 'search' ? (
         <View {...anim('dialog')} className="w-[640px] max-w-[92%]">

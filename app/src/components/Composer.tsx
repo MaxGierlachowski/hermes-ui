@@ -184,7 +184,7 @@ export function Composer({ onSend, running, onStop, initial, placeholder, autoFo
   // Desktop: the web UI's prompt box (field and actions in one bordered box, ring on focus, hint below).
   if (isWebDesktop) {
     return (
-      <View ref={box} className="gap-1.5 bg-background px-3 pb-2 pt-2">
+      <View ref={box} className="gap-1.5 px-3 pb-2 pt-2">
         {blocked && <PermissionNotice kind={blocked} onClose={() => setBlocked(null)} />}
         <CameraCapture open={camera} onClose={() => setCamera(false)} onPhoto={(p) => setImages((x) => [...x, p].slice(0, 6))} onDenied={() => setBlocked('camera')} />
         <View {...({ dataSet: { hkBox: '' } } as object)} className="gap-1 rounded-xl border border-input bg-card p-2" style={shadow('xs', c === THEME.dark)}>
