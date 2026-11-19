@@ -8,7 +8,7 @@ import { createImageResolver, real } from '../src/local-files.mjs';
 // Layout: <base>/cache (a root), <base>/Documents/{shots,other} outside every root.
 const base = real(fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-ui-test-')));
 const cache = path.join(base, 'cache');
-const shots = path.join(base, 'Documents', 'Claude outputs', 'shots');
+const shots = path.join(base, 'Documents', 'Shared outputs', 'shots');
 const other = path.join(base, 'Documents', 'other');
 for (const d of [cache, shots, other]) fs.mkdirSync(d, { recursive: true });
 const png = Buffer.from('89504e470d0a1a0a', 'hex');
