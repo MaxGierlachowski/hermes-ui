@@ -807,6 +807,19 @@ function observeAgent(id) {
 }
 
 // ---------- http ----------
+// CORS for the desktop app (its pages come from tauri://localhost) and HERMES_UI_CORS_ORIGINS. Only the
+// Bearer token works across origins: no credentials (the device cookie is SameSite=Strict anyway).
+const CORS_ORIGINS = new Set(['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', ...cfg.corsOrigins]);
+function cors(req, res) {
+  const origin = req.headers.origin;
+  if (!origin || !CORS_ORIGINS.has(origin)) return false;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type, accept');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Max-Age', '600');
+  return true;
+}
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
@@ -890,6 +903,8 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': STATIC[path.extname(file)] || 'application/octet-stream', 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache', ...SECURITY_HEADERS });
       return fs.createReadStream(file).pipe(res);
     }
+
+    if (cors(req, res) && req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
     // ---- unauthenticated: login with the board token, or redeem a pairing code ----
     if (p === '/api/login' && req.method === 'POST') {

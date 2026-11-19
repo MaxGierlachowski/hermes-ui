@@ -13,6 +13,7 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_SERVE_UI` | `--ui` | `on` | `off` = headless, API only. |
 | `HERMES_UI_DIR` | `--ui-dir` | `web/dist` | Built UI to serve. |
 | `HERMES_UI_URL` | `--ui-url` | – | Public URL of the static UI, used in iroh pairing links. |
+| `HERMES_UI_CORS_ORIGINS` | `--cors-origins` | – | Extra origins (comma separated) whose pages may call the API with the token (Bearer, no cookies). The desktop app's `tauri://localhost` is always allowed. |
 | `HERMES_UI_REMOTE` | `--remote` | `off` | `off` \| `iroh` \| `tailscale-funnel` \| `tailscale-serve` \| `cloudflare`. |
 | `HERMES_UI_LANG` | `--lang` | `en` | Language of server-generated texts (`en`, `de`). The UI follows the browser; change it in ⌘K. |
 | `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state, inbox history, VAPID keys and push subscriptions. |
