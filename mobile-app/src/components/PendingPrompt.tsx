@@ -10,6 +10,7 @@ import { respond } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
+import { isWebDesktop } from '@/lib/web-input'
 
 const stripRecommended = (c: string) => c.replace(/\s*\((recommended|empfohlen)\)\s*$/i, '').trim()
 const APPROVAL_LABEL: Record<string, string> = { once: t('Einmal erlauben'), session: t('Für diese Session'), always: t('Immer erlauben'), deny: t('Ablehnen') }
@@ -50,16 +51,19 @@ export function PendingPrompt({ sessionId, prompt: p }: { sessionId: string; pro
       <Shell p={p}>
         {!!p.description && <Text className="text-[15px]">{p.description}</Text>}
         {!!p.command && <Text selectable className="rounded-md bg-background/80 p-2 font-mono text-xs">{p.command}</Text>}
-        {p.choices.filter((c) => c !== 'deny').map((c, i) => (
-          <Button key={c} variant={i === 0 ? 'default' : 'outline'} disabled={busy} onPress={() => send({ choice: c })}>
-            <Icon as={Check} size={16} tone={i === 0 ? 'primary-foreground' : 'foreground'} /><Text>{APPROVAL_LABEL[c] || c}</Text>
-          </Button>
-        ))}
-        {p.choices.includes('deny') && (
-          <Button variant="ghost" disabled={busy} onPress={() => send({ choice: 'deny' })}>
-            <Icon as={X} size={16} tone="destructive" /><Text className="text-destructive">{t('Ablehnen')}</Text>
-          </Button>
-        )}
+        {/* Desktop: the buttons in one row like the web UI; phone: stacked full-width touch targets. */}
+        <View className={isWebDesktop ? 'flex-row flex-wrap items-center gap-2' : 'gap-3'}>
+          {p.choices.filter((c) => c !== 'deny').map((c, i) => (
+            <Button key={c} size={isWebDesktop ? 'sm' : 'default'} variant={i === 0 ? 'default' : 'outline'} disabled={busy} onPress={() => send({ choice: c })}>
+              <Icon as={Check} size={16} tone={i === 0 ? 'primary-foreground' : 'foreground'} /><Text>{APPROVAL_LABEL[c] || c}</Text>
+            </Button>
+          ))}
+          {p.choices.includes('deny') && (
+            <Button size={isWebDesktop ? 'sm' : 'default'} variant="ghost" className={isWebDesktop ? 'ml-auto' : undefined} disabled={busy} onPress={() => send({ choice: 'deny' })}>
+              <Icon as={X} size={16} tone="destructive" /><Text className="text-destructive">{t('Ablehnen')}</Text>
+            </Button>
+          )}
+        </View>
       </Shell>
     )
   }

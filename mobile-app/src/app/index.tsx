@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Animated, Pressable, RefreshControl, View } from 'react-native'
-import PagerView from 'react-native-pager-view'
+import { ActivityIndicator, Animated, Pressable, RefreshControl, View, useWindowDimensions } from 'react-native'
+import { Pager, type PagerHandle } from '@/components/Pager'
 import { FlashList } from '@shopify/flash-list'
 import { Redirect, router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,7 +12,11 @@ import { Icon } from '@/components/ui/icon'
 import { SessionCard } from '@/components/SessionCard'
 import { Inbox } from '@/components/Inbox'
 import { OfflineBanner, SyncBar } from '@/components/SyncBar'
-import { badgeCount, bootstrap, exitDemo, loadSessions, openThread, prefetchThread, setPrefs, setTab, useStore } from '@/lib/store'
+import { badgeCount, bootstrap, exitDemo, loadSessions, prefetchThread, setPrefs, setTab, useStore } from '@/lib/store'
+import { groupSessions } from '@/lib/board'
+import { layoutFor, showNewChat, showSearch, showThread } from '@/lib/nav'
+import { DesktopHome } from '@/components/desktop/DesktopHome'
+import { BoardColumns } from '@/components/desktop/BoardColumns'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
@@ -35,7 +39,7 @@ function Header() {
           </Pressable>
         )}
       </View>
-      <Button variant="ghost" size="icon" onPress={() => router.push('/search')} accessibilityLabel={t('Suche')}><Icon as={Search} /></Button>
+      <Button variant="ghost" size="icon" onPress={showSearch} accessibilityLabel={t('Suche')}><Icon as={Search} /></Button>
       <Button variant="ghost" size="icon" onPress={() => router.push('/settings')} accessibilityLabel={t('Einstellungen')}><Icon as={Settings} /></Button>
     </View>
   )
@@ -78,7 +82,7 @@ function ColumnTabs({ counts, pending, page, progress, onPick }: { counts: Recor
 /** One column: its own list, own scroll position and pull to refresh. */
 const ColumnPage = memo(function ColumnPage({ list }: { list: Session[] }) {
   const [refreshing, setRefreshing] = useState(false)
-  const open = useCallback((s: Session) => { openThread(s.id); router.push(`/thread/${encodeURIComponent(s.id)}`) }, [])
+  const open = useCallback((s: Session) => showThread(s.id), [])
   return (
     <FlashList
       data={list}
@@ -93,29 +97,27 @@ const ColumnPage = memo(function ColumnPage({ list }: { list: Session[] }) {
 })
 const Gap = () => <View className="h-2.5" />
 
-const sortCards = (a: Session, b: Session) => (b.pending?.length || 0) - (a.pending?.length || 0) || b.updatedAt - a.updatedAt
+/** Tablet / narrow window: two columns side by side, the others a snap-scroll away. */
+function TwoColumnBoard() {
+  const sessions = useStore((s) => s.sessions)
+  const openId = useStore((s) => s.openId)
+  const { lists } = useMemo(() => groupSessions(sessions), [sessions])
+  return <BoardColumns lists={lists} visible={2} selection={null} openId={openId} />
+}
 
 /** The board on a phone: the four columns as a horizontal pager (swipe with snap), tabs in sync. */
 function Board() {
   const sessions = useStore((s) => s.sessions)
   const column = useStore((s) => s.column)
   const index = Math.max(0, COLUMNS.findIndex((c) => c.id === column))
-  const pager = useRef<PagerView>(null)
+  const pager = useRef<PagerHandle>(null)
   const page = useRef(index)
   const [shown, setShown] = useState(index)
   const position = useRef(new Animated.Value(index)).current
   const offset = useRef(new Animated.Value(0)).current
   const progress = useMemo(() => Animated.add(position, offset), [])
-  const onPageScroll = useMemo(() => Animated.event([{ nativeEvent: { position, offset } }], { useNativeDriver: true }), [])
 
-  const { lists, counts, pending } = useMemo(() => {
-    const lists = { new: [], doing: [], waiting: [], done: [] } as Record<Column, Session[]>
-    const pending = { new: false, doing: false, waiting: false, done: false } as Record<Column, boolean>
-    for (const s of Object.values(sessions)) { lists[s.column].push(s); if (s.pending?.length) pending[s.column] = true }
-    for (const c of COLUMNS) lists[c.id].sort(sortCards)
-    const counts = Object.fromEntries(COLUMNS.map((c) => [c.id, lists[c.id].length])) as Record<Column, number>
-    return { lists, counts, pending }
-  }, [sessions])
+  const { lists, counts, pending } = useMemo(() => groupSessions(sessions), [sessions])
 
   // Column changed elsewhere (first load picks the first non-empty one): follow without animation.
   useEffect(() => {
@@ -128,14 +130,12 @@ function Board() {
   return (
     <View className="flex-1">
       <ColumnTabs counts={counts} pending={pending} page={shown} progress={progress} onPick={(i) => { haptic('select'); pager.current?.setPage(i) }} />
-      <AnimatedPager
+      <Pager
         ref={pager}
-        style={{ flex: 1 }}
         initialPage={index}
-        offscreenPageLimit={COLUMNS.length - 1}
-        onPageScroll={onPageScroll}
-        onPageSelected={(e: { nativeEvent: { position: number } }) => {
-          const i = e.nativeEvent.position
+        position={position}
+        offset={offset}
+        onPageSelected={(i) => {
           if (i === page.current) return
           page.current = i
           setShown(i)
@@ -144,11 +144,10 @@ function Board() {
         }}
       >
         {COLUMNS.map((c) => <View key={c.id} collapsable={false} className="flex-1"><ColumnPage list={lists[c.id]} /></View>)}
-      </AnimatedPager>
+      </Pager>
     </View>
   )
 }
-const AnimatedPager = Animated.createAnimatedComponent(PagerView)
 
 function BottomBar() {
   const tab = useStore((s) => s.tab)
@@ -198,10 +197,12 @@ export default function Home() {
   const tab = useStore((s) => s.tab)
   const hydrated = useStore((s) => s.hydrated)
   const insets = useSafeAreaInsets()
+  const layout = layoutFor(useWindowDimensions().width)
   if (auth === 'unknown') return <View className="flex-1 bg-background" />
   if (auth === 'unpaired') return <Redirect href="/pair" />
   // With a cached board the app shows it at once, also while connecting or offline.
   const content = auth === 'ok' || (hydrated && (auth === 'connecting' || auth === 'offline'))
+  if (layout === 'desktop' && content) return <DesktopHome />
   return (
     <View className="flex-1 bg-background">
       <Header />
@@ -210,14 +211,14 @@ export default function Home() {
       {content ? (
         // Both tabs stay mounted: switching is instant and keeps each one's scroll position.
         <View className="flex-1">
-          <View className="flex-1" style={tab === 'inbox' ? HIDDEN : undefined}><Board /></View>
+          <View className="flex-1" style={tab === 'inbox' ? HIDDEN : undefined}>{layout === 'tablet' ? <TwoColumnBoard /> : <Board />}</View>
           <View className="flex-1" style={tab === 'board' ? HIDDEN : undefined}><Inbox /></View>
         </View>
       ) : auth === 'connecting' ? (
         <View className="flex-1 items-center justify-center gap-3"><ActivityIndicator size="large" /><Text className="text-muted-foreground">{t('Verbinde über iroh …')}</Text></View>
       ) : <Offline />}
       {content && tab === 'board' && (
-        <Button size="lg" className="absolute right-4 rounded-full shadow-lg" style={{ bottom: insets.bottom + 72 }} onPress={() => router.push('/new')}>
+        <Button size="lg" className="absolute right-4 rounded-full shadow-lg" style={{ bottom: insets.bottom + 72 }} onPress={showNewChat}>
           <Icon as={Plus} tone="primary-foreground" /><Text>{t('Neuer Chat')}</Text>
         </Button>
       )}

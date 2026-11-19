@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
-import { openThread, setTab, startDemo, useStore } from '@/lib/store'
+import { setTab, startDemo, useStore } from '@/lib/store'
+import { showThread } from '@/lib/nav'
 
 /**
  * <scheme>://demo starts the demo mode without the pairing screen (for reviewers and screenshots).
@@ -17,7 +18,7 @@ export default function DemoRoute() {
       if (!demo && auth !== 'ok') await startDemo()
       setTab(tab === 'inbox' ? 'inbox' : 'board')
       router.replace('/')
-      if (thread) { openThread(thread); router.push(`/thread/${encodeURIComponent(thread)}`) }
+      if (thread) showThread(thread)
     })()
   }, [auth === 'unknown'])
   return <View className="flex-1 bg-background" />

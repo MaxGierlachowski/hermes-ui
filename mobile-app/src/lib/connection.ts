@@ -1,16 +1,19 @@
-// The app's one backend connection: iroh to the paired hermes-ui backend through the native
-// expo-iroh module (Rust, direct UDP paths with the relay as fallback).
+// The app's one backend connection, the same on every platform. What carries the requests is a
+// platform layer (transport.ts / transport.web.ts):
 //
-// Stored in the platform keystore (expo-secure-store → Android Keystore / iOS Keychain):
-//   - the gateway (endpoint id + relay hint) this app is paired with,
-//   - this device's iroh secret key, so its endpoint id (what the gateway allow-lists) never changes.
-import * as SecureStore from 'expo-secure-store'
-import { Directory, File, Paths } from 'expo-file-system'
-import { IrohBackend, IrohError, type ConnectionPath, type Gateway } from 'expo-iroh'
-import { Platform } from 'react-native'
+//   - iOS / Android: iroh through the native expo-iroh module (Rust, direct UDP paths, relay fallback),
+//   - web remote:   iroh through iroh-fetch (WASM in the browser, same pairing links as the web UI),
+//   - desktop/local: plain HTTP to a backend on 127.0.0.1 (the Tauri app's sidecar or a running one),
+//   - demo mode:     a stand-in that answers from sample data (demo.ts).
+//
+// Everything above this file (store, screens) only sees paths like /api/sessions.
+import {
+  activeTarget, closeTransport, deviceName, forgetTarget, isTransportError, libraryInfo, openTransport,
+  rememberTarget, savedTarget, type Target,
+} from './transport'
 
-const GATEWAY_KEY = 'hermes-ui.gateway'
-const SECRET_KEY = 'hermes-ui.iroh-secret-key'
+export type { Target }
+export { deviceName, libraryInfo }
 
 export class Unauthorized extends Error {}
 /** No backend connection yet (still connecting, or offline with cached content on screen). */
@@ -19,14 +22,21 @@ export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message) }
 }
 
-/** What the app needs from a connection: the iroh backend, or the demo mode's stand-in (demo.ts). */
+export type ConnectionPath = { kind: 'direct' | 'relay' | 'none'; paths: { kind: string; addr: string; selected: boolean; rttMs: number }[] }
+export type Gateway = { endpointId: string; relayUrl?: string }
+
+/** What the app needs from a connection: a transport, or the demo mode's stand-in (demo.ts). */
 export type Backend = {
+  /** How it is reached: iroh endpoint (endpointId) or HTTP base URL (endpointId = the URL). */
   readonly gateway: Gateway
-  /** This device's endpoint id. */
+  /** This device's endpoint id (iroh) or a label (HTTP). */
   readonly endpointId: string
   fetch(path: string, init?: { method?: string; json?: unknown; timeoutMs?: number; signal?: AbortSignal }): Promise<{ status: number; ok: boolean; text(): Promise<string>; cancel(): void }>
   events(path: string, onEvent: (event: string, data: string) => void, onState?: (open: boolean) => void): () => void
-  download(path: string, fileUri: string): Promise<{ status: number }>
+  /** Native: writes the body of GET `path` to a file (media cache). */
+  download?(path: string, fileUri: string): Promise<{ status: number }>
+  /** Web: a URL an <img>/<audio> can load directly (object URL, data URL or tokenised HTTP URL). */
+  mediaUrl?(path: string): Promise<string> | string
   connectionInfo(): ConnectionPath | null
   relayProblem(): string | null | undefined
 }
@@ -39,40 +49,24 @@ export function setDemoBackend(b: (Backend & { close(): void }) | null) {
   backend = b
 }
 
-export async function savedGateway(): Promise<Gateway | null> {
-  try { return JSON.parse((await SecureStore.getItemAsync(GATEWAY_KEY)) || 'null') } catch { return null }
+export { savedTarget, activeTarget }
+
+/** Opens the transport for a target (iroh endpoint or local HTTP backend) and makes it the backend. */
+export async function connect(target: Target, timeoutMs = 20_000) {
+  backend = await openTransport(target, timeoutMs)
+  return backend
 }
 
-/** Creates the endpoint (with the stored identity) and dials the gateway. */
-export async function connect(gateway: Gateway, timeoutMs = 20_000) {
-  const t0 = Date.now()
-  const secretKey = await SecureStore.getItemAsync(SECRET_KEY)
-  const b = await IrohBackend.connect(gateway, { secretKey, timeoutMs, lazy: true })
-  const t1 = Date.now()
-  if (b.secretKey !== secretKey) await SecureStore.setItemAsync(SECRET_KEY, b.secretKey)
-  backend = b
-  // Dial now, but don't fail here: requests redial, and the board shows "offline" meanwhile.
-  try { await b.dial(timeoutMs) } catch { /* reported by the first request */ }
-  // One log line per connect (logcat tag ReactNativeJS): endpoint setup, dial, and the path it took.
-  const path = b.connectionInfo()
-  console.log(`[hermes-ui] iroh endpoint ${t1 - t0} ms, dial ${Date.now() - t1} ms, path ${path?.kind ?? 'none'}${path?.paths.find((p) => p.selected) ? ` ${path.paths.find((p) => p.selected)!.rttMs.toFixed(1)} ms rtt` : ''}`)
-  return b
-}
-
-export async function rememberGateway(gateway: Gateway) {
-  await SecureStore.setItemAsync(GATEWAY_KEY, JSON.stringify(gateway))
-}
+export const rememberGateway = rememberTarget
 
 /** Forgets the paired backend. The device identity stays (pairing again keeps the same device id). */
 export async function forgetGateway() {
-  await SecureStore.deleteItemAsync(GATEWAY_KEY)
+  await forgetTarget()
   backend = null
-  await IrohBackend.close().catch(() => {})
+  await closeTransport().catch(() => {})
 }
 
-export const deviceName = () => `${Platform.OS === 'ios' ? 'iPhone' : 'Android'} · Hermes UI app`
-
-/** JSON API call over iroh. 401 / 403 (gateway refuses this device) → Unauthorized. */
+/** JSON API call. 401 / 403 (the backend refuses this device) → Unauthorized. */
 export async function api<T = unknown>(path: string, init: { method?: string; json?: unknown; timeoutMs?: number; signal?: AbortSignal } = {}): Promise<T> {
   if (!backend) throw new NotConnected('not connected')
   const res = await backend.fetch(path, { method: init.method, json: init.json, timeoutMs: init.timeoutMs, signal: init.signal })
@@ -84,66 +78,6 @@ export async function api<T = unknown>(path: string, init: { method?: string; js
   return body as T
 }
 
-export const isNetworkError = (e: unknown) => e instanceof IrohError || e instanceof NotConnected
+export const isNetworkError = (e: unknown) => e instanceof NotConnected || isTransportError(e)
 
-// ---------- media: backend URLs (/api/media/…, /api/file?…) as local files for <Image>/players ----------
-const mediaDir = () => {
-  const dir = new Directory(Paths.cache, 'media')
-  if (!dir.exists) dir.create({ intermediates: true, idempotent: true })
-  return dir
-}
-const inflight = new Map<string, Promise<string>>()
-const MEDIA_MAX_BYTES = 200 * 1024 * 1024
-
-/** Keeps the media cache under MEDIA_MAX_BYTES, oldest files first (the OS may also clear it). */
-export function pruneMedia() {
-  try {
-    const files = mediaDir().list().filter((f): f is File => f instanceof File)
-      .map((f) => ({ f, size: f.size ?? 0, t: f.modificationTime ?? 0 }))
-      .sort((a, b) => b.t - a.t)
-    let total = 0
-    for (const { f, size } of files) {
-      total += size
-      if (total > MEDIA_MAX_BYTES) { try { f.delete() } catch { /* in use or gone */ } }
-    }
-  } catch { /* nothing cached yet */ }
-}
-
-export function clearMedia() {
-  try { new Directory(Paths.cache, 'media').delete() } catch { /* nothing cached */ }
-}
-
-const hash = (s: string) => {
-  let h1 = 0x811c9dc5, h2 = 0x01000193
-  for (let i = 0; i < s.length; i++) { h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619); h2 = Math.imul(h2 ^ s.charCodeAt(i), 2246822519) }
-  return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36)
-}
-
-const mediaPath = (url: string) => {
-  const ext = (url.split('?')[0].match(/\.(\w{2,5})$/)?.[1] || decodeURIComponent(url).match(/\.(png|jpe?g|gif|webp|heic|m4a|mp3|ogg|opus|wav|webm|mp4)\b/i)?.[1] || 'bin').toLowerCase()
-  return new File(mediaDir(), `${hash(url)}.${ext}`)
-}
-
-/** Already on disk? Then a screen can render the image in its first frame instead of a spinner. */
-export function cachedMediaFile(url: string): string | null {
-  if (!url.startsWith('/api/')) return url
-  try { const file = mediaPath(url); return file.exists ? file.uri : null } catch { return null }
-}
-
-/** file:// URI of a backend media URL, downloaded over iroh once and cached. */
-export function mediaFile(url: string): Promise<string> {
-  if (!url.startsWith('/api/')) return Promise.resolve(url)
-  const file = mediaPath(url)
-  if (file.exists) return Promise.resolve(file.uri)
-  let p = inflight.get(url)
-  if (!p) {
-    p = (async () => {
-      if (!backend) throw new NotConnected('not connected')
-      const r = await backend.download(url, file.uri)
-      if (r.status < 200 || r.status >= 300) throw new ApiError(`HTTP ${r.status}`, r.status)
-      return file.uri
-    })().finally(() => inflight.delete(url))
-    inflight.set(url, p)
-  }
-  return p
-}
+export { cachedMediaFile, clearMedia, mediaFile, pruneMedia } from './media'

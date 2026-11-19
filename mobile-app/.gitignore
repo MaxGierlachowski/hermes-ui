@@ -55,3 +55,7 @@ modules/expo-iroh/android/build/
 modules/expo-iroh/android/.cxx/
 modules/expo-iroh/ios/build/
 
+
+# web build: iroh-fetch copied by scripts/web-vendor.mjs; desktop export
+public/vendor/
+dist-web/

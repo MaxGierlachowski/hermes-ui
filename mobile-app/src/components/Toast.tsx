@@ -2,8 +2,8 @@ import { useEffect } from 'react'
 import { Pressable, View } from 'react-native'
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
-import { dismissToast, openThread, useStore } from '@/lib/store'
+import { showThread } from '@/lib/nav'
+import { dismissToast, useStore } from '@/lib/store'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
@@ -20,7 +20,7 @@ export function Toast() {
   return (
     <Animated.View key={toast.id} entering={FadeInDown.duration(180)} exiting={FadeOutDown.duration(150)} pointerEvents="box-none" style={{ position: 'absolute', left: 12, right: 12, bottom: insets.bottom + 76 }}>
       <Pressable
-        onPress={() => { dismissToast(); if (toast.sessionId) { openThread(toast.sessionId); router.push(`/thread/${encodeURIComponent(toast.sessionId)}`) } }}
+        onPress={() => { dismissToast(); if (toast.sessionId) showThread(toast.sessionId) }}
         className={cn('flex-row items-center gap-3 rounded-xl border border-border bg-popover px-4 py-3 shadow-lg', toast.kind === 'error' && 'border-destructive/40')}
       >
         <View className={cn('h-2 w-2 rounded-full', toast.kind === 'error' ? 'bg-destructive' : toast.kind === 'success' ? 'bg-emerald-500' : 'bg-primary')} />

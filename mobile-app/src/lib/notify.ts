@@ -5,7 +5,7 @@
 //      (POST /api/push/native), which then pushes like it does for Web Push. Needs the app built with
 //      a google-services.json (see README) — without it getDevicePushTokenAsync fails and we stay local.
 import * as Notifications from 'expo-notifications'
-import { Platform } from 'react-native'
+import { AppState, Platform } from 'react-native'
 import type { InboxItem } from '@shared/types'
 import { api } from './connection'
 
@@ -29,6 +29,9 @@ export async function setupNotifications(ask: boolean) {
   if (current.granted || !ask) return current.granted
   return (await Notifications.requestPermissionsAsync()).granted
 }
+
+/** Not in the foreground: new inbox entries become system notifications instead of toasts. */
+export const appInBackground = () => AppState.currentState !== 'active'
 
 export async function notifyInboxItem(item: InboxItem, label: string, title: string) {
   try {

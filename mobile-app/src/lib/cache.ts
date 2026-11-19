@@ -40,6 +40,9 @@ const remember = (key: string, e: Entry<unknown>) => {
   if (mem.size > MEM_MAX) mem.delete(mem.keys().next().value!)
 }
 
+/** Native: files are read on demand, nothing to load up front (web: cache.web.ts preloads IndexedDB). */
+export async function initCache() {}
+
 export function readCache<T>(key: string): Entry<T> | null {
   const m = mem.get(key)
   if (m) return m as Entry<T>

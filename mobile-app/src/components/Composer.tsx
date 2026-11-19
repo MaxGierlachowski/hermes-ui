@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
-import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from 'react-native'
+import { useEffect, useRef, useState, type ComponentRef } from 'react'
+import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from 'react-native'
 import { Image } from 'expo-image'
 import * as ImagePicker from 'expo-image-picker'
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio'
-import { File } from 'expo-file-system'
+import { fileUpload } from '@/lib/upload'
 import { ArrowUp, Camera, ImagePlus, Mic, Square, X } from 'lucide-react-native'
 import { useColorScheme } from 'nativewind'
 import type { OutgoingMessage, Upload } from '@shared/types'
@@ -13,6 +13,8 @@ import { THEME } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
+import { toast } from '@/lib/store'
+import { isWebDesktop, useComposerKeys } from '@/lib/web-input'
 
 export type Picked = { uri: string; upload: Upload }
 
@@ -25,23 +27,31 @@ export async function pickImage(source: 'library' | 'camera'): Promise<Picked[]>
   return r.assets.filter((a) => a.base64).map((a) => ({ uri: a.uri, upload: { name: a.fileName || 'image.jpg', type: a.mimeType || 'image/jpeg', data: a.base64! } }))
 }
 
-export async function fileUpload(uri: string, type: string, name?: string): Promise<Upload> {
-  return { name, type, data: await new File(uri).base64() }
-}
+export { fileUpload }
+
+// Round buttons: 48 dp touch targets on phones, 36 px with a mouse.
+const BTN = isWebDesktop ? 'h-9 w-9' : 'h-12 w-12'
+
+// Unsent text per chat survives closing and reopening it (like the web UI).
+const drafts = new Map<string, string>()
 
 /**
  * Text, images (gallery / camera), voice message, send — or stop while Hermes works and the field is
  * empty. Sits above the keyboard (the screen uses KeyboardAvoidingView); touch targets are 48 dp.
  */
-export function Composer({ onSend, running, onStop, initial, placeholder, autoFocus }: {
+export function Composer({ onSend, running, onStop, initial, placeholder, autoFocus, draftKey }: {
   onSend: (msg: OutgoingMessage) => Promise<unknown>
   running?: boolean
   onStop?: () => void
   initial?: { text?: string; images?: Picked[] }
   placeholder?: string
   autoFocus?: boolean
+  /** Keeps unsent text under this key (the chat id). */
+  draftKey?: string
 }) {
-  const [text, setText] = useState(initial?.text || '')
+  const [text, setTextState] = useState(initial?.text || (draftKey ? drafts.get(draftKey) : '') || '')
+  const setText = (v: string) => { setTextState(v); if (draftKey) { if (v) drafts.set(draftKey, v); else drafts.delete(draftKey) } }
+  const box = useRef<ComponentRef<typeof View>>(null)
   const [images, setImages] = useState<Picked[]>(initial?.images || [])
   const [busy, setBusy] = useState(false)
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
@@ -69,22 +79,25 @@ export function Composer({ onSend, running, onStop, initial, placeholder, autoFo
       const uri = recorder.uri
       if (!uri) return
       const upload = await fileUpload(uri, 'audio/mp4', 'voice.m4a')
-      if (!upload.data) { Alert.alert(t('Aufnahme ist leer – Mikrofon prüfen')); return }
+      if (!upload.data) { toast(t('Aufnahme ist leer – Mikrofon prüfen'), 'error'); return }
       await send(upload)
       return
     }
     const perm = await requestRecordingPermissionsAsync()
-    if (!perm.granted) { Alert.alert(t('Mikrofon nicht erlaubt'), t('Erlaube das Mikrofon in den Android-Einstellungen der App.')); return }
+    if (!perm.granted) { toast(`${t('Mikrofon nicht erlaubt')}: ${t('Erlaube das Mikrofon in den Android-Einstellungen der App.')}`, 'error'); return }
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true })
     await recorder.prepareToRecordAsync()
     recorder.record()
     haptic('warning')
   }
 
+  // Desktop: Enter sends (Shift+Enter: new line), images by paste or drop onto the composer.
+  useComposerKeys(box, { onSend: () => send(), onImages: (p) => { if (p.length) setImages((x) => [...x, ...p].slice(0, 6)) } })
+
   const canSend = !!text.trim() || images.length > 0
   const secs = Math.floor((rec.durationMillis || 0) / 1000)
   return (
-    <View className="gap-2 border-t border-border bg-background px-3 pb-2 pt-2">
+    <View ref={box} className="gap-2 border-t border-border bg-background px-3 pb-2 pt-2">
       {images.length > 0 && (
         <ScrollView horizontal contentContainerClassName="gap-2">
           {images.map((img, i) => (
@@ -111,29 +124,32 @@ export function Composer({ onSend, running, onStop, initial, placeholder, autoFo
           placeholderTextColor={c['muted-foreground']}
           multiline
           autoFocus={autoFocus}
-          className="max-h-40 min-h-12 rounded-2xl border border-input bg-card px-4 py-3 text-[15px] text-foreground"
+          className={cn('max-h-40 rounded-2xl border border-input bg-card px-4 text-foreground', isWebDesktop ? 'min-h-11 py-2.5 text-[14px]' : 'min-h-12 py-3 text-[15px]')}
           textAlignVertical="center"
         />
       )}
       <View className="flex-row items-center gap-1">
-        <Pressable disabled={rec.isRecording} onPress={async () => { const p = await pickImage('library'); if (p.length) setImages((x) => [...x, ...p].slice(0, 6)) }} className="h-12 w-12 items-center justify-center rounded-full active:bg-accent" accessibilityLabel={t('Bild anhängen')}>
+        <Pressable disabled={rec.isRecording} onPress={async () => { const p = await pickImage('library'); if (p.length) setImages((x) => [...x, ...p].slice(0, 6)) }} className={cn('items-center justify-center rounded-full active:bg-accent web:hover:bg-accent', isWebDesktop ? 'h-9 w-9' : 'h-12 w-12')} accessibilityLabel={t('Bild anhängen')}>
           <Icon as={ImagePlus} tone="muted-foreground" />
         </Pressable>
-        <Pressable disabled={rec.isRecording} onPress={async () => { const p = await pickImage('camera'); if (p.length) setImages((x) => [...x, ...p].slice(0, 6)) }} className="h-12 w-12 items-center justify-center rounded-full active:bg-accent" accessibilityLabel={t('Foto aufnehmen')}>
-          <Icon as={Camera} tone="muted-foreground" />
-        </Pressable>
+        {!isWebDesktop && (
+          <Pressable disabled={rec.isRecording} onPress={async () => { const p = await pickImage('camera'); if (p.length) setImages((x) => [...x, ...p].slice(0, 6)) }} className="h-12 w-12 items-center justify-center rounded-full active:bg-accent" accessibilityLabel={t('Foto aufnehmen')}>
+            <Icon as={Camera} tone="muted-foreground" />
+          </Pressable>
+        )}
+        {isWebDesktop && <Text className="ml-1 text-xs text-muted-foreground">{t('↵ senden · ⇧↵ neue Zeile · Bilder per Einfügen oder Drag & Drop')}</Text>}
         <View className="flex-1" />
         {!canSend && (
-          <Pressable onPress={toggleRecording} className={cn('h-12 w-12 items-center justify-center rounded-full', rec.isRecording ? 'bg-destructive' : 'active:bg-accent')} accessibilityLabel={rec.isRecording ? t('Aufnahme senden') : t('Sprachnachricht')}>
+          <Pressable onPress={toggleRecording} className={cn('items-center justify-center rounded-full', BTN, rec.isRecording ? 'bg-destructive' : 'active:bg-accent')} accessibilityLabel={rec.isRecording ? t('Aufnahme senden') : t('Sprachnachricht')}>
             <Icon as={rec.isRecording ? ArrowUp : Mic} tone={rec.isRecording ? 'primary-foreground' : 'muted-foreground'} />
           </Pressable>
         )}
         {running && !canSend && !rec.isRecording ? (
-          <Pressable onPress={() => { haptic('warning'); onStop?.() }} className="h-12 w-12 items-center justify-center rounded-full bg-foreground" accessibilityLabel={t('Stopp')}>
+          <Pressable onPress={() => { haptic('warning'); onStop?.() }} className={cn('items-center justify-center rounded-full bg-foreground', BTN)} accessibilityLabel={t('Stopp')}>
             <Icon as={Square} size={16} color={c.background} fill={c.background} />
           </Pressable>
         ) : !rec.isRecording && (
-          <Pressable disabled={!canSend || busy} onPress={() => send()} className={cn('h-12 w-12 items-center justify-center rounded-full bg-primary', (!canSend || busy) && 'opacity-40')} accessibilityLabel={t('Senden')}>
+          <Pressable disabled={!canSend || busy} onPress={() => send()} className={cn('items-center justify-center rounded-full bg-primary', BTN, (!canSend || busy) && 'opacity-40')} accessibilityLabel={t('Senden')}>
             {busy ? <ActivityIndicator color="#fff" /> : <Icon as={ArrowUp} tone="primary-foreground" />}
           </Pressable>
         )}

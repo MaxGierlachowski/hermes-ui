@@ -1,6 +1,6 @@
 import { memo, useState } from 'react'
 import { Pressable, View } from 'react-native'
-import { router } from 'expo-router'
+import { showPaseo } from '@/lib/nav'
 import { AlertTriangle, Archive, Bell, Bot, ChevronRight, Clock, CornerDownRight, FileText, RotateCcw, ShieldCheck, Webhook, Wrench, Zap, type LucideIcon } from 'lucide-react-native'
 import type { Attachment, PaseoChip, ThreadMessage } from '@shared/types'
 import { stripMediaTags } from '@shared/media-tags'
@@ -55,7 +55,7 @@ function PaseoInline({ m, chips, sessionId }: { m: ThreadMessage; chips: PaseoCh
   const chip = p.agentId ? chips.find((c) => c.id === p.agentId) : undefined
   const st = AGENT_STATE[chip?.state || 'unknown'] || AGENT_STATE.unknown
   const title = chip?.title || p.title || p.ref.slice(0, 8)
-  const open = () => p.agentId && router.push({ pathname: '/paseo/[id]', params: { id: sessionId, agent: p.agentId } })
+  const open = () => p.agentId && showPaseo(sessionId, p.agentId)
   if (p.action !== 'create') {
     const ActionIcon = p.action === 'archive' ? Archive : p.action === 'permission' ? ShieldCheck : CornerDownRight
     const what = p.action === 'archive' ? t('Agent „{title}“ archiviert', { title }) : p.action === 'permission' ? t('Freigabe für „{title}“ beantwortet', { title }) : t('Nachricht an „{title}“', { title })

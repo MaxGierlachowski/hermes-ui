@@ -5,10 +5,10 @@ import { AppState } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Column, InboxItem, OpenItem, OutgoingMessage, PaseoAgent, PaseoItem, Session, ThreadMessage } from '@shared/types'
 import { parsePairingLink } from '@shared/pairing'
-import { api, ApiError, clearMedia, connect, deviceName, forgetGateway, getBackend, isNetworkError, pruneMedia, rememberGateway, savedGateway, setDemoBackend, Unauthorized } from './connection'
+import { activeTarget, api, ApiError, clearMedia, connect, deviceName, forgetGateway, getBackend, isNetworkError, pruneMedia, rememberGateway, setDemoBackend, Unauthorized, type Target } from './connection'
 import { DemoBackend } from './demo'
-import { clearCache, readCache, trimMessages, writeCache } from './cache'
-import { notifyInboxItem } from './notify'
+import { clearCache, initCache, readCache, trimMessages, writeCache } from './cache'
+import { appInBackground, notifyInboxItem } from './notify'
 import { t } from './i18n'
 
 export type Auth = 'unknown' | 'unpaired' | 'connecting' | 'ok' | 'refused' | 'offline'
@@ -123,7 +123,8 @@ export async function bootstrap() {
     prefsLoaded = true
   }
   if (state.demo) return
-  const gw = await savedGateway()
+  await initCache()
+  const gw = await activeTarget()
   // Not paired: nothing cached is worth keeping (e.g. what a demo left behind).
   if (!gw) { clearCache(); set({ auth: 'unpaired' }); return }
   if (!state.hydrated) hydrate()
@@ -144,13 +145,28 @@ export async function pair(link: string) {
   if (!p) throw new Error(t('Das ist kein Kopplungslink (#iroh=…).'))
   if (state.demo) await exitDemo()
   set({ auth: 'connecting', error: null })
-  const gateway = { endpointId: p.endpointId, relayUrl: p.relayUrl }
+  const gateway: Target = { endpointId: p.endpointId, relayUrl: p.relayUrl }
   try {
     await connect(gateway)
     if (p.code) await api('/api/pair/redeem', { method: 'POST', json: { code: p.code, name: deviceName() }, timeoutMs: 30_000 })
     await rememberGateway(gateway)
     await start()
     toast(t('Gerät gekoppelt'), 'success')
+  } catch (err) {
+    set({ auth: 'unpaired', error: err instanceof Error ? err.message : String(err) })
+    throw err
+  }
+}
+
+/** Desktop / web: a backend on this machine, reached over plain HTTP with its token (no iroh). */
+export async function connectLocal(baseUrl: string, token: string) {
+  if (state.demo) await exitDemo()
+  set({ auth: 'connecting', error: null })
+  const target: Target = { kind: 'http', baseUrl: baseUrl.replace(/\/$/, ''), token }
+  try {
+    await connect(target)
+    await rememberGateway(target)
+    await start()
   } catch (err) {
     set({ auth: 'unpaired', error: err instanceof Error ? err.message : String(err) })
     throw err
@@ -443,7 +459,7 @@ export function connectEvents() {
 /** In the foreground: an in-app toast; in the background: a local system notification. */
 function onNewInboxItem(item: InboxItem) {
   const title = item.source === 'paseo' && item.agentTitle ? item.agentTitle : item.title || 'Hermes'
-  if (AppState.currentState !== 'active') { notifyInboxItem(item, kindLabel(item.kind), title); return }
+  if (appInBackground()) { notifyInboxItem(item, kindLabel(item.kind), title); return }
   if ((item.kind === 'done' || item.kind === 'error') && item.sessionId && item.sessionId === state.openId) return
   toast(`${kindLabel(item.kind)} · ${title}`, item.kind.endsWith('error') ? 'error' : 'info', item.sessionId)
 }

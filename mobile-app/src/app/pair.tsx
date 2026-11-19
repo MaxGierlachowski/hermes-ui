@@ -3,9 +3,9 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } f
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Clipboard from 'expo-clipboard'
-import { ClipboardPaste, PlayCircle, QrCode } from 'lucide-react-native'
+import { ClipboardPaste, Laptop, PlayCircle, QrCode } from 'lucide-react-native'
 import { parsePairingLink } from '@shared/pairing'
-import { pair, startDemo, useStore } from '@/lib/store'
+import { connectLocal, pair, startDemo, useStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
@@ -61,10 +61,12 @@ export default function PairScreen() {
           <Text className="text-[15px] leading-6 text-muted-foreground">
             {t('Diese Oberfläche enthält keine Daten. Sie verbindet sich per iroh mit deinem Hermes-UI-Backend. Starte dort {cmd} (oder Fernzugriff → Gerät koppeln) und scanne den QR-Code – oder füge den Link hier ein.', { cmd: 'hermes-ui pair' })}
           </Text>
-          <Button size="lg" onPress={() => router.push('/scan')} disabled={busy}>
-            <Icon as={QrCode} tone="primary-foreground" />
-            <Text>{t('QR-Code scannen')}</Text>
-          </Button>
+          {Platform.OS !== 'web' && (
+            <Button size="lg" onPress={() => router.push('/scan')} disabled={busy}>
+              <Icon as={QrCode} tone="primary-foreground" />
+              <Text>{t('QR-Code scannen')}</Text>
+            </Button>
+          )}
           <View className="gap-2">
             <Input value={link} onChangeText={setLink} placeholder={t('Kopplungslink einfügen')} autoCapitalize="none" autoCorrect={false} editable={!busy} onSubmitEditing={() => submit(link)} />
             <View className="flex-row gap-2">
@@ -78,6 +80,7 @@ export default function PairScreen() {
             </View>
             {!!(error || storeError) && <Text className="text-sm text-destructive">{error || storeError}</Text>}
           </View>
+          {Platform.OS === 'web' && <LocalBackend busy={busy} setBusy={setBusy} />}
           <View className="gap-2 border-t border-border pt-5">
             <Button variant="ghost" disabled={busy} onPress={async () => { await startDemo(); router.replace('/') }} accessibilityHint={t('Zeigt die App mit Beispieldaten, ohne Backend.')}>
               <Icon as={PlayCircle} size={18} />
@@ -88,5 +91,30 @@ export default function PairScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  )
+}
+
+/** Web / desktop: a backend on this machine, over plain HTTP with its token (HERMES_UI_TOKEN in .env). */
+function LocalBackend({ busy, setBusy }: { busy: boolean; setBusy: (b: boolean) => void }) {
+  const [url, setUrl] = useState('http://127.0.0.1:8787')
+  const [token, setToken] = useState('')
+  const [error, setError] = useState('')
+  const submit = async () => {
+    setError('')
+    setBusy(true)
+    try { await connectLocal(url.trim(), token.trim()); router.replace('/') } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+  }
+  return (
+    <View className="gap-2 border-t border-border pt-5">
+      <View className="flex-row items-center gap-2">
+        <Icon as={Laptop} size={16} tone="muted-foreground" />
+        <Text className="text-sm font-medium">{t('Backend auf diesem Rechner')}</Text>
+      </View>
+      <Input value={url} onChangeText={setUrl} placeholder="http://127.0.0.1:8787" autoCapitalize="none" autoCorrect={false} editable={!busy} />
+      <Input value={token} onChangeText={setToken} placeholder="HERMES_UI_TOKEN" secureTextEntry autoCapitalize="none" autoCorrect={false} editable={!busy} onSubmitEditing={submit} />
+      <Button variant="secondary" disabled={busy || !url.trim() || !token.trim()} onPress={submit}><Text>{t('Lokal verbinden')}</Text></Button>
+      {!!error && <Text className="text-sm text-destructive">{error}</Text>}
+      <Text className="text-xs text-muted-foreground">{t('Direkt über HTTP, ohne iroh. Das Backend muss diese Oberfläche per HERMES_UI_CORS_ORIGINS zulassen; die Desktop-App ist immer zugelassen.')}</Text>
+    </View>
   )
 }

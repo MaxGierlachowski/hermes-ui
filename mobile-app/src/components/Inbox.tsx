@@ -2,20 +2,20 @@ import { useState } from 'react'
 import { memo } from 'react'
 import { RefreshControl, View, Pressable } from 'react-native'
 import { FlashList } from '@shopify/flash-list'
-import { router } from 'expo-router'
+import { showThread } from '@/lib/nav'
 import { Bot, CheckCheck, CircleAlert, CircleCheck, ShieldAlert } from 'lucide-react-native'
 import type { InboxItem, OpenItem } from '@shared/types'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { Icon } from '@/components/ui/icon'
 import { PendingPrompt } from './PendingPrompt'
-import { kindLabel, loadInbox, markRead, openThread, respondPaseo, useStore } from '@/lib/store'
+import { kindLabel, loadInbox, markRead, respondPaseo, useStore } from '@/lib/store'
 import { relTime, t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 function OpenCard({ item }: { item: OpenItem }) {
   const [busy, setBusy] = useState(false)
-  const go = () => { if (item.sessionId) { openThread(item.sessionId); router.push(`/thread/${encodeURIComponent(item.sessionId)}`) } }
+  const go = () => { if (item.sessionId) showThread(item.sessionId) }
   if (item.source === 'hermes') {
     return (
       <View className="gap-2">
@@ -49,7 +49,7 @@ const ITEM_ICON = (k: InboxItem['kind']) => (k.endsWith('error') || k === 'paseo
 const HistoryRow = memo(function HistoryRow({ item }: { item: InboxItem }) {
   return (
     <Pressable
-      onPress={() => { markRead([item.id]); if (item.sessionId) { openThread(item.sessionId); router.push(`/thread/${encodeURIComponent(item.sessionId)}`) } }}
+      onPress={() => { markRead([item.id]); if (item.sessionId) showThread(item.sessionId) }}
       className="min-h-14 flex-row items-start gap-3 border-b border-border px-1 py-3 active:bg-accent"
     >
       <Icon as={ITEM_ICON(item.kind)} size={18} tone={item.kind.endsWith('error') ? 'destructive' : 'muted-foreground'} />

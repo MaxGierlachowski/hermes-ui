@@ -6,16 +6,16 @@ import { useColorScheme } from 'nativewind'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import { ArrowLeft, Check } from 'lucide-react-native'
-import { IrohBackend, type ConnectionPath } from 'expo-iroh'
 import { Text } from '@/components/ui/text'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
-import { getBackend } from '@/lib/connection'
+import { getBackend, libraryInfo, type ConnectionPath } from '@/lib/connection'
 import { registerRemotePush, setupNotifications, testNotification } from '@/lib/notify'
 import { keepAliveMode, setKeepAliveMode, type KeepAliveMode } from '@/lib/keepalive'
 import { exitDemo, setPrefs, unpair, useStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
+import { applyTheme } from '@/lib/theme-mode'
 import { haptic } from '@/lib/haptics'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -48,7 +48,7 @@ function Choice<T extends string>({ options, value, onChange }: { options: { id:
 
 export default function Settings() {
   const insets = useSafeAreaInsets()
-  const { colorScheme, setColorScheme } = useColorScheme()
+  const { colorScheme } = useColorScheme()
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system')
   const days = useStore((s) => s.days)
   const system = useStore((s) => s.system)
@@ -81,14 +81,14 @@ export default function Settings() {
           {!!b?.gateway.relayUrl && <Row label="Relay" value={b.gateway.relayUrl} mono />}
           <Row label={t('Dieses Gerät')} value={b?.endpointId || '–'} mono />
           {!!b?.relayProblem() && <Row label={t('Relay-Problem')} value={b.relayProblem()!} />}
-          <Text className="text-xs text-muted-foreground">{IrohBackend.libraryInfo()}</Text>
+          <Text className="text-xs text-muted-foreground">{libraryInfo()}</Text>
         </Section>
 
         <Section title={t('Darstellung')}>
           <Choice
             options={[{ id: 'system', label: t('System') }, { id: 'light', label: t('Hell') }, { id: 'dark', label: t('Dunkel') }]}
             value={theme}
-            onChange={(v) => { setTheme(v); setColorScheme(v); AsyncStorage.setItem('hk_theme', v) }}
+            onChange={(v) => { setTheme(v); applyTheme(v); AsyncStorage.setItem('hk_theme', v) }}
           />
           <Text className="text-xs text-muted-foreground">{t('Aktuell')}: {colorScheme}</Text>
         </Section>

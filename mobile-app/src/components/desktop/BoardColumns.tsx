@@ -1,0 +1,80 @@
+// The board as columns side by side: all four on the desktop, two at a time (with snap scrolling) on a
+// tablet or in a narrow window. Cards can be dragged between columns and have a right-click menu
+// (web / desktop); the keyboard selection is drawn as a ring.
+import { memo, useRef, type ComponentRef } from 'react'
+import { FlatList, ScrollView, View, useWindowDimensions } from 'react-native'
+import { COLUMNS, type Column, type Session } from '@shared/types'
+import { Text } from '@/components/ui/text'
+import { SessionCard } from '@/components/SessionCard'
+import { COLUMN_COLOR } from '@/components/status'
+import { setColumn, prefetchThread } from '@/lib/store'
+import { useCardDrag, useColumnDrop } from '@/lib/web-input'
+import { openMenu } from '@/lib/menu'
+import { showThread } from '@/lib/nav'
+import { t } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
+import { copyText } from '@/lib/clipboard'
+
+export function cardMenu(s: Session, at: { x: number; y: number }) {
+  openMenu([
+    { id: 'open', text: t('Öffnen') },
+    '-',
+    ...COLUMNS.map((c) => ({ id: `col:${c.id}`, text: `${t('Verschieben nach')} ${c.label}`, enabled: s.column !== c.id })),
+    { id: 'col:auto', text: t('Spalte automatisch'), enabled: !!s.override },
+    '-',
+    { id: 'copy-title', text: t('Titel kopieren') },
+    { id: 'copy-id', text: t('Session-ID kopieren') },
+  ], at, (id) => {
+    if (id === 'open') showThread(s.id)
+    else if (id.startsWith('col:')) setColumn(s.id, id.slice(4) as Column | 'auto')
+    else if (id === 'copy-title') copyText(s.title || '')
+    else if (id === 'copy-id') copyText(s.id)
+  })
+}
+
+const Card = memo(function Card({ s, selected, open }: { s: Session; selected: boolean; open: boolean }) {
+  const ref = useRef<ComponentRef<typeof View>>(null)
+  useCardDrag(ref, s.id, (at) => cardMenu(s, at))
+  return (
+    <View ref={ref} className={cn('rounded-xl', selected && 'ring-2 ring-ring ring-offset-0', open && !selected && 'ring-1 ring-primary/50')}>
+      <SessionCard s={s} onPress={() => showThread(s.id)} onLongPress={() => prefetchThread(s.id)} />
+    </View>
+  )
+})
+
+const BoardColumn = memo(function BoardColumn({ col, list, width, selected, openId }: { col: Column; list: Session[]; width: number | undefined; selected: number; openId: string | null }) {
+  const ref = useRef<ComponentRef<typeof View>>(null)
+  const over = useColumnDrop(ref, (id) => setColumn(id, col))
+  const meta = COLUMNS.find((c) => c.id === col)!
+  return (
+    <View ref={ref} className={cn('flex-1 rounded-xl border border-border bg-muted/40', over && 'border-primary bg-primary/5')} style={width ? { width, flex: 0 } : undefined}>
+      <View className="h-10 flex-row items-center gap-2 px-3">
+        <View className={cn('h-2 w-2 rounded-full', COLUMN_COLOR[col])} />
+        <Text className="text-[13px] font-semibold">{meta.label}</Text>
+        <Text className="text-[13px] tabular-nums text-muted-foreground">{list.length}</Text>
+      </View>
+      <FlatList
+        data={list}
+        keyExtractor={(s) => s.id}
+        contentContainerClassName="gap-2 px-2 pb-3"
+        renderItem={({ item, index }) => <Card s={item} selected={index === selected} open={item.id === openId} />}
+        ListEmptyComponent={<Text className="px-2 py-6 text-center text-xs text-muted-foreground">{t('Keine Chats in dieser Spalte.')}</Text>}
+        removeClippedSubviews={false}
+      />
+    </View>
+  )
+})
+
+/** `visible` columns fit the width; more scroll horizontally with snap (tablet: 2). */
+export function BoardColumns({ lists, visible, selection, openId }: { lists: Record<Column, Session[]>; visible: 2 | 4; selection: { col: number; idx: number } | null; openId: string | null }) {
+  const { width: win } = useWindowDimensions()
+  const cols = COLUMNS.map((c, i) => (
+    <BoardColumn key={c.id} col={c.id} list={lists[c.id]} width={visible === 2 ? (win - 36) / 2 : undefined} selected={selection?.col === i ? selection.idx : -1} openId={openId} />
+  ))
+  if (visible === 4) return <View className="flex-1 flex-row gap-3 p-3">{cols}</View>
+  return (
+    <ScrollView horizontal snapToInterval={(win - 36) / 2 + 12} decelerationRate="fast" showsHorizontalScrollIndicator={false} contentContainerClassName="gap-3 p-3">
+      {cols}
+    </ScrollView>
+  )
+}

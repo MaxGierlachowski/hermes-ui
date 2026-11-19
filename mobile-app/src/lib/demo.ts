@@ -151,6 +151,12 @@ export class DemoBackend implements Backend {
     return () => { this.listeners.delete(onEvent) }
   }
 
+  /** Web: the sample image as a data URL (no file system). */
+  mediaUrl(path: string) {
+    if (path !== DEMO_IMAGE) throw new Error('not found')
+    return DEMO_IMAGE_URI
+  }
+
   async download(path: string, fileUri: string) {
     if (path !== DEMO_IMAGE) return { status: 404 }
     const b64 = DEMO_IMAGE_URI.slice(DEMO_IMAGE_URI.indexOf(',') + 1)

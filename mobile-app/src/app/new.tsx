@@ -7,7 +7,8 @@ import { Text } from '@/components/ui/text'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Composer, fileUpload, type Picked } from '@/components/Composer'
-import { createChat, openThread, toast } from '@/lib/store'
+import { createChat, toast } from '@/lib/store'
+import { showThread } from '@/lib/nav'
 import { takeSharedDraft } from '@/lib/share'
 import { t } from '@/lib/i18n'
 
@@ -43,8 +44,7 @@ export default function NewChat() {
           onSend={async (msg) => {
             const s = await createChat(msg).catch((e) => { toast(e instanceof Error ? e.message : String(e), 'error'); return null })
             if (!s) return
-            openThread(s.id)
-            router.replace(`/thread/${encodeURIComponent(s.id)}`)
+            showThread(s.id, { replace: true })
           }}
         />
       </View>

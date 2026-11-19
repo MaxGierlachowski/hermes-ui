@@ -1,0 +1,9 @@
+// Native builds have no desktop shell: the same API as desktop.web.ts, all no-ops.
+export const isDesktop = false
+export const isMac = false
+export const invoke = async <T,>(_cmd: string, _args?: Record<string, unknown>): Promise<T | null> => null
+export type LocalBackend = { baseUrl: string; token: string; managed: boolean }
+export const localBackend = async (): Promise<LocalBackend | null> => null
+export const onShellAction = (_fn: (id: string) => void) => () => {}
+export const setBadge = async (_count: number) => {}
+export const nativeMenu = async (_items: unknown[], _onPick: (id: string) => void) => false
