@@ -57,6 +57,8 @@ export function shellTokens(cmd) {
     } else if (';&|<>'.includes(c)) {
       // `2>` / `2>>`: the digit belongs to the redirection, not to the word before.
       if (c === '>' && cur === '2') { cur = null; if (s[i + 1] === '>') { i++; out.push('2>>'); } else out.push('2>'); continue; }
+      // `>&1` / `2>&1`: the target of a redirection is a word.
+      if (c === '&' && cur === null && REDIRECTS.has(out.at(-1))) { cur = '&'; continue; }
       push();
       const two = s.slice(i, i + 2);
       if (['&&', '||', '>>', '&>'].includes(two)) { out.push(two); i++; } else out.push(c);
@@ -169,8 +171,9 @@ export function childCalls(rows) {
           started = hermesRuns(args.command).map((run) => ({ kind: 'terminal', command: clipText(args.command, 600), background: !!args.background, ...run }));
         }
         const prev = byCall.get(callId) || [];
+        const first = prev.length;
         started.forEach((s, i) => {
-          const c = { ...s, msgId: r.id, callId, ts: r.timestamp, index: prev.length + i };
+          const c = { ...s, msgId: r.id, callId, ts: r.timestamp, index: first + i };
           out.push(c);
           prev.push(c);
         });
@@ -193,9 +196,11 @@ export function childCalls(rows) {
           const r = body.results.find((x) => x?.task_index === c.index) || body.results[c.index];
           c.taskStatus = r?.status || null;
           c.background = false;
-        } else {
-          c.failed = clipText(res.content, 300); // refused or failed before it started a child
+        } else if (body?.error || (!body && /^\s*(error|failed|refused)\b/i.test(String(res.content || '')))) {
+          c.failed = clipText(body?.error || res.content, 300); // refused or failed before it started a child
         }
+        // Anything else (e.g. a result Hermes compacted to "[delegate_task] '' (1,438 chars result)")
+        // says nothing about the children; they are matched like those of a synchronous call.
       } else {
         c.procId = typeof body?.session_id === 'string' && body.session_id.startsWith('proc_') ? body.session_id : null;
         c.pid = Number.isInteger(body?.pid) ? body.pid : null;
@@ -219,8 +224,9 @@ const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 
 /**
  * Subagent sessions for the chat's delegate_task calls. Background calls: by subagent id (hard).
- * Synchronous calls: the chat's subagent rows without an id match that started between call and
- * result; within one call by the task's goal in the child's first message, else in start order.
+ * Otherwise (synchronous calls, compacted results, children without _subagent_id): the chat's
+ * unclaimed subagent rows that started in the call's window; within one call by the task's goal in
+ * the child's first message, else in start order.
  * @param {object[]} calls  from childCalls(), kind 'subagent'
  * @param {{ id: string, subagent_id?: string, started_at: number, first_prompt?: string }[]} sessions  the chat's subagent rows
  * @returns {Map<object, object[]>} call -> its session segments (oldest first; compression continues a child in a new row)
@@ -236,11 +242,13 @@ export function matchSubagents(calls, sessions) {
   for (const c of calls) {
     if (c.subagentId && bySa.has(c.subagentId)) { out.set(c, bySa.get(c.subagentId)); used.add(c.subagentId); c.match = 'id'; }
   }
+  // Synchronous calls, compacted results, and children of older Hermes versions that do not carry
+  // _subagent_id: the chat's unclaimed children that started in the call's window.
   const groups = new Map();
-  for (const c of calls) if (!out.has(c) && !c.subagentId && !c.failed) groups.set(c.callId, [...(groups.get(c.callId) || []), c]);
+  for (const c of calls) if (!out.has(c) && !c.failed) groups.set(c.callId, [...(groups.get(c.callId) || []), c]);
   for (const list of groups.values()) {
     const from = list[0].ts - 2;
-    const to = (list[0].resultTs ?? Infinity) + 2;
+    const to = list[0].background ? (list[0].resultTs ?? list[0].ts) + 120 : (list[0].resultTs ?? Infinity) + 2;
     const cand = [...bySa.entries()].filter(([k, segs]) => !used.has(k) && segs[0].started_at >= from && segs[0].started_at <= to);
     const claim = (c, hit) => { used.add(hit[0]); out.set(c, hit[1]); };
     // 1) the goal appears in the child's first message (Hermes hands it the goal as its task)
