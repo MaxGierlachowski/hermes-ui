@@ -1,8 +1,18 @@
+# Local state and secrets: never committed (docs/secrets-and-state.md)
 .env
 data/
+.secrets/
+hermes-ui-secrets-*
+*.age
+
+# Dependencies and build output
 node_modules/
+web/dist/
+web/public/iroh-sw.js
+web/test-results/
+web/playwright-report/
+.tools/
+
+# OS / editor
 .DS_Store
 *.log
-web/dist/
-web/node_modules/
-.tools/

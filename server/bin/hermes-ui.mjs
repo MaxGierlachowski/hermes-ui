@@ -13,6 +13,7 @@ Usage:
   hermes-ui serve [options]   start the backend (default)
   hermes-ui pair              print a pairing link + QR code for a remote device
   hermes-ui status            show backend, Hermes, Paseo and remote status
+  hermes-ui install-gateway   download + verify the iroh-gateway binary now (otherwise on the first iroh start)
   hermes-ui help
 
 Options (each also as env var, see README):
@@ -51,6 +52,12 @@ if (cmd === 'serve') {
     const [h, r] = await Promise.all([api('/api/health'), api('/api/remote')]);
     console.log(JSON.stringify({ hermesGateway: h.gateway, remote: r.remote, devices: r.devices.map((d) => `${d.name} (${d.via}${d.irohId ? ` ${d.irohId.slice(0, 10)}…` : ''})`) }, null, 2));
   } catch (err) { console.error(`backend not reachable: ${err.message}`); process.exit(1); }
+} else if (cmd === 'install-gateway') {
+  try {
+    const cfg = loadConfig(rest);
+    const { ensureGatewayBinary } = await import('../src/iroh.mjs');
+    console.log(await ensureGatewayBinary({ ...cfg.iroh, dataDir: cfg.dataDir }));
+  } catch (err) { console.error(`install-gateway failed: ${err.message}`); process.exit(1); }
 } else {
   console.log(HELP);
 }

@@ -1,0 +1,102 @@
+# Android release build: AAB for Google Play + one APK per ABI, on a tag mobile-app-v* or by hand.
+#
+# Works without secrets (debug-signed artifacts, uploaded to the workflow run). With these repository
+# secrets it signs with the upload key and, for tags, attaches the files to a draft pre-release and
+# uploads the AAB to Play's internal testing track (docs/releasing.md):
+#   ANDROID_KEYSTORE_BASE64     base64 of mobile-app/.secrets/release.keystore
+#   ANDROID_KEYSTORE_PASSWORD   store password
+#   ANDROID_KEY_ALIAS           key alias
+#   ANDROID_KEY_PASSWORD        key password
+#   PLAY_SERVICE_ACCOUNT_JSON   (optional) Play Console service account JSON → upload to "internal"
+#   GOOGLE_SERVICES_JSON        (optional) google-services.json content → push with the app closed (FCM)
+# Repository variables (optional): HERMES_UI_APP_ID, HERMES_UI_APP_NAME, HERMES_UI_LINK_HOST, HERMES_UI_LINK_PATH.
+name: Android release
+
+on:
+  push:
+    tags: ['mobile-app-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HERMES_UI_APP_ID: ${{ vars.HERMES_UI_APP_ID }}
+      HERMES_UI_APP_NAME: ${{ vars.HERMES_UI_APP_NAME }}
+      HERMES_UI_LINK_HOST: ${{ vars.HERMES_UI_LINK_HOST }}
+      HERMES_UI_LINK_PATH: ${{ vars.HERMES_UI_LINK_PATH }}
+      # secrets cannot be used in `if:` directly
+      HAS_UPLOAD_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      HAS_PLAY_KEY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK packages (NDK for React Native and for the iroh library)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;37.0.0" "ndk;27.1.12297006" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mobile-app/modules/expo-iroh/rust
+      - name: Rust toolchain + cargo-ndk
+        working-directory: mobile-app/modules/expo-iroh/rust
+        run: |
+          rustup show active-toolchain
+          cargo install cargo-ndk --locked --version 4.1.2
+      - run: npm ci
+        working-directory: mobile-app
+      - name: Signing key (optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GOOGLE_SERVICES: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        working-directory: mobile-app
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            mkdir -p .secrets && umask 077
+            echo "$KEYSTORE_BASE64" | base64 -d > .secrets/release.keystore
+            printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$PWD/.secrets/release.keystore" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > .secrets/keystore.properties
+            echo "signing with the upload key"
+          else
+            echo "::warning::no ANDROID_KEYSTORE_BASE64 secret: artifacts are debug-signed (not for the store)"
+          fi
+          if [ -n "$GOOGLE_SERVICES" ]; then
+            echo "$GOOGLE_SERVICES" > .secrets/google-services.json
+            echo "GOOGLE_SERVICES_JSON=$PWD/.secrets/google-services.json" >> "$GITHUB_ENV"
+          fi
+      - name: Build AAB + APKs
+        run: npm run release:android
+        working-directory: mobile-app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: mobile-app/dist/
+          retention-days: 14
+      - name: Draft pre-release with the files (tags only)
+        if: startsWith(github.ref, 'refs/tags/') && env.HAS_UPLOAD_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" mobile-app/dist/* --draft --prerelease --title "Mobile app ${GITHUB_REF_NAME#mobile-app-}" --notes-file CHANGELOG.md
+      - name: Upload to Play (internal testing, draft)
+        if: startsWith(github.ref, 'refs/tags/') && env.HAS_PLAY_KEY == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ vars.HERMES_UI_APP_ID || 'app.hermesui.mobile' }}
+          releaseFiles: mobile-app/dist/*.aab
+          track: internal
+          status: draft
