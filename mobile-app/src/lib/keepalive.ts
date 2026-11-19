@@ -22,6 +22,8 @@ function text(n: number) {
 
 function apply() {
   if (Platform.OS !== 'android') return
+  // The system may have stopped it (dataSync time limit); start it again from the foreground.
+  if (running && !KeepAlive.isRunning()) running = false
   const st = getState()
   const n = working()
   const want = st.auth === 'ok' && mode !== 'off' && (mode === 'always' || n > 0)
