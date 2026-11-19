@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent'
-import { bootstrap, openThread, setTab, useStore } from '@/lib/store'
+import { bootstrap, openThread, setTab, startDemo, useStore } from '@/lib/store'
 import { setupNotifications } from '@/lib/notify'
 import { startKeepAlivePolicy } from '@/lib/keepalive'
 import { setSharedDraft } from '@/lib/share'
@@ -19,6 +19,19 @@ import { THEME } from '@/lib/theme'
 import { Toast } from '@/components/Toast'
 
 SplashScreen.preventAutoHideAsync()
+
+// Store screenshots: a build with EXPO_PUBLIC_DEMO_TOUR=1 starts the demo by itself and shows board,
+// a thread and the inbox, 8 s each (simulators cannot tap). Normal builds drop this code.
+const DEMO_TOUR = process.env.EXPO_PUBLIC_DEMO_TOUR === '1'
+async function demoTour() {
+  await startDemo()
+  router.replace('/')
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  await wait(8000)
+  openThread('demo-site'); router.push('/thread/demo-site')
+  await wait(8000)
+  router.back(); setTab('inbox')
+}
 // Dev builds only: library deprecation warnings would cover the composer and tab bar.
 if (__DEV__) LogBox.ignoreAllLogs(true)
 
@@ -61,7 +74,8 @@ export default function RootLayout() {
   const auth = useStore((s) => s.auth)
   useEffect(() => {
     AsyncStorage.getItem('hk_theme').then((v) => { if (v === 'light' || v === 'dark') setColorScheme(v) })
-    bootstrap()
+    if (DEMO_TOUR) demoTour()
+    else bootstrap()
     setupNotifications(false).catch(() => {})
     startKeepAlivePolicy()
   }, [])
@@ -87,6 +101,7 @@ export default function RootLayout() {
                 <Stack.Screen name="settings" />
                 <Stack.Screen name="search" options={{ animation: 'fade' }} />
                 <Stack.Screen name="paseo/[id]" />
+                <Stack.Screen name="demo" options={{ animation: 'none' }} />
               </Stack>
               <Toast />
               <ShareIntentRouter />

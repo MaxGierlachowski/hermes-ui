@@ -12,12 +12,13 @@ import { Icon } from '@/components/ui/icon'
 import { SessionCard } from '@/components/SessionCard'
 import { Inbox } from '@/components/Inbox'
 import { OfflineBanner, SyncBar } from '@/components/SyncBar'
-import { badgeCount, bootstrap, loadSessions, openThread, prefetchThread, setPrefs, setTab, useStore } from '@/lib/store'
+import { badgeCount, bootstrap, exitDemo, loadSessions, openThread, prefetchThread, setPrefs, setTab, useStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
 
 function Header() {
+  const demo = useStore((s) => s.demo)
   const live = useStore((s) => s.live)
   const gateway = useStore((s) => s.gateway)
   const tab = useStore((s) => s.tab)
@@ -27,6 +28,12 @@ function Header() {
       <View className="flex-1 flex-row items-center gap-2 pl-2">
         <Text className="text-lg font-semibold">{tab === 'inbox' ? 'Inbox' : 'Hermes'}</Text>
         <View className={cn('h-2 w-2 rounded-full', live && gateway ? 'bg-emerald-500' : live ? 'bg-amber-500' : 'bg-zinc-400')} accessibilityLabel={live ? 'live' : 'offline'} />
+        {demo && (
+          <Pressable onPress={async () => { await exitDemo(); router.replace('/pair') }} accessibilityRole="button" accessibilityLabel={t('Demo beenden')} hitSlop={8} className="ml-1 flex-row items-center gap-1 rounded-full bg-primary/15 px-2.5 py-1">
+            <Text className="text-xs font-semibold text-primary">{t('Demo')}</Text>
+            <Text className="text-xs text-primary">· {t('beenden')}</Text>
+          </Pressable>
+        )}
       </View>
       <Button variant="ghost" size="icon" onPress={() => router.push('/search')} accessibilityLabel={t('Suche')}><Icon as={Search} /></Button>
       <Button variant="ghost" size="icon" onPress={() => router.push('/settings')} accessibilityLabel={t('Einstellungen')}><Icon as={Settings} /></Button>

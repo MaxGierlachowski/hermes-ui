@@ -5,7 +5,8 @@ import { AppState } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Column, InboxItem, OpenItem, OutgoingMessage, PaseoAgent, PaseoItem, Session, ThreadMessage } from '@shared/types'
 import { parsePairingLink } from '@shared/pairing'
-import { api, ApiError, clearMedia, connect, deviceName, forgetGateway, getBackend, isNetworkError, pruneMedia, rememberGateway, savedGateway, Unauthorized } from './connection'
+import { api, ApiError, clearMedia, connect, deviceName, forgetGateway, getBackend, isNetworkError, pruneMedia, rememberGateway, savedGateway, setDemoBackend, Unauthorized } from './connection'
+import { DemoBackend } from './demo'
 import { clearCache, readCache, trimMessages, writeCache } from './cache'
 import { notifyInboxItem } from './notify'
 import { t } from './i18n'
@@ -35,6 +36,8 @@ type State = {
   syncing: number
   boardAt: number | null
   hydrated: boolean
+  /** Demo mode: sample data from demo.ts instead of a backend. */
+  demo: boolean
 }
 
 let state: State = {
@@ -57,6 +60,7 @@ let state: State = {
   syncing: 0,
   boardAt: null,
   hydrated: false,
+  demo: false,
 }
 const listeners = new Set<() => void>()
 const set = (patch: Partial<State> | ((s: State) => Partial<State>)) => {
@@ -118,8 +122,10 @@ export async function bootstrap() {
     columnChosen = !!prefs.column
     prefsLoaded = true
   }
+  if (state.demo) return
   const gw = await savedGateway()
-  if (!gw) { set({ auth: 'unpaired' }); return }
+  // Not paired: nothing cached is worth keeping (e.g. what a demo left behind).
+  if (!gw) { clearCache(); set({ auth: 'unpaired' }); return }
   if (!state.hydrated) hydrate()
   set({ auth: 'connecting', error: null })
   try {
@@ -136,6 +142,7 @@ export async function bootstrap() {
 export async function pair(link: string) {
   const p = parsePairingLink(link)
   if (!p) throw new Error(t('Das ist kein Kopplungslink (#iroh=…).'))
+  if (state.demo) await exitDemo()
   set({ auth: 'connecting', error: null })
   const gateway = { endpointId: p.endpointId, relayUrl: p.relayUrl }
   try {
@@ -150,7 +157,26 @@ export async function pair(link: string) {
   }
 }
 
+/** Demo mode: the app with sample data and no backend, e.g. for a first look or an app review. */
+export async function startDemo() {
+  clearTimeout(retryTimer)
+  stopEvents()
+  clearCache()
+  setDemoBackend(new DemoBackend())
+  set({ demo: true, auth: 'connecting', error: null, sessions: {}, openId: null, messages: [], hydrated: false, boardAt: null })
+  await start()
+}
+
+export async function exitDemo() {
+  stopEvents()
+  setDemoBackend(null)
+  clearCache()
+  clearMedia()
+  set({ demo: false, auth: 'unpaired', sessions: {}, openId: null, messages: [], streaming: null, hydrated: false, boardAt: null, inbox: { ...state.inbox, open: [], items: [], unread: 0, loaded: false } })
+}
+
 export async function unpair() {
+  if (state.demo) return exitDemo()
   stopEvents()
   await forgetGateway()
   clearCache()
@@ -424,7 +450,7 @@ function onNewInboxItem(item: InboxItem) {
 
 // Coming back to the foreground: reconnect the stream if it died while the app slept.
 AppState.addEventListener('change', (s) => {
-  if (s === 'active' && state.auth === 'offline') { bootstrap(); return }
+  if (s === 'active' && state.auth === 'offline' && !state.demo) { bootstrap(); return }
   if (s !== 'active' || state.auth !== 'ok') return
   if (!state.live) connectEvents()
   loadSessions()

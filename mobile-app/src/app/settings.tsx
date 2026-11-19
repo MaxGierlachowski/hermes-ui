@@ -13,7 +13,7 @@ import { Icon } from '@/components/ui/icon'
 import { getBackend } from '@/lib/connection'
 import { registerRemotePush, setupNotifications, testNotification } from '@/lib/notify'
 import { keepAliveMode, setKeepAliveMode, type KeepAliveMode } from '@/lib/keepalive'
-import { setPrefs, unpair, useStore } from '@/lib/store'
+import { exitDemo, setPrefs, unpair, useStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
@@ -52,6 +52,7 @@ export default function Settings() {
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system')
   const days = useStore((s) => s.days)
   const system = useStore((s) => s.system)
+  const demo = useStore((s) => s.demo)
   const [path, setPath] = useState<ConnectionPath | null>(null)
   const [push, setPush] = useState('')
   const [keep, setKeep] = useState<KeepAliveMode>(keepAliveMode())
@@ -117,12 +118,18 @@ export default function Settings() {
         </Section>
 
         <Section title={t('Kopplung')}>
-          <Button variant="destructive" onPress={() => Alert.alert(t('Verbindung vergessen'), t('Die App vergisst das Backend. Die Geräte-Identität bleibt, neu koppeln geht jederzeit.'), [
-            { text: t('Abbrechen'), style: 'cancel' },
-            { text: t('Vergessen'), style: 'destructive', onPress: async () => { await unpair(); router.replace('/pair') } },
-          ])}>
-            <Text>{t('Verbindung vergessen')}</Text>
-          </Button>
+          {demo ? (
+            <Button variant="outline" onPress={async () => { await exitDemo(); router.replace('/pair') }}>
+              <Text>{t('Demo beenden und koppeln')}</Text>
+            </Button>
+          ) : (
+            <Button variant="destructive" onPress={() => Alert.alert(t('Verbindung vergessen'), t('Die App vergisst das Backend. Die Geräte-Identität bleibt, neu koppeln geht jederzeit.'), [
+              { text: t('Abbrechen'), style: 'cancel' },
+              { text: t('Vergessen'), style: 'destructive', onPress: async () => { await unpair(); router.replace('/pair') } },
+            ])}>
+              <Text>{t('Verbindung vergessen')}</Text>
+            </Button>
+          )}
         </Section>
         <Text className="text-center text-xs text-muted-foreground">Hermes UI {Constants.expoConfig?.version} · MIT</Text>
       </ScrollView>
