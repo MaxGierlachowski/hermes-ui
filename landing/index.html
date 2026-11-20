@@ -2,16 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <script>
-    // Installed web apps from before this page existed start here (their start_url is the site root),
-    // and pairing links and notifications may still point here: send all of them to the app.
-    (function () {
-      var h = location.hash, mm = function (q) { return window.matchMedia && matchMedia(q).matches }
-      var installed = navigator.standalone === true || mm('(display-mode: standalone)') || mm('(display-mode: fullscreen)') || mm('(display-mode: minimal-ui)') || mm('(display-mode: window-controls-overlay)')
-      var appLink = /^#\//.test(h) || /(^#|&)(iroh|relay|pair)=/.test(h)
-      if (installed || appLink) location.replace('app/' + location.search + h)
-    })()
-  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Hermes UI: every Hermes agent on one board, approvals from anywhere</title>
   <meta name="description" content="Hermes UI turns your Hermes Agent sessions into a live Kanban board and puts approvals on your phone, end-to-end encrypted and peer-to-peer over iroh. Self-hosted, no cloud account, no open ports. Open source.">
@@ -32,6 +22,9 @@
   <meta name="twitter:title" content="Hermes UI: your agents on one board, approvals from anywhere">
   <meta name="twitter:description" content="A live Kanban board for Hermes Agent sessions. Approve from your phone, peer-to-peer and end-to-end encrypted.">
   <meta name="twitter:image" content="https://maxgierlachowski.github.io/hermes-ui/assets/og.png">
+  <!-- The web app's manifest (id = the root, scope = /app/). Installs from before the move are known to
+       Chrome by the root; seeing this manifest here, Chrome moves their start_url and scope to /app/. -->
+  <link rel="manifest" href="app/manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="preload" href="assets/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -110,6 +103,9 @@
     .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .skip { position: absolute; left: 12px; top: -48px; z-index: 50; background: var(--surface); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); }
     .skip:focus { top: 12px; }
+    .resume { background: var(--accent-soft); border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); font-size: 14px; }
+    .resume .wrap { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 14px; padding-top: 8px; padding-bottom: 8px; text-align: center; }
+    .resume[hidden] { display: none; }
 
     /* Status dots: the board's whole colour language */
     .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; background: var(--zinc); }
@@ -449,6 +445,32 @@
 <body class="no-js">
   <script>document.body.classList.replace('no-js', 'js')</script>
   <a class="skip" href="#main">Skip to content</a>
+  <div class="resume" id="resume" hidden>
+    <div class="wrap"><span id="resume-text">This browser is paired with your Hermes UI backend.</span> <a class="btn primary small" id="resume-link" href="app/">Open your board →</a></div>
+  </div>
+  <script>
+    // This page never forwards by itself. When the visit looks like it was meant for the web app, a bar
+    // offers the way there, one click: a pairing link from a backend whose HERMES_UI_URL is still the root
+    // (#iroh=…&pair=…), an installed app from before the move (its start_url is still the root), an app
+    // route from history or a bookmark (#/board, #/inbox/…), or a browser that already holds a pairing
+    // (the app keeps it in localStorage under hk_remote, same origin).
+    (function () {
+      var h = location.hash, mm = function (q) { return window.matchMedia && matchMedia(q).matches }, paired = false
+      try { paired = !!localStorage.getItem('hk_remote') } catch (e) {}
+      var pairing = /(^#|&)iroh=/.test(h), route = /^#\//.test(h)
+      var installed = navigator.standalone === true || mm('(display-mode: standalone)') || mm('(display-mode: fullscreen)') || mm('(display-mode: minimal-ui)') || mm('(display-mode: window-controls-overlay)')
+      var text = pairing ? 'You opened a pairing link. Pairing happens in the web app.'
+        : installed ? 'The Hermes UI web app moved to /app/.'
+        : paired ? 'This browser is paired with your Hermes UI backend.'
+        : route ? 'Looking for the web app? It moved to /app/.' : ''
+      if (!text) return
+      document.getElementById('resume-text').textContent = text
+      var link = document.getElementById('resume-link')
+      link.href = 'app/' + location.search + (pairing || route ? h : '')
+      link.textContent = pairing ? 'Continue pairing in the app →' : paired ? 'Open your board →' : 'Open the web app →'
+      document.getElementById('resume').hidden = false
+    })()
+  </script>
 
   <nav class="top" aria-label="Main">
     <div class="wrap">
@@ -896,7 +918,7 @@
           <details><summary>Do I need Paseo?</summary><p>No. Paseo is optional. If you use it, Hermes UI shows the coding agents your chats start, live and read-only, and lets you answer their permission requests from the inbox.</p></details>
           <details><summary>Does it work on iPhone today?</summary><p>Yes, as a web app. Add it to the Home Screen from Safari to get push notifications (iOS 16.4 or later). The native iOS app is in testing.</p></details>
           <details><summary>What does it cost?</summary><p>Nothing. Hermes UI is open source under the MIT license. You pay only for the models Hermes uses, as before.</p></details>
-          <details><summary>I installed the web app before this page existed. What changes?</summary><p>The web app moved from the site root to <a href="app/">/app/</a>. Installed copies, pairing links and notifications forward there automatically, and your pairing and push settings carry over. Nothing to do.</p></details>
+          <details><summary>I installed the web app before this page existed. What changes?</summary><p>The web app moved from the site root to <a href="app/">/app/</a>. Your pairing and push settings carry over, and notifications open /app/. Pairing links, installed copies and old bookmarks that still point at the root show this page with a bar that takes you on with one click; installed copies in Chrome switch to /app/ by themselves after one visit.</p></details>
         </div>
       </div>
     </section>
