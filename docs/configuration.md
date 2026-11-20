@@ -57,8 +57,9 @@ In every mode the backend stays on `127.0.0.1`:
 
 ```bash
 node server/scripts/launchd-plist.mjs --remote iroh > ~/Library/LaunchAgents/io.github.hermes-ui.plist
-launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.hermes-ui.plist
 ```
 
-`server/examples/io.github.hermes-ui.plist` shows the shape of the plist.
+`server/examples/io.github.hermes-ui.plist` shows the shape of the plist. Checks, restart and removal:
+[self-hosting.md](self-hosting.md#macos-launchagent).
 
