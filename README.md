@@ -47,7 +47,7 @@ Requirements:
 
 ### Use it from a phone or tablet (iroh, recommended)
 
-1. Use the hosted UI at <https://maxgierlachowski.github.io/hermes-ui/app/> (built from this repo by `.github/workflows/pages.yml`; the site root is the landing page, which forwards pairing links to `/app/`), or host `web/dist` yourself on any static host. It works from any path. Set its URL as `HERMES_UI_URL`.
+1. Use the hosted UI at <https://maxgierlachowski.github.io/hermes-ui/app/> (built from this repo by `.github/workflows/pages.yml`; the site root is the landing page; it never redirects, pairing links that still point there get a "Continue pairing in the app" button), or host `web/dist` yourself on any static host. It works from any path. Set its URL as `HERMES_UI_URL`.
 2. Start the backend with `--remote iroh` (or `HERMES_UI_REMOTE=iroh`). On first start it downloads `iroh-gateway` for your platform from the [iroh-bridge releases](https://github.com/irohkit/iroh-bridge/releases) and verifies its SHA-256. Alternatively set `IROH_GATEWAY_BIN`.
 3. Pair the device:
    - Run `hermes-ui pair`, or open the remote-access dialog (📱) on the host and press "Pair device".

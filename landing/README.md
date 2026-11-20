@@ -30,19 +30,35 @@ landing page or a stale app.
 Self-hosted builds (`npm run build`, backend serving `web/dist`) are unchanged: no `VITE_SW_PATH`, the
 worker sits next to `index.html` and opens its own scope.
 
-## What forwards to /app/
+## Nothing forwards to /app/ by itself
 
-The first script in `index.html`, before anything renders, replaces the location with `app/` + query +
-hash when
+The landing page never redirects: no script, no meta refresh, no `404.html`, and the root worker
+(`sw.js` + `iroh-sw.js`) has no navigation handling (it routes only iroh hosts and opens `/app/` on a
+notification click). An earlier version forwarded installed apps, `#/…` routes and pairing links in its
+`<head>`; together with Chrome's link capturing of the old install (scope `/hermes-ui/`), that pulled
+even plain links to `/` and `/?x` into the app window and on to `/app/`.
 
-- the page runs as an installed app (`display-mode: standalone | fullscreen | minimal-ui |
-  window-controls-overlay`, or iOS `navigator.standalone`): installs from before the move still start
-  at the root;
-- the hash is an app route (`#/…`, e.g. `#/inbox` from older notifications) or a pairing link
-  (`#iroh=…&relay=…&pair=…`, from backends whose `HERMES_UI_URL` is still the root).
+Instead, a bar under the skip link offers the way on with one click when the visit looks like it was
+meant for the web app:
 
-Plain visits to the root show the landing page. GitHub Pages caches HTML for up to 10 minutes, so an
-old copy can show until then.
+| Situation | Bar | Button goes to |
+|---|---|---|
+| pairing link at the root (`#iroh=…&pair=…`, backend `HERMES_UI_URL` without `/app`) | "You opened a pairing link …" | `app/` + the fragment ("Continue pairing in the app") |
+| installed app from before the move (`display-mode: standalone` etc., iOS `navigator.standalone`) | "The Hermes UI web app moved to /app/." | `app/` + query |
+| this browser holds a pairing (`localStorage.hk_remote`, same origin) | "This browser is paired …" | `app/` ("Open your board") |
+| app route from history or a bookmark (`#/board`, `#/inbox/…`) | "Looking for the web app? …" | `app/` + the route |
+
+## Installs from before the move
+
+They have no manifest `id`, so Chrome knows them by their `start_url`, the root. The landing page links
+the app's manifest (`<link rel="manifest" href="app/manifest.webmanifest">`), and `build-pages.mjs`
+gives that manifest the root as `id` (`PAGES_BASE`, default `/hermes-ui/`). Chrome then treats it as the
+same app and, on the next visit to the landing page or launch of the app, moves its `start_url` and
+`scope` to `/app/` (Chrome updates both when the `id` matches). From then on the installed app starts in
+`/app/` directly and no longer captures links to the landing page. Fresh installs, from the landing page
+or `/app/`, get scope `/app/`. iOS keeps the start URL it saved; such installs show the bar.
+
+GitHub Pages caches HTML for up to 10 minutes, so an old copy can show until then.
 
 ## Rules for the page
 

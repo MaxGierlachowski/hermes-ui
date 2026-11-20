@@ -33,6 +33,14 @@ fs.mkdirSync(out, { recursive: true })
 fs.cpSync(dist, path.join(out, 'app'), { recursive: true })
 for (const f of ['sw.js', 'iroh-sw.js']) fs.rmSync(path.join(out, 'app', f), { force: true })
 
+// Installs from before the move have no manifest id, so Chrome identifies them by their start_url, the
+// site root. Giving the new manifest that id makes Chrome treat it as the same app and update their
+// start_url and scope to /app/ on the next launch: the installed app then opens /app/ directly and stops
+// claiming links to the landing page. PAGES_BASE is the site's path on its host (GitHub Pages: /<repo>/).
+const base = process.env.PAGES_BASE || '/hermes-ui/'
+const manifestFile = path.join(out, 'app', 'manifest.webmanifest')
+fs.writeFileSync(manifestFile, `${JSON.stringify({ id: base, ...JSON.parse(fs.readFileSync(manifestFile, 'utf8')) }, null, 2)}\n`)
+
 // Root files: the worker (told where the UI is), the iroh bridge it imports, the icons the landing
 // page, notifications and older installs use.
 fs.writeFileSync(path.join(out, 'sw.js'), `self.HERMES_UI_APP_PATH = 'app/'\n${fs.readFileSync(path.join(dist, 'sw.js'), 'utf8')}`)

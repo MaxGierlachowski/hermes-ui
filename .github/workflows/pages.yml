@@ -39,6 +39,10 @@ jobs:
           test -f _site/index.html && test -f _site/app/index.html && test -f _site/app/manifest.webmanifest
           test -f _site/iroh-sw.js && grep -q "HERMES_UI_APP_PATH = 'app/'" _site/sw.js
           test ! -e _site/app/sw.js
+          grep -q '"id": "/hermes-ui/"' _site/app/manifest.webmanifest
+          # The landing page never redirects (see landing/README.md).
+          if grep -Eq 'location\.(replace|assign)|http-equiv="refresh"' _site/index.html; then echo "landing page redirects"; exit 1; fi
+          test ! -e _site/404.html
       - uses: actions/configure-pages@v5
         if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v3
