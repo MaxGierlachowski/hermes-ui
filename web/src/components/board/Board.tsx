@@ -11,6 +11,7 @@ import { OverlayScroll } from '@/components/common/OverlayScroll'
 import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
 import { ColumnSheet } from './ColumnSheet'
+import { LoadMore } from './LoadMore'
 
 type Cols = Record<Column, Session[]>
 
@@ -94,6 +95,7 @@ function DesktopBoard({ cols }: { cols: Cols }) {
                   </KanbanItem>
                 ))}
                 {!value[id].length && <div className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground/70">{t('Keine Karten')}</div>}
+                <LoadMore />
               </div>
             </OverlayScroll>
           </KanbanColumn>
@@ -151,6 +153,7 @@ function MobileBoard({ cols }: { cols: Cols }) {
             <MobileCard key={s.id} s={s} selected={s.id === openId} onMove={() => setMoving(s)} />
           ))}
           {!cols[tab].length && <div className="py-10 text-center text-sm text-muted-foreground">{t('Keine Karten')}</div>}
+          <LoadMore />
           {cols[tab].length > 0 && <p className="pt-2 text-center text-[11px] text-muted-foreground/70">{t('Lange drücken zum Verschieben · wischen für andere Spalten')}</p>}
         </div>
       </OverlayScroll>

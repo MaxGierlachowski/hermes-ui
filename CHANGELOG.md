@@ -5,6 +5,18 @@ All notable changes. The backend + web UI and the app share one repository; app 
 
 ## Unreleased – universal spike
 
+### Board: newest chats first, older ones page in while scrolling (app 0.5.1)
+- Fixed: with Cron/System hidden the board could miss chats from yesterday. The backend loaded the 400
+  newest sessions of the last days and only then dropped cron runs in JavaScript; with ~85 cron runs an
+  hour, a chat from the day before ranked beyond 1,000. The filter now runs in SQL before the limit.
+- `GET /api/sessions` is paginated: `limit`, `before=<ts>:<id>` cursor, `nextCursor` in the answer
+  (see [architecture.md](docs/architecture.md#backend-and-hermes)). Drafts and pinned cards come with the
+  first page only. Old clients without `limit` keep working (`days` still accepted, 200 cards).
+- App and web UI: scrolling to the end of a column loads the next older page; a short column shows
+  "Load older chats". Live refreshes merge by id and keep the pages already loaded.
+- The time-window setting defaults to "All" (newest chats, no window); 1/3/7/30 days stay available.
+  The old saved value is not carried over, so a former default of 3 days does not stick as a filter.
+
 ### Hermes' own agents next to Paseo agents (ADR 0013)
 - `delegate_task` subagents and terminal runs of `hermes [-p <profile>] chat -q …` show up like Paseo agents:
   inline where they were started, in the chat's agent list with state and read-only transcript, as chips

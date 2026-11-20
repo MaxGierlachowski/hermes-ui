@@ -10,6 +10,7 @@ import { Text } from '@/components/ui/text'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { SessionCard } from '@/components/SessionCard'
+import { LoadMoreFooter, onColumnScroll } from '@/components/LoadMore'
 import { Inbox } from '@/components/Inbox'
 import { OfflineBanner, SyncBar } from '@/components/SyncBar'
 import { badgeCount, bootstrap, exitDemo, loadSessions, prefetchThread, setPrefs, setTab, useStore } from '@/lib/store'
@@ -99,6 +100,9 @@ const ColumnPage = memo(function ColumnPage({ list }: { list: Session[] }) {
       ItemSeparatorComponent={Gap}
       renderItem={({ item }) => <View className="px-4"><SessionCard s={item} onPress={() => open(item)} onLongPress={() => prefetchThread(item.id)} /></View>}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadSessions(); setRefreshing(false) }} />}
+      onScroll={onColumnScroll}
+      scrollEventThrottle={100}
+      ListFooterComponent={LoadMoreFooter}
       ListEmptyComponent={<Text className="py-16 text-center text-muted-foreground">{t('Keine Chats in dieser Spalte.')}</Text>}
     />
   )
