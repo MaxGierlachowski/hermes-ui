@@ -3,13 +3,17 @@
 //      <img>/<audio> loads of backend URLs over iroh. Inert when registered without ?hosts=.
 //   2. Web Push: shows the backend's notifications and opens the right thread or inbox entry on click.
 // Payloads carry no chat content: { title, body, tag, url, badge, actions?, confirm? }.
+// Normally the worker sits next to the UI. The GitHub Pages build keeps it at the site root (where
+// installs from before the landing page registered it) and prepends HERMES_UI_APP_PATH = 'app/'.
 
 importScripts('./iroh-sw.js')
+
+const appUrl = () => new URL(self.HERMES_UI_APP_PATH || './', self.registration.scope).href
 
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { data = { body: event.data && event.data.text() } }
-  const scope = self.registration.scope
+  const app = appUrl()
   event.waitUntil((async () => {
     if (typeof data.badge === 'number' && self.navigator && self.navigator.setAppBadge) {
       try { await (data.badge ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge()) } catch { /* unsupported */ }
@@ -18,8 +22,8 @@ self.addEventListener('push', (event) => {
       body: data.body || '',
       tag: data.tag || undefined,
       renotify: !!data.tag,
-      icon: `${scope}icon-192.png`,
-      badge: `${scope}icon-192.png`,
+      icon: `${app}icon-192.png`,
+      badge: `${app}icon-192.png`,
       data: { url: data.url || '#/inbox', confirm: data.confirm || null },
       actions: Array.isArray(data.actions) ? data.actions.slice(0, 2) : [],
     })
@@ -35,14 +39,14 @@ self.addEventListener('notificationclick', (event) => {
     hash += `?confirm=${encodeURIComponent(confirm.promptId)}&choice=${encodeURIComponent(event.action === 'deny' ? 'deny' : confirm.allow)}`
   }
   event.waitUntil((async () => {
-    const scope = self.registration.scope
+    const app = appUrl()
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-    const win = windows.find((w) => w.url.startsWith(scope))
+    const win = windows.find((w) => w.url.startsWith(app))
     if (win) {
       await win.focus()
       win.postMessage({ type: 'hermes-ui:navigate', hash })
       return
     }
-    await self.clients.openWindow(scope + hash)
+    await self.clients.openWindow(app + hash)
   })())
 })

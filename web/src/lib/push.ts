@@ -5,6 +5,7 @@ import { useSyncExternalStore } from 'react'
 import { api } from './api'
 import { getConnection } from './backend'
 import type { PushSettings } from './types'
+import { swUrl } from './sw-url'
 
 export const DEFAULT_PUSH: PushSettings = {
   approval: true, done: true, error: true, paseo: true, skipWhenVisible: true,
@@ -27,7 +28,6 @@ const subs = new Set<() => void>()
 const setPs = (p: Partial<PushState>) => { ps = { ...ps, ...p }; subs.forEach((l) => l()) }
 export const usePush = () => useSyncExternalStore((l) => { subs.add(l); return () => subs.delete(l) }, () => ps)
 
-const swUrl = () => new URL('sw.js', location.href.replace(/[^/]*$/, '')).pathname
 
 /**
  * One service worker per scope: sw.js = iroh-fetch's bridge (imported) + push handling. Over iroh,

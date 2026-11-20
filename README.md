@@ -1,5 +1,7 @@
 # Hermes UI
 
+**Website:** <https://maxgierlachowski.github.io/hermes-ui/> · **Web app:** <https://maxgierlachowski.github.io/hermes-ui/app/>
+
 A Kanban board for [Hermes Agent](https://hermes-agent.nousresearch.com) sessions. Every chat (desktop, Slack, cron, CLI, or one started from the board) is a card. Cards move between **New Task → Doing → Waiting → Done** live.
 
 On the board you can:
@@ -45,7 +47,7 @@ Requirements:
 
 ### Use it from a phone or tablet (iroh, recommended)
 
-1. Use the hosted UI at <https://maxgierlachowski.github.io/hermes-ui/> (built from this repo by `.github/workflows/pages.yml`), or host `web/dist` yourself on any static host. It works from any path. Set its URL as `HERMES_UI_URL`.
+1. Use the hosted UI at <https://maxgierlachowski.github.io/hermes-ui/app/> (built from this repo by `.github/workflows/pages.yml`; the site root is the landing page, which forwards pairing links to `/app/`), or host `web/dist` yourself on any static host. It works from any path. Set its URL as `HERMES_UI_URL`.
 2. Start the backend with `--remote iroh` (or `HERMES_UI_REMOTE=iroh`). On first start it downloads `iroh-gateway` for your platform from the [iroh-bridge releases](https://github.com/irohkit/iroh-bridge/releases) and verifies its SHA-256. Alternatively set `IROH_GATEWAY_BIN`.
 3. Pair the device:
    - Run `hermes-ui pair`, or open the remote-access dialog (📱) on the host and press "Pair device".
@@ -53,7 +55,7 @@ Requirements:
 4. The browser keeps a stable iroh identity. From then on the gateway only admits paired devices: everyone else is refused at connection time. You can revoke a device in the dialog.
 
 ```bash
-HERMES_UI_REMOTE=iroh HERMES_UI_URL=https://maxgierlachowski.github.io/hermes-ui npm start
+HERMES_UI_REMOTE=iroh HERMES_UI_URL=https://maxgierlachowski.github.io/hermes-ui/app npm start
 npx hermes-ui pair     # or: node bin/hermes-ui.mjs pair
 ```
 

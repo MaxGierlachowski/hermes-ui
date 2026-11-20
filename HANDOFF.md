@@ -13,7 +13,7 @@ Alles Technische steht ausführlich in `docs/` auf dem Branch `hermes/universal-
 | **Aktuellster Stand** | Branch **`hermes/universal-spike`** (enthält alles: Store-Vorbereitung + Universal-App + Umbenennung `mobile-app/` → `app/`) |
 | Offene PRs | **#9** `hermes/mobile-app` → `main` (Store-Vorbereitung, Demo-Modus, Monorepo `server/`, Doku, Release-Tooling) · **#10** `hermes/universal-spike` → `hermes/mobile-app` (Universal-App iOS/Android/Web/Desktop mit Tauri 2, `app/`). Beide Draft, **Reihenfolge: erst #9, dann #10**. |
 | `main` | Stand vor #9: alte shadcn-Web-UI in `web/`, Backend im Root, App noch in `mobile-app/` |
-| Web-UI (PWA) live | https://maxgierlachowski.github.io/hermes-ui/ (aus `main`, GitHub Pages) |
+| Web-UI (PWA) live | https://maxgierlachowski.github.io/hermes-ui/app/ (aus `main`, GitHub Pages); an der Wurzel `…/hermes-ui/` liegt seit 20.11. die Landing Page (`landing/`, siehe `landing/README.md`) |
 | Releases (GitHub, Pre-Release) | `mobile-app-v0.3.0` (Android APK + AAB, Demo-Modus) · **`app-v0.4.0-beta`** (Android, UI-Polish; Update über 0.3.0, gleicher Schlüssel) · `desktop-spike-1` / `desktop-spike-2` / **`desktop-spike-3`** (macOS `.dmg`, unsigniert, Apple Silicon; spike-2 Permissions, spike-3 UI-Polish) |
 | Doku (englisch) | `docs/` auf `hermes/universal-spike`: `architecture.md`, `development.md`, `app.md`, `desktop-app.md`, `releasing.md`, `secrets-and-state.md`, `security.md`, `self-hosting.md`, `configuration.md`, `design.md`, `mobile-audit.md`, `ui-audit.md`, `features.md`, `decisions/0001…0012` |
 | Desktop-App auf diesem Mac | `/Applications/Hermes UI.app` = `desktop-spike-3` (installiert 19.11.); noch **nicht gekoppelt** (siehe Nächste Schritte) |
