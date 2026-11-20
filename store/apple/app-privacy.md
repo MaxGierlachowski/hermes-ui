@@ -25,7 +25,7 @@ answer is "No":
 | Analytics, crash reporting, ads, attribution SDKs | none in the app | – |
 
 The build's privacy manifest matches this: `NSPrivacyTracking = false`, no tracking domains,
-`NSPrivacyCollectedDataTypes = []` (set in `mobile-app/app.config.ts`), plus the required-reason API
+`NSPrivacyCollectedDataTypes = []` (set in `app/app.config.ts`), plus the required-reason API
 declarations.
 
 **Tracking (ATT):** the app does not track. No `NSUserTrackingUsageDescription`, no IDFA.

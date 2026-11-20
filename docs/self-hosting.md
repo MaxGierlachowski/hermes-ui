@@ -120,14 +120,29 @@ Set `HERMES_UI_URL` to the URL you chose. Building and testing the UI itself: [d
 ### macOS (LaunchAgent)
 
 ```bash
+npm run build                                  # once, and after every update: serve does not build the UI
 node server/scripts/launchd-plist.mjs --remote iroh > ~/Library/LaunchAgents/io.github.hermes-ui.plist
-launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.hermes-ui.plist
 ```
 
-The script prints a plist with this machine's paths and passes extra arguments to `hermes-ui serve`.
-It starts at login, restarts on exit and logs to `~/Library/Logs/hermes-ui.log`. Run `npm run build`
-once before, because `serve` does not build the UI. `server/examples/io.github.hermes-ui.plist` shows
-the shape.
+The script prints a plist with this machine's paths and passes extra arguments to `hermes-ui serve`:
+the **absolute path of the `node` that runs it** (with nvm, run it with the Node 24 you want; launchd
+does not load nvm), the repository root as `WorkingDirectory` (so `.env` and `data/` are found), and the
+current `PATH`. It starts at login (`RunAtLoad`), restarts the backend whenever it exits (`KeepAlive`)
+and logs to `~/Library/Logs/hermes-ui.log`. `server/examples/io.github.hermes-ui.plist` shows the shape.
+
+- **One backend per port.** Stop a backend you started by hand first (it also stops its
+  `iroh-gateway` child), otherwise the LaunchAgent's copy cannot bind the port and launchd restarts it
+  in a loop: `lsof -iTCP:8787 -sTCP:LISTEN` must show nothing before `bootstrap`.
+- **Check:** `launchctl print gui/$(id -u)/io.github.hermes-ui | grep -E 'state|pid'`, then
+  `node bin/hermes-ui.mjs status` (remote online, same endpoint id as before, since it lives in `data/`).
+- **Restart test / after an update:** `launchctl kickstart -k gui/$(id -u)/io.github.hermes-ui` stops
+  and starts it; a crash or `kill` brings it back the same way (after at most `ThrottleInterval`, 10 s
+  by default).
+- **Remove:** `launchctl bootout gui/$(id -u)/io.github.hermes-ui` (and delete the plist).
+
+`launchctl load` / `unload` still work but are deprecated; `bootstrap` / `bootout` report errors
+instead of failing silently.
 
 ### Linux (systemd user unit)
 

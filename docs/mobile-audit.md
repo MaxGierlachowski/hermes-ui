@@ -113,7 +113,7 @@ and `useKeyboardInset`.
 
 ## Native app
 
-The native app (`mobile-app/`) follows the same rules with native components: column pager with
+The native app (`app/`) follows the same rules with native components: column pager with
 synced tabs, bottom sheets (220 ms in, 160 ms out, swipe to close), pinch-zoom viewer, composer above
 the keyboard, haptics, hardware back that closes the top layer first, and edge-to-edge system bars in
 theme colours. Known gaps:

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Mic, Paperclip, Square, X } from 'lucide-react'
+import { ArrowUp, Loader2, Mic, Paperclip, Square, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { PromptInput, PromptInputAction, PromptInputActions, PromptInputTextarea } from '@/components/ui/prompt-input'
 import { Button } from '@/components/ui/button'
@@ -44,6 +44,7 @@ export function Composer({
   const [dragging, setDragging] = useState(false)
   const [rec, setRec] = useState<{ r: MediaRecorder; started: number } | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  const [since, setSince] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -86,12 +87,14 @@ export function Composer({
     if (busy || (!text.trim() && !images.length && !voice)) return
     setBusy(true)
     haptic()
+    setSince(Date.now())
     try {
-      await onSubmit({
+      const ok = await onSubmit({
         text: text.trim(),
         images: await Promise.all(images.map((i) => fileToUpload(i.file, i.file.name || 'image.png'))),
         audio: voice ? await fileToUpload(voice.blob, 'voice') : null,
       })
+      if (ok === false) return // not delivered (already reported): keep text, images and the recording
       setText('')
       setImages([])
       setVoice(null)
@@ -120,7 +123,8 @@ export function Composer({
                 </button>
               </div>
             ))}
-            {voice && (
+            {voice && busy && <VoiceProgress seconds={voice.seconds} since={since} />}
+            {voice && !busy && (
               <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-1 ring-1 ring-border touch:w-full touch:rounded-xl touch:py-0 touch:pr-0">
                 <audio controls src={voice.url} className="h-8 w-48 touch:h-11 touch:min-w-0 touch:flex-1" />
                 <span className="text-xs tabular-nums text-muted-foreground">{voice.seconds}s</span>
@@ -223,6 +227,33 @@ function TouchRow({ rec, elapsed, canSend, busy, onAttach, onMic, onSend, onStop
         ) : (
           <Button type="button" variant="ghost" size="icon" className="shrink-0 rounded-full text-muted-foreground [&_svg]:size-5" onClick={onMic} aria-label={t('Sprachnachricht aufnehmen')} data-testid="mic"><Mic /></Button>
         )}
+      </div>
+    </div>
+  )
+}
+
+const mmss = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+
+/**
+ * A voice message on its way: the backend has Hermes transcribe it, then sends it (one request).
+ * Hermes' speech-to-text reports no progress, so the bar is indeterminate and the seconds count up.
+ */
+function VoiceProgress({ seconds, since }: { seconds: number; since: number }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(timer)
+  }, [])
+  const waited = Math.max(0, Math.floor((now - since) / 1000))
+  return (
+    <div role="progressbar" aria-label={t('Sprachnachricht wird transkribiert …')} data-testid="voice-progress" className="flex w-full flex-col gap-1.5 rounded-md bg-muted px-2.5 py-2 ring-1 ring-border touch:rounded-xl">
+      <div className="flex items-center gap-2 text-sm">
+        <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+        <span className="flex-1 truncate">{t('Sprachnachricht wird transkribiert …')}</span>
+        <span className="text-xs tabular-nums text-muted-foreground">{t('Aufnahme {len}', { len: mmss(seconds) })} · {mmss(waited)}</span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-border">
+        <div className="h-1 w-1/3 animate-[voice-progress_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
       </div>
     </div>
   )

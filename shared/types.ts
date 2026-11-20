@@ -21,7 +21,12 @@ export type PendingPrompt = {
 }
 
 export type AgentState = 'running' | 'idle' | 'closed' | 'error' | 'needs-attention' | 'finished' | 'archived' | 'unknown'
-export type PaseoChip = { id: string; title: string | null; state: AgentState; status: string; rel: 'created' | 'steers' | 'watches'; account: string | null; kind: string | null; archived: boolean; pendingCount: number; createdAt?: string | null; updatedAt?: string | null }
+// provider 'hermes': an agent Hermes started itself (delegate_task subagent, kind 'subagent'; a terminal
+// `hermes chat` run, kind 'terminal'). match says how it was tied to the chat: 'id' / 'goal' / 'order'
+// (Hermes' own parent link) or 'prompt' / 'time' (terminal runs: a heuristic, shown as such).
+export type AgentProvider = 'paseo' | 'hermes'
+export type AgentMatch = 'id' | 'goal' | 'order' | 'prompt' | 'time' | null
+export type PaseoChip = { id: string; title: string | null; state: AgentState; status: string; rel: 'created' | 'steers' | 'watches'; account: string | null; kind: string | null; archived: boolean; pendingCount: number; createdAt?: string | null; updatedAt?: string | null; provider?: AgentProvider; match?: AgentMatch }
 export type PaseoAgent = PaseoChip & {
   known: boolean
   pendingPermissions?: { kind: string; name: string; title: string | null }[]
@@ -34,6 +39,10 @@ export type PaseoAgent = PaseoChip & {
   updatedAt?: string | null
   createdAt?: string | null
   deepLink?: string | null
+  // provider 'hermes'
+  profile?: string | null
+  sessionId?: string | null
+  command?: string | null
 }
 export type PaseoItem = {
   role: 'user' | 'assistant' | 'tool' | 'todo' | 'error' | 'notice'
@@ -76,6 +85,8 @@ export type OutboxState = { id: string | null; status: 'sending' | 'waiting' | '
 
 export type ThreadMessage = {
   id?: number
+  // Row key when one transcript row yields several items (a delegate_task call starting several subagents).
+  key?: string
   // event: delivered to the session but not typed by the user (webhook, cron, background notices)
   role: 'user' | 'assistant' | 'tool' | 'system' | 'event' | 'paseo'
   text: string
@@ -90,7 +101,7 @@ export type ThreadMessage = {
   threadContext?: string
   outbox?: OutboxState
   // Paseo tool call at this point of the chat; live state comes from the session's paseo chips.
-  paseo?: { action: 'create' | 'message' | 'archive' | 'permission'; ref: string; agentId: string | null; title?: string | null; account?: string | null; text?: string }
+  paseo?: { action: 'create' | 'message' | 'archive' | 'permission'; ref: string; agentId: string | null; title?: string | null; account?: string | null; text?: string; provider?: AgentProvider; kind?: string | null }
 }
 
 export type RemoteState = {

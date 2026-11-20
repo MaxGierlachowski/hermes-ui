@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 // The backend package (server/). In a checkout of the repository, ROOT is the repository root: `.env`,
-// `data/` and the built UI (`web/dist`) live there, next to server/, web/ and mobile-app/.
+// `data/` and the built UI (`web/dist`) live there, next to server/, web/ and app/.
 export const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repo = path.dirname(PKG);
 export const ROOT = fs.existsSync(path.join(repo, 'web', 'package.json')) && fs.existsSync(path.join(repo, 'server', 'package.json')) ? repo : PKG;
@@ -88,6 +88,9 @@ export function loadConfig(argv = []) {
     uiDir: expand(get('HERMES_UI_DIR', 'ui-dir', path.join(ROOT, 'web', 'dist'))),
     // Public URL of the static UI (e.g. GitHub Pages) used in iroh pairing links. Empty = local UI only.
     uiUrl: (get('HERMES_UI_URL', 'ui-url', '') || '').replace(/\/$/, ''),
+    // Extra origins (comma separated) whose pages may call the API with the token, e.g. a dev server
+    // of the universal app. The desktop app (tauri://localhost) is always allowed. Bearer only: no cookies.
+    corsOrigins: (get('HERMES_UI_CORS_ORIGINS', 'cors-origins', '') || '').split(',').map((x) => x.trim().replace(/\/$/, '')).filter(Boolean),
     remote: get('HERMES_UI_REMOTE', 'remote', 'off'), // off | iroh | tailscale-funnel | tailscale-serve | cloudflare
     iroh: {
       bin: expand(get('IROH_GATEWAY_BIN', 'iroh-gateway-bin', '')),

@@ -8,7 +8,7 @@
 #   --yes                             install missing tools with Homebrew / sdkmanager / rustup without asking
 #   --no-tests                        skip checks, tests and the web build
 #
-# Versions come from .nvmrc, mise.toml, mobile-app/modules/expo-iroh/rust/rust-toolchain.toml and the
+# Versions come from .nvmrc, mise.toml, app/modules/expo-iroh/rust/rust-toolchain.toml and the
 # constants below; docs/development.md lists them. Nothing here touches secrets or data/: restore those
 # with scripts/import-secrets.sh (docs/secrets-and-state.md).
 set -euo pipefail
@@ -82,8 +82,8 @@ fi
 # ---------- mobile app ----------
 if [[ $MOBILE == 1 ]]; then
   step "mobile app: npm ci"
-  npm ci --prefix mobile-app --no-audit --no-fund
-  ok "mobile-app dependencies installed"
+  npm ci --prefix app --no-audit --no-fund
+  ok "app dependencies installed"
 
   step "JDK 17"
   if [[ -z "${JAVA_HOME:-}" || ! -x "${JAVA_HOME:-}/bin/java" ]]; then
@@ -126,14 +126,14 @@ if [[ $MOBILE == 1 ]]; then
   fi
   # rustup puts its own cargo first; Homebrew's cargo has no Android/iOS targets.
   export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
-  (cd mobile-app/modules/expo-iroh/rust && rustup show active-toolchain >/dev/null && rustc --version)
+  (cd app/modules/expo-iroh/rust && rustup show active-toolchain >/dev/null && rustc --version)
   if [[ "$(cargo ndk --version 2>/dev/null || true)" != *"$CARGO_NDK_VERSION"* ]]; then
     cargo install cargo-ndk --locked --version "$CARGO_NDK_VERSION"
   fi
   ok "toolchain from rust-toolchain.toml, cargo-ndk $CARGO_NDK_VERSION"
 
   step "iroh library for Android"
-  npm --prefix mobile-app run iroh:android
+  npm --prefix app run iroh:android
   ok "libhermes_iroh.so + Kotlin bindings"
 
   if [[ "$(uname)" == Darwin ]]; then
@@ -141,7 +141,7 @@ if [[ $MOBILE == 1 ]]; then
     if have xcodebuild && xcodebuild -version >/dev/null 2>&1; then
       have pod || brew_install cocoapods
       have watchman || warn "watchman not installed (optional, faster Metro file watching): brew install watchman"
-      npm --prefix mobile-app run iroh:ios
+      npm --prefix app run iroh:ios
       ok "HermesIrohFFI.xcframework + Swift bindings ($(xcodebuild -version | head -1))"
     else
       warn "Xcode not installed: skipping iOS (install it from the App Store, then run this again)"
@@ -153,7 +153,7 @@ step "done"
 cat <<EOF
    Backend:   npm start            (http://127.0.0.1:\${HERMES_UI_PORT:-8787}; token is written to .env)
    Web dev:   npm run dev          (Vite on :5173, proxies /api to the backend)
-   App:       cd mobile-app && npx expo run:android | npx expo run:ios   (dev client), then npm start
+   App:       cd app && npx expo run:android | npx expo run:ios   (dev client), then npm start
    Release:   npm run app:release:android   (docs/releasing.md)
    Secrets:   scripts/import-secrets.sh <backup.age>   (docs/secrets-and-state.md)
 EOF
@@ -164,6 +164,6 @@ if [[ $START == 1 ]]; then
   trap 'kill "${pids[@]}" 2>/dev/null || true' EXIT INT TERM
   node bin/hermes-ui.mjs serve & pids+=($!)
   npm run dev & pids+=($!)
-  if [[ $MOBILE == 1 || -d mobile-app/node_modules ]]; then (cd mobile-app && npx expo start --dev-client) & pids+=($!); fi
+  if [[ $MOBILE == 1 || -d app/node_modules ]]; then (cd app && npx expo start --dev-client) & pids+=($!); fi
   wait
 fi

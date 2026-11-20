@@ -1,0 +1,61 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+example
+
+# generated native folders
+/ios
+/android
+
+# Local secrets: release keystore + its properties (never committed)
+.secrets/
+
+# expo-iroh build output (scripts/build-android.sh, build-ios.sh)
+modules/expo-iroh/rust/target/
+modules/expo-iroh/android/src/main/jniLibs/
+modules/expo-iroh/android/src/main/java/uniffi/
+modules/expo-iroh/ios/Generated/
+modules/expo-iroh/ios/*.xcframework
+modules/expo-iroh/android/build/
+modules/expo-iroh/android/.cxx/
+modules/expo-iroh/ios/build/
+
+
+# web build: iroh-fetch copied by scripts/web-vendor.mjs; desktop export
+public/vendor/
+dist-web/

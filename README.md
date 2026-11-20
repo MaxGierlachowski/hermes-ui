@@ -29,9 +29,13 @@ For phones: start with `HERMES_UI_REMOTE=iroh`, open the hosted UI
 (<https://maxgierlachowski.github.io/hermes-ui/>) or the app, and pair with `npx hermes-ui pair`
 (or `node bin/hermes-ui.mjs pair`) → scan the QR code. Details: [docs/self-hosting.md](docs/self-hosting.md).
 
-The **mobile app** ([`mobile-app/`](mobile-app)) is React Native with a native Rust iroh client. Try it
+The **mobile app** ([`app/`](app)) is React Native with a native Rust iroh client. Try it
 without a backend: "Try the demo" on its first screen. Builds and pre-releases:
-[docs/mobile-app.md](docs/mobile-app.md), [Releases](https://github.com/MaxGierlachowski/hermes-ui/releases).
+[docs/app.md](docs/app.md), [Releases](https://github.com/MaxGierlachowski/hermes-ui/releases).
+
+The same app also runs in the browser and as a **desktop app for macOS** ([`desktop-app/`](desktop-app),
+Tauri 2, with the backend built in): [docs/desktop-app.md](docs/desktop-app.md). A spike, measured
+against the web UI in [ADR 0012](docs/decisions/0012-universal-app.md).
 
 ## Documentation
 
@@ -42,11 +46,11 @@ without a backend: "Try the demo" on its first screen. Builds and pre-releases:
 | [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md) | how the pieces fit, and why |
 | [Security](docs/security.md) | pairing, allow-list, tokens, what relays see |
 | [Development](docs/development.md) | fresh machine in one command, versions, tests |
-| [Mobile app](docs/mobile-app.md) · [Releasing](docs/releasing.md) | builds, signing, push, App Store / Google Play |
+| [Mobile app](docs/app.md) · [Desktop app](docs/desktop-app.md) · [Releasing](docs/releasing.md) | builds, signing, push, App Store / Google Play, macOS |
 | [Secrets and state](docs/secrets-and-state.md) | what is not in git and how to move it |
 | [Design](docs/design.md) · [Mobile audit](docs/mobile-audit.md) | visual language, touch standards |
 
-Repository: `server/` backend + CLI · `web/` UI · `mobile-app/` app · `shared/` shared TypeScript ·
+Repository: `server/` backend + CLI · `web/` UI · `app/` the app (phone, web, desktop) · `desktop-app/` Tauri shell · `shared/` shared TypeScript ·
 `docs/` · `store/` listing material · `site/` privacy and support pages.
 
 ## Contributing and license

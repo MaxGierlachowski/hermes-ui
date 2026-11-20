@@ -19,7 +19,7 @@ Native's JavaScript engine supports neither.
 
 ## Decision
 
-- Build `mobile-app/` as a React Native app with Expo (SDK 58, New Architecture, Expo Router) and
+- Build `app/` as a React Native app with Expo (SDK 58, New Architecture, Expo Router) and
   native screens styled with NativeWind, using the web UI's colour tokens.
 - Write the connection as an Expo module, `modules/expo-iroh`: a thin Rust crate around iroh-bridge's
   own client (`client-core`, the same client inside `iroh-fetch`), exposed with **UniFFI** to Kotlin

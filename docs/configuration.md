@@ -13,6 +13,7 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_SERVE_UI` | `--ui` | `on` | `off` = headless, API only. |
 | `HERMES_UI_DIR` | `--ui-dir` | `web/dist` | Built UI to serve. |
 | `HERMES_UI_URL` | `--ui-url` | – | Public URL of the static UI, used in iroh pairing links. |
+| `HERMES_UI_CORS_ORIGINS` | `--cors-origins` | – | Extra origins (comma separated) whose pages may call the API with the token (Bearer, no cookies). The desktop app's `tauri://localhost` is always allowed. |
 | `HERMES_UI_REMOTE` | `--remote` | `off` | `off` \| `iroh` \| `tailscale-funnel` \| `tailscale-serve` \| `cloudflare`. |
 | `HERMES_UI_LANG` | `--lang` | `en` | Language of server-generated texts (`en`, `de`). The UI follows the browser; change it in ⌘K. |
 | `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state, inbox history, VAPID keys and push subscriptions. |
@@ -27,7 +28,7 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_PASEO_RESPOND` | `--paseo-respond` | `on` | `off` = the inbox shows Paseo permissions but cannot answer them. |
 | `HERMES_UI_PUSH` | `--push` | `on` | `off` disables Web Push. |
 | `HERMES_UI_PUSH_SUBJECT` | `--push-subject` | `HERMES_UI_URL` if https | VAPID subject (`mailto:` or `https:`); Apple rejects anything else. |
-| `HERMES_UI_FCM_SERVICE_ACCOUNT` | `--fcm-service-account` | – | Firebase service-account JSON: push to the native Android app through FCM, next to Web Push. See [mobile-app.md](mobile-app.md). |
+| `HERMES_UI_FCM_SERVICE_ACCOUNT` | `--fcm-service-account` | – | Firebase service-account JSON: push to the native Android app through FCM, next to Web Push. See [app.md](app.md). |
 | `HERMES_UI_INBOX_DAYS`, `HERMES_UI_INBOX_MAX` | `--inbox-days`, `--inbox-max` | `30`, `1000` | How long / how many inbox entries are kept. |
 | `PASEO_DAEMON_URL` | `--paseo-url` | from `PASEO_MCP_CONFIG`, else `ws://127.0.0.1:6767/ws` | Paseo daemon. |
 | `PASEO_MCP_CONFIG` | `--paseo-mcp-config` | `~/.config/paseo-mcp/config.json` | Where the daemon URL is read from. |
@@ -56,8 +57,9 @@ In every mode the backend stays on `127.0.0.1`:
 
 ```bash
 node server/scripts/launchd-plist.mjs --remote iroh > ~/Library/LaunchAgents/io.github.hermes-ui.plist
-launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.hermes-ui.plist
 ```
 
-`server/examples/io.github.hermes-ui.plist` shows the shape of the plist.
+`server/examples/io.github.hermes-ui.plist` shows the shape of the plist. Checks, restart and removal:
+[self-hosting.md](self-hosting.md#macos-launchagent).
 

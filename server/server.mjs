@@ -13,6 +13,7 @@ import { loadConfig } from './src/config.mjs';
 import { IrohGateway } from './src/iroh.mjs';
 import { t, setLang } from './src/i18n.mjs';
 import { Store } from './src/store.mjs';
+import { sessionPage } from './src/session-page.mjs';
 import { Board } from './src/board.mjs';
 import { HermesGateway } from './src/hermes-ws.mjs';
 import { Remote } from './src/remote.mjs';
@@ -25,6 +26,8 @@ import { Push } from './src/push.mjs';
 import { parseUserMessage, previewOf } from './src/user-markers.mjs';
 import { Outbox, queuedRow } from './src/outbox.mjs';
 import { callsOf, paseoItem, paseoTool } from './src/paseo-calls.mjs';
+import { HermesAgents } from './src/hermes-agents.mjs';
+import { agentColumn, agentsBusy, sortAgents } from './src/agent-column.mjs';
 import QRCode from 'qrcode';
 
 const cfg = loadConfig(process.argv.slice(2));
@@ -45,6 +48,8 @@ const SYSTEM_SOURCES = new Set(['cron', 'tool', 'subagent', 'oneshot', 'webhook'
 const WEB_DIST = cfg.uiDir;
 
 const store = new Store(path.join(HERMES_HOME, 'state.db'));
+// Hermes' own child agents (delegate_task, terminal `hermes chat`), shown like Paseo agents.
+const hermesAgents = new HermesAgents({ store, hermesHome: HERMES_HOME });
 // Paseo is optional: HERMES_UI_PASEO=off, or simply no daemon running (it then stays disconnected quietly).
 const paseo = new Paseo({ url: cfg.paseo.url, opsLoopFile: cfg.paseo.opsLoopFile, source: cfg.paseo.source, mcp: cfg.paseo.mcp, respond: cfg.paseo.respond });
 const PASEO_ON = cfg.paseo.mode !== 'off';
@@ -196,9 +201,13 @@ function paseoFor(sessionId) {
     const prev = out.get(id);
     if (!prev || REL_RANK[rel] > REL_RANK[prev.rel]) out.set(id, { ...paseo.view(id), rel, linkedAt: at });
   }
-  const order = { 'needs-attention': 0, running: 1, error: 2, finished: 3, idle: 4, closed: 5, unknown: 6, archived: 7 };
-  return [...out.values()].sort((a, b) => (order[a.state] ?? 5) - (order[b.state] ?? 5) || REL_RANK[b.rel] - REL_RANK[a.rel]);
+  return sortAgents([...out.values()]);
 }
+// All agents of a chat: Paseo agents and Hermes' own children.
+const agentsFor = (sessionId) => sortAgents([...paseoFor(sessionId), ...hermesAgents.agentsFor(sessionId)]);
+// Chats with a running Hermes child: re-checked on a timer (a process can end without a state.db write,
+// and profile databases are not part of the poll).
+const childWatch = new Map(); // chat id -> signature of its children's states
 const sessionsOfAgent = (id) => {
   const sessions = new Set([...(agentSessions.get(id) || [])]);
   for (const [ref, set] of agentSessions) if (ref !== id && id.startsWith(ref)) set.forEach((s) => sessions.add(s));
@@ -227,23 +236,15 @@ function toCard(row) {
     : (row.last_msg_id ?? 0) <= ov.msgId);
   if (overridden) column = ov.column;
   const pending = lv?.prompts?.size ? [...lv.prompts.values()].map(promptView) : [];
-  // N6: Hermes is done, but agents it started or steers are still at work -> Doing, not Waiting.
-  const agents = paseoFor(row.id);
-  const owned = agents.filter((a) => a.rel !== 'watches' && !a.archived);
-  const blocked = owned.filter((a) => a.state === 'needs-attention');
-  const busy = owned.filter((a) => a.state === 'running');
-  let paseoNote = '';
-  if (!pending.length && (autoColumn === 'waiting' || autoColumn === 'doing') && !SYSTEM_SOURCES.has(row.source)) {
-    if (blocked.length) {
-      paseoNote = t('paseoBlocked', { title: blocked[0].title });
-      if (autoColumn === 'waiting' && !overridden) column = 'waiting';
-    } else if (busy.length && autoColumn === 'waiting') {
-      paseoNote = t('paseoRunningList', { n: busy.length, titles: busy.map((a) => a.title).join(', ') });
-      if (!overridden) column = 'doing';
-    } else if (busy.length) {
-      paseoNote = t('paseoRunning', { n: busy.length });
-    }
-  }
+  // N6: Hermes is done, but agents it started or steers are still at work -> Doing, not Waiting
+  // (src/agent-column.mjs; Paseo agents and Hermes' own subagents / terminal runs alike).
+  const agents = agentsFor(row.id);
+  const kids = agents.filter((a) => a.provider === 'hermes');
+  if (kids.some((a) => a.state === 'running')) childWatch.set(row.id, kids.map((a) => `${a.id}=${a.state}`).join(','));
+  else childWatch.delete(row.id);
+  const ac = agentColumn({ autoColumn, column, overridden: !!overridden, pending: pending.length, system: SYSTEM_SOURCES.has(row.source), agents, t });
+  column = ac.column;
+  const paseoNote = ac.note;
   let activity = '';
   if (pending.length) {
     const p = pending[0];
@@ -264,7 +265,7 @@ function toCard(row) {
     override: !!overridden,
     running: autoColumn === 'doing' || (!!paseoNote && column === 'doing'),
     paseoNote,
-    paseo: agents.map(({ id, title, state, status, rel, account, kind, archived, pendingPermissions, createdAt, updatedAt }) => ({ id, title, state, status, rel, account, kind, archived, pendingCount: pendingPermissions?.length || 0, createdAt, updatedAt })),
+    paseo: agents.map(({ id, title, state, status, rel, account, kind, archived, pendingPermissions, createdAt, updatedAt, provider, match }) => ({ id, title, state, status, rel, account, kind, archived, pendingCount: pendingPermissions?.length || 0, createdAt, updatedAt, ...(provider === 'hermes' ? { provider, match } : {}) })),
     activity: clip(activity, 220),
     initialPrompt: clip(prompt, 400),
     createdAt: row.started_at,
@@ -427,6 +428,12 @@ function poll() {
     lastMark = mark;
     lastIds = store.maxIds();
     if (PASEO_ON) for (const sid of scanPaseoRefs()) changed.push(sid);
+    for (const sid of hermesAgents.scan()) changed.push(sid);
+    // A child session that changed (subagent row, terminal run) updates its chat's card.
+    for (const id of [...changed]) {
+      const parent = hermesAgents.parentOf(id);
+      if (parent) changed.push(parent);
+    }
     for (const id of new Set(changed)) {
       const row = store.getSession(id);
       if (row && (row.admitted || row.leased) && !SYSTEM_SOURCES.has(row.source)) follow(id);
@@ -437,6 +444,12 @@ function poll() {
   } catch (err) { console.error('poll', err.message); }
 }
 setInterval(poll, 1500);
+setInterval(() => {
+  for (const [id, sig] of childWatch) {
+    const kids = hermesAgents.agentsFor(id);
+    if (kids.map((a) => `${a.id}=${a.state}`).join(',') !== sig) pushCard(id, true);
+  }
+}, 5000);
 setInterval(() => {
   for (const [id, col] of timeWatch) {
     const card = cardById(id);
@@ -454,8 +467,19 @@ function threadMessages(id) {
   const calls = new Map(); // tool_call_id -> [{ name, args }], for Paseo items
   const seenCalls = new Map();
   const out = [];
+  // Hermes' own child agents, inline right after the message that started them (live state: the chips).
+  const kids = new Map();
+  for (const a of hermesAgents.agentsFor(id)) kids.set(a.msgId, [...(kids.get(a.msgId) || []), a]);
+  let after = null;
   for (const r of rows) {
+    if (after) { out.push(...after); after = null; }
     if (r.display_kind === 'hidden') continue;
+    if (r.role === 'assistant' && kids.has(r.id)) {
+      after = kids.get(r.id).sort((a, b) => a.callId.localeCompare(b.callId) || a.index - b.index).map((a, i) => ({
+        id: r.id, key: `h${r.id}.${i}`, role: 'paseo', text: '', ts: r.timestamp,
+        paseo: { action: 'create', ref: a.id, agentId: a.id, title: a.title, account: a.profile, provider: 'hermes', kind: a.kind },
+      }));
+    }
     if (r.role === 'assistant' && r.tool_calls) for (const [k, v] of callsOf(r.tool_calls)) calls.set(k, v);
     if (r.role === 'tool' && PASEO_ON) {
       // Paseo agent started / messaged / archived here: an inline card with live state (src/paseo-calls.mjs).
@@ -506,6 +530,7 @@ function threadMessages(id) {
     for (const file of paths) msg.attachments.push(fileAttachment({ kind: mediaKind(file), path: file }));
     out.push(msg);
   }
+  if (after) out.push(...after);
   // Sent from the board, not in the transcript yet (see src/outbox.mjs).
   const entries = outbox.forSession(id);
   for (const e of entries) {
@@ -551,15 +576,22 @@ async function sendPrompt(id, { text = '', images = [], audio = null }) {
     attachments.push(await gateway.uploadImage(img));
   }
   let body = text;
+  let voice = null; // what happened to the voice message, reported back to the client
   if (audio) {
     const url = board.saveMedia(id, { ...audio, name: 'voice' });
     media.push({ afterMsgId, kind: 'audio', url });
     let transcript = '';
+    let error = '';
+    const t0 = Date.now();
     try {
       const res = await gateway.transcribe(audio);
       transcript = res.ok !== false ? (res.transcript || '').trim() : '';
-      if (!transcript) console.warn('transcribe: empty', JSON.stringify(res).slice(0, 200));
-    } catch (err) { console.warn('transcribe failed:', err.message); }
+      if (!transcript) {
+        error = res.ok === false ? String(res.error || res.detail || 'transcription failed') : 'empty transcript';
+        console.warn('transcribe: empty', JSON.stringify(res).slice(0, 200));
+      }
+    } catch (err) { error = err.message; console.warn('transcribe failed:', err.message); }
+    voice = { transcribed: !!transcript, ms: Date.now() - t0, ...(error ? { error: clip(error, 300) } : {}) };
     if (transcript) body = body ? `${body}\n\n🎙 ${transcript}` : transcript;
     else {
       const file = board.mediaPath(...url.split('/').slice(-2).map(decodeURIComponent));
@@ -595,7 +627,7 @@ async function sendPrompt(id, { text = '', images = [], audio = null }) {
   reconcileOutbox(id);
   pushCard(id, true);
   broadcast('reload', { id, final: false });
-  return { body, admission, entry: outbox.get(entry.id) || { ...entry, status: 'delivered' } };
+  return { body, admission, voice, entry: outbox.get(entry.id) || { ...entry, status: 'delivered' } };
 }
 
 function sessionRunning(id, row = store.getSession(id)) {
@@ -743,8 +775,7 @@ function settledElsewhere(promptId, how = 'elsewhere') {
 const busyState = new Map(); // sessionId -> boolean
 function observeCard(card) {
   if (card.system || card.draft) return;
-  const owned = (card.paseo || []).filter((a) => a.rel !== 'watches' && !a.archived);
-  const busy = card.running || card.pending.length > 0 || owned.some((a) => a.state === 'running' || a.state === 'needs-attention');
+  const busy = card.running || card.pending.length > 0 || agentsBusy(card.paseo);
   const was = busyState.get(card.id);
   busyState.set(card.id, busy);
   if (!was || busy) return;
@@ -807,6 +838,19 @@ function observeAgent(id) {
 }
 
 // ---------- http ----------
+// CORS for the desktop app (its pages come from tauri://localhost) and HERMES_UI_CORS_ORIGINS. Only the
+// Bearer token works across origins: no credentials (the device cookie is SameSite=Strict anyway).
+const CORS_ORIGINS = new Set(['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost', ...cfg.corsOrigins]);
+function cors(req, res) {
+  const origin = req.headers.origin;
+  if (!origin || !CORS_ORIGINS.has(origin)) return false;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type, accept');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Max-Age', '600');
+  return true;
+}
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
@@ -890,6 +934,8 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': STATIC[path.extname(file)] || 'application/octet-stream', 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache', ...SECURITY_HEADERS });
       return fs.createReadStream(file).pipe(res);
     }
+
+    if (cors(req, res) && req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
     // ---- unauthenticated: login with the board token, or redeem a pairing code ----
     if (p === '/api/login' && req.method === 'POST') {
@@ -987,7 +1033,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/push' && req.method === 'GET') return send(res, 200, { publicKey: push.publicKey, subscriptions: push.forDevice(deviceKey) });
       const body = await readJson(req);
       if (p === '/api/push/subscribe' && req.method === 'POST') return send(res, 200, push.subscribe(deviceKey, deviceName, body.subscription, body.settings));
-      // Native app (mobile-app/): FCM device token instead of a Web Push subscription.
+      // Native app (app/): FCM device token instead of a Web Push subscription.
       if (p === '/api/push/native' && req.method === 'POST') {
         try { return send(res, 200, push.subscribeNative(deviceKey, deviceName, body, body.settings)); } catch (err) { return send(res, err.status || 400, { error: err.message }); }
       }
@@ -1050,14 +1096,12 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { q, title: byTitle, content: byContent });
     }
     if (p === '/api/sessions' && req.method === 'GET') {
-      const days = Math.min(Number(url.searchParams.get('days') || 3), 90);
-      const system = url.searchParams.get('system') === '1';
-      const since = Date.now() / 1000 - days * 86400;
-      const pinned = [...Object.keys(board.data.created), ...Object.keys(board.data.overrides)];
-      const rows = store.listSessions({ sinceTs: since, ids: pinned });
-      const cards = rows.filter((r) => !isEmptyShell(r)).map(toCard).filter((c) => system || !c.system);
+      const pinnedIds = [...new Set([...Object.keys(board.data.created), ...Object.keys(board.data.overrides)])];
       const drafts = Object.values(board.data.drafts).map(draftCard);
-      return send(res, 200, { sessions: [...drafts, ...cards], gateway: gateway.connected });
+      let page;
+      try { page = sessionPage(url.searchParams, { store, systemSources: SYSTEM_SOURCES, pinnedIds, drafts, toCard, isEmptyShell }); }
+      catch (err) { if (err.status === 400) return send(res, 400, { error: err.message }); throw err; }
+      return send(res, 200, { ...page, gateway: gateway.connected });
     }
 
     if (p === '/api/sessions' && req.method === 'POST') {
@@ -1103,13 +1147,15 @@ const server = http.createServer(async (req, res) => {
         const newId = await startDraft(id);
         return send(res, 200, { session: cardById(newId) });
       }
+      let sent;
       try {
-        await sendPrompt(id, body);
+        sent = await sendPrompt(id, body);
       } catch (err) {
         // The message stays in the thread as failed, with "send again".
         return send(res, 502, { error: err.message, session: cardById(id), messages: threadMessages(id) });
       }
-      return send(res, 200, { session: cardById(id), messages: threadMessages(id) });
+      // voice: { transcribed, ms, error? } – a failed transcription is sent as an audio file and reported here.
+      return send(res, 200, { session: cardById(id), messages: threadMessages(id), voice: sent.voice });
     }
 
     if ((m = p.match(/^\/api\/outbox\/([0-9a-f-]{36})(\/retry)?$/)) && (req.method === 'DELETE' || (m[2] && req.method === 'POST'))) {
@@ -1158,12 +1204,21 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { session: card });
     }
 
-    // ---- Paseo (read-only) ----
+    // ---- Agents: Paseo (read-only) and Hermes' own children (read-only) ----
     if ((m = p.match(/^\/api\/sessions\/([^/]+)\/paseo$/)) && req.method === 'GET') {
       const id = decodeURIComponent(m[1]);
       const list = paseoFor(id);
       await Promise.all(list.filter((a) => !a.known).map((a) => paseo.ensure(a.id)));
-      return send(res, 200, { connected: paseo.connected, source: paseo.sourceLabel, agents: paseoFor(id) });
+      return send(res, 200, { connected: paseo.connected, source: paseo.sourceLabel, agents: agentsFor(id) });
+    }
+    if ((m = p.match(/^\/api\/agents\/(hermes(?::|%3A)[^/]+)\/timeline$/i)) && req.method === 'GET') {
+      const id = decodeURIComponent(m[1]);
+      const limit = Math.min(Number(url.searchParams.get('limit') || 150), 400);
+      const parent = hermesAgents.index.get(id)?.parent;
+      const agent = parent ? hermesAgents.agentsFor(parent).find((a) => a.id === id) : null;
+      const t = hermesAgents.timeline(id, limit);
+      if (!t) return send(res, 404, { error: 'not found' });
+      return send(res, 200, { agent: agent || { id, provider: 'hermes', known: false, title: null, state: 'unknown', status: 'unknown' }, ...t });
     }
     if ((m = p.match(/^\/api\/paseo\/agents\/([0-9a-f-]{36})\/timeline$/)) && req.method === 'GET') {
       const id = m[1];
@@ -1219,6 +1274,7 @@ server.listen(PORT, HOST, () => {
   gateway.connect();
   syncIrohAccess();
   remote.start();
+  hermesAgents.scan();
   if (PASEO_ON) {
     scanPaseoRefs();
     paseo.connect();

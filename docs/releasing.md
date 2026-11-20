@@ -3,7 +3,7 @@
 How to get the app from this repository into Google Play and the App Store under **your own** accounts.
 Nothing here needs a service of the project: every account, key and listing is yours.
 
-Related: [mobile-app.md](mobile-app.md) (build, signing, pairing, push) ·
+Related: [app.md](app.md) (build, signing, pairing, push) ·
 [secrets-and-state.md](secrets-and-state.md) (what to back up) · [`store/`](../store/README.md)
 (listing texts, review notes, privacy answers, graphics) · [`CHANGELOG.md`](../CHANGELOG.md).
 
@@ -14,11 +14,11 @@ Related: [mobile-app.md](mobile-app.md) (build, signing, pairing, push) ·
 
 | Decision | Where | Why it is permanent |
 |---|---|---|
-| **App id** (`HERMES_UI_APP_ID`, e.g. `com.example.hermesui`) | `mobile-app/.env` | Play package names and iOS bundle ids are permanent once uploaded. A different id is a different app: users reinstall, reviews and installs start from zero. Use reverse DNS of a domain you own. The default `app.hermesui.mobile` is fine for local builds, but you do not own `hermesui.app`. |
+| **App id** (`HERMES_UI_APP_ID`, e.g. `com.example.hermesui`) | `app/.env` | Play package names and iOS bundle ids are permanent once uploaded. A different id is a different app: users reinstall, reviews and installs start from zero. Use reverse DNS of a domain you own. The default `app.hermesui.mobile` is fine for local builds, but you do not own `hermesui.app`. |
 | **Store name** | `HERMES_UI_APP_NAME`, `store/listing/*.md` | The name can change later, but the first one shapes the listing. See [Naming](#naming). |
-| **Upload key** | `mobile-app/.secrets/` | Updates must be signed with it. With Play App Signing a lost upload key can be reset through Google support, but the old key is still what installed APKs outside Play check. Back it up now ([secrets-and-state.md](secrets-and-state.md)). |
+| **Upload key** | `app/.secrets/` | Updates must be signed with it. With Play App Signing a lost upload key can be reset through Google support, but the old key is still what installed APKs outside Play check. Back it up now ([secrets-and-state.md](secrets-and-state.md)). |
 
-Changing the app id later also means the sideloaded APKs (`mobile-app-v0.x` pre-releases) cannot update
+Changing the app id later also means the sideloaded APKs (the `mobile-app-v0.x` / `app-v0.x` pre-releases) cannot update
 to the store version: uninstall them first.
 
 ## Naming
@@ -65,14 +65,14 @@ databases before you settle on it. Renaming the repo or the app is a separate de
   accounts (D-U-N-S) are exempt.
 - Create the app (name, default language, app or game: app, free).
 - **Play App Signing** is mandatory for app bundles: Google keeps the app signing key, you upload with
-  your **upload key** = the keystore in `mobile-app/.secrets/`. On first upload, choose "Use Google-
+  your **upload key** = the keystore in `app/.secrets/`. On first upload, choose "Use Google-
   generated key".
 
 ### Firebase (optional: push with the app closed)
 
 1. console.firebase.google.com → new project (no Analytics needed).
 2. Add an **Android app** with the package name `HERMES_UI_APP_ID` → download `google-services.json`
-   → keep it in `mobile-app/.secrets/` and set `GOOGLE_SERVICES_JSON` to its path.
+   → keep it in `app/.secrets/` and set `GOOGLE_SERVICES_JSON` to its path.
 3. Project settings → Service accounts → **Generate new private key** → keep the JSON outside the repo
    and set `HERMES_UI_FCM_SERVICE_ACCOUNT` for the backend.
 4. iOS (later): FCM can deliver to iOS through APNs: upload an APNs auth key (.p8, from the Apple
@@ -84,24 +84,24 @@ databases before you settle on it. Renaming the repo or the app is a separate de
 
 | What | Where it lives (never in git) | Used by |
 |---|---|---|
-| Upload keystore + `keystore.properties` | `mobile-app/.secrets/` | Gradle release signing |
-| Play service account JSON | `mobile-app/.secrets/play-service-account.json` | `eas submit`, CI upload |
-| App Store Connect API key (.p8 + key id + issuer id) | `mobile-app/.secrets/AuthKey_<id>.p8` | `eas submit`, Xcode/Transporter |
-| `google-services.json` | `mobile-app/.secrets/`, path in `GOOGLE_SERVICES_JSON` | app build (FCM) |
+| Upload keystore + `keystore.properties` | `app/.secrets/` | Gradle release signing |
+| Play service account JSON | `app/.secrets/play-service-account.json` | `eas submit`, CI upload |
+| App Store Connect API key (.p8 + key id + issuer id) | `app/.secrets/AuthKey_<id>.p8` | `eas submit`, Xcode/Transporter |
+| `google-services.json` | `app/.secrets/`, path in `GOOGLE_SERVICES_JSON` | app build (FCM) |
 | Firebase service account | outside the repo, `HERMES_UI_FCM_SERVICE_ACCOUNT` | backend (sends push) |
-| App identity | `mobile-app/.env` (from `.env.example`) | `app.config.ts` |
+| App identity | `app/.env` (from `.env.example`) | `app.config.ts` |
 
 `scripts/export-secrets.sh` puts all of these into one encrypted backup.
 
 ### GitHub Actions secrets (optional, for CI releases)
 
-`.github/workflows/android.yml` builds on a tag `mobile-app-v*`. Without secrets it produces
+`.github/workflows/android.yml` builds on a tag `app-v*`. Without secrets it produces
 debug-signed artifacts; with them it signs, attaches the files to a draft pre-release and uploads the
 AAB to Play's internal track:
 
 | Secret | Value |
 |---|---|
-| `ANDROID_KEYSTORE_BASE64` | `base64 -i mobile-app/.secrets/release.keystore` |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -i app/.secrets/release.keystore` |
 | `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | from `keystore.properties` |
 | `PLAY_SERVICE_ACCOUNT_JSON` | Play Console → Setup → API access → service account with "Release to testing tracks" |
 | `GOOGLE_SERVICES_JSON` | content of `google-services.json` |
@@ -110,9 +110,10 @@ Repository **variables**: `HERMES_UI_APP_ID`, `HERMES_UI_APP_NAME`, `HERMES_UI_L
 
 ## 3. Version and build number
 
-One place: [`mobile-app/version.json`](../mobile-app/version.json) — `version` (shown to users,
+One place: [`app/version.json`](../app/version.json) — `version` (shown to users,
 `0.3.0`) and `build` (Android `versionCode`, iOS `CFBundleVersion`; must grow with every upload).
-Raise both for a release, add a section to `CHANGELOG.md`, tag `mobile-app-vX.Y.Z`.
+Raise both for a release, add a section to `CHANGELOG.md`, tag `app-vX.Y.Z` (until 0.3.0 the tags were
+`mobile-app-vX.Y.Z`, before the folder was renamed to `app/`).
 EAS cloud builds keep their own counter (`appVersionSource: remote`, `autoIncrement` in the production
 profile); after the first EAS build run `eas build:version:set` once to start it at `build`.
 
@@ -123,7 +124,7 @@ Prerequisites: `scripts/bootstrap.sh --mobile` ([development.md](development.md)
 ### Android (local, recommended)
 
 ```bash
-cd mobile-app
+cd app
 npm run release:android     # Rust lib → prebuild → AAB + one APK per ABI → dist/ (+ SHA-256 list)
 ```
 
@@ -133,7 +134,7 @@ upload key (SHA-256 also in `store/templates/` for `assetlinks.json`).
 ### iOS (local, Xcode)
 
 ```bash
-cd mobile-app
+cd app
 npm run iroh:ios
 npx expo prebuild --platform ios --clean && (cd ios && pod install)
 open ios/HermesUI.xcworkspace   # Signing & Capabilities: your team; Product → Archive → Distribute
@@ -143,7 +144,7 @@ Uploads need Xcode 26+ with the iOS 26 SDK (Apple's rule since 2026-04-28).
 
 ### EAS (Expo's cloud builder, optional)
 
-`mobile-app/eas.json` has profiles `development` (dev client), `preview` (internal APK) and
+`app/eas.json` has profiles `development` (dev client), `preview` (internal APK) and
 `production` (AAB / App Store archive). The native Rust library is built on the build machine by the
 `eas-build-post-install` hook (`scripts/eas-build-post-install.sh`, installs rustup + targets). Untested
 in the cloud so far; `eas build --local` runs the same steps on your machine.
@@ -225,9 +226,36 @@ custom domain can. Then set `HERMES_UI_VERIFIED_LINK_HOST`.
 
 ## 7. Release checklist
 
-- [ ] `mobile-app/version.json`: version + build raised; `CHANGELOG.md` section
+- [ ] `app/version.json`: version + build raised; `CHANGELOG.md` section
 - [ ] `npm run verify` and `npm run test:ui` green
 - [ ] `npm run release:android` → AAB + APKs signed with the upload key
 - [ ] Demo mode checked on a phone (pairing screen → Try the demo)
-- [ ] Tag `mobile-app-vX.Y.Z`, push; pre-release with APKs + AAB + SHA-256 list
+- [ ] Tag `app-vX.Y.Z`, push; pre-release with APKs + AAB + SHA-256 list
 - [ ] Play: internal → closed → production; App Store: TestFlight → review
+
+## Desktop app (macOS)
+
+The desktop app ([desktop-app.md](desktop-app.md)) is a spike: its pre-releases (`desktop-spike-N`) carry
+an **unsigned** DMG for Apple silicon. To ship it to others:
+
+1. **Developer ID**: the Apple Developer Program (same account as for the App Store) → certificate
+   "Developer ID Application" in Xcode → Settings → Accounts. Signing identity e.g.
+   `Developer ID Application: <Name> (<TEAMID>)`.
+2. **Sign**: `APPLE_SIGNING_IDENTITY="Developer ID Application: …"` and `tauri build --bundles app,dmg`
+   in `desktop-app/` (or `bundle.macOS.signingIdentity` in `tauri.conf.json`, today `-` = ad hoc), and
+   drop `scripts/sign-adhoc.sh` from `npm run build`. The bundled Node binary is signed with the same
+   identity; `Entitlements.plist` (JIT, microphone, camera) applies to both. The Developer ID signature
+   replaces the ad-hoc identity: users are asked once more for microphone, camera, notifications and
+   Keychain access; after that the decisions stay across updates (same Team ID + identifier).
+3. **Notarize**: set `APPLE_API_ISSUER`, `APPLE_API_KEY` and `APPLE_API_KEY_PATH` (an App Store Connect
+   API key with the Developer role) or `APPLE_ID`, `APPLE_PASSWORD` (app-specific password) and
+   `APPLE_TEAM_ID`; `tauri build` notarizes and staples the app and the DMG.
+4. **Check**: `spctl -a -vvv -t install "Hermes UI.app"` says "Notarized Developer ID";
+   `codesign -dv --verbose=4 "Hermes UI.app/Contents/MacOS/node"` shows the hardened runtime.
+5. **Universal binary** (Intel + Apple silicon): `rustup target add x86_64-apple-darwin`,
+   `tauri build --target universal-apple-darwin`, and a universal Node binary for the sidecar
+   (`lipo -create` of the arm64 and x64 builds).
+6. **Updates** (later): Tauri's updater plugin with a signed `latest.json` on GitHub Releases.
+
+Until then: right-click → Open on first launch (see [desktop-app.md](desktop-app.md#install-unsigned-beta)).
+

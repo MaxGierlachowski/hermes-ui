@@ -1,0 +1,192 @@
+// One chat: header, messages, open approvals / questions and the composer. A screen on the phone
+// (app/thread/[id].tsx), the right half of the split view on the desktop (embedded).
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
+import { ActivityIndicator, KeyboardAvoidingView, Pressable, View } from 'react-native'
+import { useNavigation } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { ArrowLeft, Bot, Check, Columns3, X } from 'lucide-react-native'
+import { COLUMNS, type Column, type OutgoingMessage, type PaseoChip, type ThreadMessage } from '@shared/types'
+import { stripMediaTags } from '@shared/media-tags'
+import { Text } from '@/components/ui/text'
+import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/icon'
+import { MessageView } from '@/components/MessageView'
+import { Markdown } from '@/components/Markdown'
+import { PendingPrompt } from '@/components/PendingPrompt'
+import { Composer } from '@/components/Composer'
+import { Lightbox } from '@/components/Lightbox'
+import { TransitionReady } from '@/components/Media'
+import { Sheet } from '@/components/Sheet'
+import { SyncBar } from '@/components/SyncBar'
+import { COLUMN_COLOR, StatusDot, sourceIcon } from '@/components/status'
+import { ThreadList, type Row } from './ThreadList'
+import { SUMMARY_PILL_SPACE, SummaryPill, useSummaryPill } from './SummaryPill'
+import { getState, interrupt, openThread, sendMessage, setColumn, useStore } from '@/lib/store'
+import { closeThread, showPaseo, showThread } from '@/lib/nav'
+import { openMenu } from '@/lib/menu'
+import { cn } from '@/lib/utils'
+import { clock, t } from '@/lib/i18n'
+import { haptic } from '@/lib/haptics'
+
+function ColumnSheet({ open, onClose, current, onPick }: { open: boolean; onClose: () => void; current: Column; onPick: (c: Column | 'auto') => void }) {
+  return (
+    <Sheet open={open} onClose={onClose}>
+        <Text className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('Spalte')}</Text>
+        {COLUMNS.map((c) => (
+          <Pressable key={c.id} onPress={() => onPick(c.id)} className="min-h-12 flex-row items-center gap-3 rounded-lg px-2 active:bg-accent">
+            <View className={cn('h-2.5 w-2.5 rounded-full', COLUMN_COLOR[c.id])} />
+            <Text className="flex-1 text-[15px]">{c.label}</Text>
+            {current === c.id && <Icon as={Check} size={18} tone="primary" />}
+          </Pressable>
+        ))}
+        <Pressable onPress={() => onPick('auto')} className="min-h-12 flex-row items-center gap-3 rounded-lg px-2 active:bg-accent">
+          <View className="h-2.5 w-2.5" />
+          <Text className="flex-1 text-[15px] text-muted-foreground">{t('Automatisch')}</Text>
+        </Pressable>
+    </Sheet>
+  )
+}
+
+const NO_CHIPS: PaseoChip[] = []
+// Stable keys also for messages without a database id (the cache keeps only the newest ones, so an
+// index would shift when the full history arrives).
+const rowKey = (m: ThreadMessage) => m.key ?? (m.id != null ? `m${m.id}` : `t${m.ts ?? 0}-${m.role}-${m.text.length}`)
+
+/** True once the screen's open transition has finished (or after 400 ms at the latest). */
+function useTransitionDone(embedded: boolean) {
+  const navigation = useNavigation()
+  const [done, setDone] = useState(embedded)
+  useEffect(() => {
+    if (embedded) return
+    const timer = setTimeout(() => setDone(true), 400)
+    const off = navigation.addListener('transitionEnd' as never, () => { clearTimeout(timer); setDone(true) })
+    return () => { clearTimeout(timer); off() }
+  }, [navigation, embedded])
+  return done
+}
+
+export function ThreadPane({ sessionId, embedded = false }: { sessionId: string; embedded?: boolean }) {
+  const session = useStore((s) => s.sessions[sessionId])
+  const openId = useStore((s) => s.openId)
+  const messages = useStore((s) => s.messages)
+  const loading = useStore((s) => s.loadingThread)
+  const streaming = useStore((s) => (s.streaming && s.streaming.id === sessionId ? s.streaming.text : ''))
+  const insets = useSafeAreaInsets()
+  const [lightbox, setLightbox] = useState<{ uri: string; source: string } | null>(null)
+  const [sheet, setSheet] = useState(false)
+  const columnButton = useRef<ComponentRef<typeof View>>(null)
+  const ready = useTransitionDone(embedded)
+  const chips = session?.paseo?.length ? session.paseo : NO_CHIPS
+
+  useEffect(() => { if (openId !== sessionId) openThread(sessionId) }, [sessionId])
+  // Leaving the thread screen: stop treating it as open (live messages, toasts for its own turns).
+  useEffect(() => () => { if (!embedded && getState().openId === sessionId) openThread(null) }, [sessionId, embedded])
+
+  // Newest first: row 0 sits at the bottom, right above the composer.
+  const rows = useMemo<Row[]>(() => {
+    const out: Row[] = []
+    if (session?.pending?.length) out.push({ key: 'prompts', kind: 'prompts' })
+    if (streaming) out.push({ key: 'stream', kind: 'stream', text: streaming })
+    for (let i = messages.length - 1; i >= 0; i--) out.push({ key: rowKey(messages[i]), kind: 'msg', m: messages[i] })
+    return out
+  }, [messages, streaming, session?.pending])
+
+  const pickColumn = (c: Column | 'auto') => { haptic('select'); setSheet(false); setColumn(sessionId, c) }
+  const columnMenu = () => {
+    if (!embedded) { setSheet(true); return }
+    columnButton.current?.measureInWindow((x, y, w, h) => {
+      openMenu([
+        ...COLUMNS.map((c) => ({ id: c.id, text: c.label, checked: session?.column === c.id && session?.override })),
+        '-' as const,
+        { id: 'auto', text: t('Automatisch'), checked: !session?.override },
+      ], { x: x + w, y: y + h, align: 'right' }, (id) => pickColumn(id as Column | 'auto'))
+    })
+  }
+
+  const openImage = useCallback((uri: string, source: string) => setLightbox({ uri, source }), [])
+  // The composer's send path, also used by the Summary pill.
+  const submit = async (msg: OutgoingMessage) => {
+    const next = await sendMessage(sessionId, msg)
+    if (!next) return false // not delivered: the composer keeps the message (and a voice take)
+    if (next !== sessionId) showThread(next, { replace: true })
+  }
+  const summary = useSummaryPill(sessionId, session?.draft ? 0 : messages.length, !!session?.running || !!session?.pending?.length)
+
+  const agents = session?.paseo?.length || 0
+  const agentsRunning = session?.paseo?.filter((a) => a.state === 'running' && a.rel !== 'watches').length || 0
+  return (
+    <View className="flex-1 bg-background">
+      <View className={cn('flex-row gap-1 border-b border-border', embedded ? 'items-start px-2 py-2' : 'items-center px-1 pb-1')} style={embedded ? undefined : { paddingTop: insets.top + 2 }}>
+        {!embedded && <Button variant="ghost" size="icon" onPress={closeThread} accessibilityLabel={t('Zurück')}><Icon as={ArrowLeft} /></Button>}
+        {embedded ? (
+          // Desktop split: the web UI's thread header (title on up to two lines, source · created · id below).
+          <View className="min-w-0 flex-1 gap-0.5 pl-2 pt-1">
+            <View className="flex-row items-start gap-2">
+              {session && <StatusDot column={session.column} running={session.running} pending={!!session.pending?.length} className="mt-[6px]" />}
+              <Text className="flex-1 text-[15px] font-semibold leading-5" numberOfLines={2} selectable>{session?.title || t('Ohne Titel')}</Text>
+            </View>
+            {session && (
+              <View className="flex-row items-center gap-2 pl-4">
+                <View className="flex-row items-center gap-1"><Icon as={sourceIcon(session.source)} size={12} tone="muted-foreground" /><Text className="text-xs text-muted-foreground">{session.source}</Text></View>
+                <Text className="text-xs tabular-nums text-muted-foreground">{clock(session.createdAt)}</Text>
+                <Text selectable className="shrink font-mono text-[11px] text-muted-foreground" numberOfLines={1}>{session.id}</Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View className="flex-1 flex-row items-center gap-2">
+            {session && <StatusDot column={session.column} running={session.running} pending={!!session.pending?.length} />}
+            <Text className="flex-1 text-[16px] font-semibold" numberOfLines={1}>{session?.title || t('Ohne Titel')}</Text>
+          </View>
+        )}
+        {agents > 0 && (
+          <Button variant="ghost" size="sm" onPress={() => showPaseo(sessionId)} accessibilityLabel={t('Agents')} {...({ dataSet: { tip: agentsRunning ? t('Agents ({n} laufen)', { n: agentsRunning }) : t('Agents') } } as object)}>
+            <Icon as={Bot} size={embedded ? 16 : 18} /><Text className="text-sm tabular-nums">{agents}</Text>
+            {agentsRunning > 0 && <View className="h-1.5 w-1.5 rounded-full bg-indigo-500 web:animate-pulse" />}
+          </Button>
+        )}
+        <View ref={columnButton} collapsable={false}>
+          <Button variant="ghost" size={embedded ? 'icon-sm' : 'icon'} onPress={columnMenu} accessibilityLabel={t('Spalte')}><Icon as={Columns3} size={embedded ? 16 : 20} /></Button>
+        </View>
+        {embedded && <Button variant="ghost" size="icon-sm" onPress={closeThread} accessibilityLabel={`${t('Schließen')}`} {...({ dataSet: { tip: `${t('Schließen')}  Esc` } } as object)}><Icon as={X} size={16} /></Button>}
+      </View>
+      <SyncBar />
+      <KeyboardAvoidingView behavior="padding" className="flex-1" keyboardVerticalOffset={0} enabled={!embedded}>
+        {/* The Summary pill floats over the bottom of the list (inside its box), not out of the composer:
+            Android only draws and hit-tests children inside their parent, and a percentage offset there
+            ignores the parent's safe-area padding (the pill sank behind the composer). */}
+        <View className="min-h-0 flex-1">
+          {loading && !messages.length ? (
+            <View className="flex-1 items-center justify-center"><ActivityIndicator /></View>
+          ) : (
+            <TransitionReady.Provider value={ready}>
+              <ThreadList
+                rows={rows}
+                renderRow={(item) => item.kind === 'msg'
+                  ? <MessageView m={item.m} sessionId={sessionId} chips={chips} onImage={openImage} />
+                  : item.kind === 'stream'
+                    ? <View className="opacity-90"><Markdown text={stripMediaTags(item.text)} /></View>
+                    : <View className="gap-3">{session?.pending.map((p) => <PendingPrompt key={p.promptId} sessionId={sessionId} prompt={p} />)}</View>}
+                footer={session?.initialPrompt && !messages.length ? <Text className="text-center text-sm text-muted-foreground">„{session.initialPrompt}“</Text> : undefined}
+                bottomInset={summary.state === 'hidden' ? 0 : SUMMARY_PILL_SPACE}
+              />
+            </TransitionReady.Provider>
+          )}
+          <SummaryPill state={summary.state} onPress={() => summary.run((text) => submit({ text, images: [], audio: null }))} />
+        </View>
+        <View style={{ paddingBottom: embedded ? 0 : insets.bottom }} className="bg-background">
+          <Composer
+            key={sessionId}
+            draftKey={sessionId}
+            autoFocus={embedded}
+            running={session?.running}
+            onStop={() => interrupt(sessionId)}
+            onSend={submit}
+          />
+        </View>
+      </KeyboardAvoidingView>
+      {!embedded && <ColumnSheet open={sheet} onClose={() => setSheet(false)} current={session?.column || 'new'} onPick={pickColumn} />}
+      <Lightbox uri={lightbox?.uri ?? null} source={lightbox?.source} onClose={() => setLightbox(null)} />
+    </View>
+  )
+}
