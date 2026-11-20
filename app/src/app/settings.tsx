@@ -98,7 +98,7 @@ export default function Settings() {
 
         <Section title="Board">
           <Text className="text-sm">{t('Zeitraum')}</Text>
-          <Choice options={[1, 3, 7, 30].map((d) => ({ id: String(d), label: d === 1 ? t('1 Tag') : t('{n} Tage', { n: d }) }))} value={String(days)} onChange={(v) => setPrefs({ days: Number(v) })} />
+          <Choice options={[0, 1, 3, 7, 30].map((d) => ({ id: String(d), label: d === 0 ? t('Alle Chats') : d === 1 ? t('1 Tag') : t('{n} Tage', { n: d }) }))} value={String(days)} onChange={(v) => setPrefs({ days: Number(v) })} />
           <Choice options={[{ id: '0', label: t('Cron/System ausblenden') }, { id: '1', label: 'Cron/System' }]} value={system ? '1' : '0'} onChange={(v) => setPrefs({ system: v === '1' })} />
         </Section>
 

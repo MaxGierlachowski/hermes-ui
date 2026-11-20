@@ -21,8 +21,12 @@ type State = {
   sessions: Record<string, Session>
   gateway: boolean
   live: boolean
+  /** Optional time window in days, 0 = none: the newest chats, older ones page in while scrolling. */
   days: number
   system: boolean
+  /** Where the next older page starts; null = everything is loaded. */
+  nextCursor: string | null
+  loadingMore: boolean
   tab: Tab
   column: Column
   openId: string | null
@@ -48,8 +52,10 @@ let state: State = {
   sessions: {},
   gateway: false,
   live: false,
-  days: 3,
+  days: 0,
   system: false,
+  nextCursor: null,
+  loadingMore: false,
   tab: 'board',
   column: 'doing',
   openId: null,
@@ -125,8 +131,10 @@ export async function bootstrap() {
   mark('bootstrap')
   clearTimeout(retryTimer)
   if (!prefsLoaded) {
-    const prefs = JSON.parse((await AsyncStorage.getItem('hk_prefs')) || '{}') as Partial<Pick<State, 'days' | 'system' | 'column'>>
-    set({ ...prefs })
+    // `window` replaced `days` (0.5.1): the old default of 3 days must not stick as a filter.
+    const { window, system, column } = JSON.parse((await AsyncStorage.getItem('hk_prefs')) || '{}') as { window?: number; system?: boolean; column?: Column }
+    const prefs = { ...(window != null && { days: window }), ...(system != null && { system }), ...(column && { column }) }
+    set(prefs)
     columnChosen = !!prefs.column
     prefsLoaded = true
   }
@@ -223,18 +231,48 @@ async function start() {
 }
 
 // ---------- loading ----------
-export async function loadSessions(throwing = false) {
+// The board loads in pages (newest activity first). A reload fetches the first page again; once older
+// pages were scrolled in, it merges by id and keeps everything loaded (and the cursor), so live
+// refreshes never drop them and no row between the pages goes missing. A filter change starts over.
+type Page = { sessions: Session[]; nextCursor?: string | null; gateway: boolean }
+const PAGE = 50
+const sessionsUrl = (before?: string) => `/api/sessions?limit=${PAGE}&system=${state.system ? 1 : 0}${state.days ? `&days=${state.days}` : ''}${before ? `&before=${encodeURIComponent(before)}` : ''}`
+let paged = false // a later page was loaded since the last reset
+let generation = 0 // bumped by a filter change: answers to older requests are dropped
+
+export async function loadSessions(throwing = false, reset = false) {
+  const gen = reset ? ++generation : generation
+  if (reset) paged = false
   try {
-    const { sessions, gateway } = await track(api<{ sessions: Session[]; gateway: boolean }>(`/api/sessions?days=${state.days}&system=${state.system ? 1 : 0}`))
-    set({ gateway, sessions: Object.fromEntries(sessions.map((s) => [s.id, s])), boardAt: Date.now() })
-    writeCache<BoardCache>('board', { sessions, gateway })
-    pickColumn(sessions)
+    const page = await track(api<Page>(sessionsUrl()))
+    if (gen !== generation) return true
+    const first = Object.fromEntries(page.sessions.map((s) => [s.id, s]))
+    set((st) => paged
+      ? { gateway: page.gateway, sessions: { ...st.sessions, ...first }, boardAt: Date.now() }
+      : { gateway: page.gateway, sessions: first, nextCursor: page.nextCursor ?? null, boardAt: Date.now() })
+    persistBoard()
+    pickColumn(page.sessions)
     return true
   } catch (err) {
     if (throwing) throw err
     handle(err, true)
     return false
   }
+}
+
+/** Next older page (infinite scroll at the end of a column). */
+export async function loadMore() {
+  const cursor = state.nextCursor
+  if (!cursor || state.loadingMore || state.demo) return
+  const gen = generation
+  set({ loadingMore: true })
+  try {
+    const page = await track(api<Page>(sessionsUrl(cursor)))
+    if (gen !== generation) return
+    paged = true
+    set((st) => ({ sessions: { ...Object.fromEntries(page.sessions.map((s) => [s.id, s])), ...st.sessions }, nextCursor: page.nextCursor ?? null }))
+    persistBoard()
+  } catch (err) { handle(err, true) } finally { if (gen === generation) set({ loadingMore: false }) }
 }
 
 // Until the user picked a column: Waiting when something there needs an answer (like the web UI),
@@ -250,8 +288,8 @@ let columnChosen = false
 export async function setPrefs(patch: Partial<Pick<State, 'days' | 'system' | 'column'>>) {
   if (patch.column) columnChosen = true
   set(patch)
-  await AsyncStorage.setItem('hk_prefs', JSON.stringify({ days: state.days, system: state.system, column: state.column }))
-  if ('days' in patch || 'system' in patch) loadSessions()
+  await AsyncStorage.setItem('hk_prefs', JSON.stringify({ window: state.days, system: state.system, column: state.column }))
+  if ('days' in patch || 'system' in patch) { set({ sessions: {}, nextCursor: null, loadingMore: false }); loadSessions(false, true) }
 }
 export const setTab = (tab: Tab) => { set({ tab }); if (tab === 'inbox') loadInbox() }
 

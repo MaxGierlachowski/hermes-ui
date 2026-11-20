@@ -54,6 +54,25 @@ mode. A poll every 1.5 s uses a watermark (highest message id, last activity, ru
 turn leases) to find changed sessions. Sessions from every source appear this way: desktop app, chat
 platforms, CLI, cron, webhooks. Search uses Hermes' own FTS5 index (`messages_fts`), also read-only.
 
+**Board pages.** `GET /api/sessions` (`server/src/session-page.mjs`) returns one page of cards, newest
+activity first. Every filter runs in SQL before the `LIMIT`, so a busy cron schedule cannot push real
+chats off the page: without `system=1`, sessions from system sources (cron, tool, subagent, oneshot,
+webhook, kanban, api_server) and cron deliveries mirrored into a chat are left out; with it, empty cron
+shells are. Pages are keyset-paginated on `(COALESCE(last_activity_at, started_at), id)`:
+
+| Parameter | Meaning |
+|---|---|
+| `limit` | Page size, 1–200 (default 50; without the parameter 200, for clients from before pagination) |
+| `before` | Cursor `<timestamp>:<session id>` from the previous answer's `nextCursor` |
+| `system=1` | Include cron and other system sessions |
+| `days` | Optional time window in days (0 or missing = none) |
+
+The answer is `{ sessions, nextCursor, gateway }`; `nextCursor` is `null` on the last page. Drafts and
+pinned cards (created on the board, or moved by hand) come with the first page only and are never part
+of the paged stream, so later pages cannot repeat them. The clients load the next page when a column is
+scrolled to its end ("Load older chats" when it is too short to scroll) and, on a live reload, merge the
+first page by id into what is loaded instead of dropping older pages.
+
 **Write path.** `server/src/hermes-ws.mjs` speaks the same protocol as the Hermes desktop app:
 
 1. It sends `identify` and then `session-ticket` as JSON lines on `$HERMES_HOME/gateway.sock`. The

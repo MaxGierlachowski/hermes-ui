@@ -6,6 +6,7 @@ import { FlatList, ScrollView, View, useWindowDimensions } from 'react-native'
 import { COLUMNS, type Column, type Session } from '@shared/types'
 import { Text } from '@/components/ui/text'
 import { SessionCard } from '@/components/SessionCard'
+import { LoadMoreFooter, onColumnScroll } from '@/components/LoadMore'
 import { COLUMN_COLOR } from '@/components/status'
 import { setColumn, prefetchThread } from '@/lib/store'
 import { useCardDrag, useColumnDrop } from '@/lib/web-input'
@@ -65,6 +66,9 @@ const BoardColumn = memo(function BoardColumn({ col, list, width, selected, open
         contentContainerClassName="gap-2 px-2 pb-2"
         renderItem={({ item, index }) => <Card s={item} selected={index === selected} open={item.id === openId} />}
         ListEmptyComponent={<View className="rounded-lg border border-dashed border-border px-3 py-6"><Text className="text-center text-xs text-muted-foreground/70">{t('Keine Karten')}</Text></View>}
+        ListFooterComponent={LoadMoreFooter}
+        onScroll={onColumnScroll}
+        scrollEventThrottle={100}
         removeClippedSubviews={false}
       />
     </View>

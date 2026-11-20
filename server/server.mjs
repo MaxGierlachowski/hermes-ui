@@ -13,6 +13,7 @@ import { loadConfig } from './src/config.mjs';
 import { IrohGateway } from './src/iroh.mjs';
 import { t, setLang } from './src/i18n.mjs';
 import { Store } from './src/store.mjs';
+import { sessionPage } from './src/session-page.mjs';
 import { Board } from './src/board.mjs';
 import { HermesGateway } from './src/hermes-ws.mjs';
 import { Remote } from './src/remote.mjs';
@@ -1095,14 +1096,12 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { q, title: byTitle, content: byContent });
     }
     if (p === '/api/sessions' && req.method === 'GET') {
-      const days = Math.min(Number(url.searchParams.get('days') || 3), 90);
-      const system = url.searchParams.get('system') === '1';
-      const since = Date.now() / 1000 - days * 86400;
-      const pinned = [...Object.keys(board.data.created), ...Object.keys(board.data.overrides)];
-      const rows = store.listSessions({ sinceTs: since, ids: pinned });
-      const cards = rows.filter((r) => !isEmptyShell(r)).map(toCard).filter((c) => system || !c.system);
+      const pinnedIds = [...new Set([...Object.keys(board.data.created), ...Object.keys(board.data.overrides)])];
       const drafts = Object.values(board.data.drafts).map(draftCard);
-      return send(res, 200, { sessions: [...drafts, ...cards], gateway: gateway.connected });
+      let page;
+      try { page = sessionPage(url.searchParams, { store, systemSources: SYSTEM_SOURCES, pinnedIds, drafts, toCard, isEmptyShell }); }
+      catch (err) { if (err.status === 400) return send(res, 400, { error: err.message }); throw err; }
+      return send(res, 200, { ...page, gateway: gateway.connected });
     }
 
     if (p === '/api/sessions' && req.method === 'POST') {

@@ -9,6 +9,7 @@ What the board, the thread panel and the inbox do, in detail. The mobile app: [a
   - Waiting: the turn has finished and nothing of the session runs any more, or there is an open approval or clarify prompt.
   - Done: **only you** set it, and it sticks until you write in that session again.
   - Finished cron, webhook and one-shot runs go to Done; they are visible behind the "Cron/system" filter.
+  - The board shows the newest chats first (50 per page plus pinned cards); scrolling to the end of a column loads older ones. Cron and system runs are filtered out before the page is cut, so they never crowd out real chats. An optional time window (1/3/7/30 days) narrows it further.
 - **Thread panel:**
   - Full transcript with tool calls (collapsible) and images, live streaming, stop button.
   - Composer with text, images (paste or drag & drop) and voice messages. Voice is recorded with MediaRecorder and transcribed by Hermes' own STT.
