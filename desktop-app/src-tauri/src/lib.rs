@@ -11,6 +11,7 @@
 //! - **Native chrome**: menu bar (with the shortcuts), tray icon, closing hides to the tray, a global
 //!   shortcut to show / hide the window, launch at login, window size and position remembered,
 //!   system notifications, a single instance.
+//! - **Links**: external links open in the default browser, never inside the window (external.rs).
 //!
 //! Configuration: `desktop.json` in the app's config dir; for development the same keys as env vars
 //! (HERMES_UI_DESKTOP_MODE / _PORT / _URL / _TOKEN / _DATA_DIR / _SIDECAR_ARGS / _SHORTCUT).
@@ -36,6 +37,7 @@ use tauri_plugin_shell::{process::CommandChild, process::CommandEvent, ShellExt}
 
 #[cfg(target_os = "macos")]
 mod macos_notify;
+mod external;
 
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -418,6 +420,8 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        // Links never navigate the app's webview away: external ones open in the default browser.
+        .plugin(external::navigation_guard())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| { if event.state() == ShortcutState::Pressed { toggle_window(app) } })
@@ -430,9 +434,16 @@ pub fn run() {
             tauri::webview::PermissionKind::Microphone | tauri::webview::PermissionKind::Camera => tauri::webview::PermissionResponse::Allow,
             _ => tauri::webview::PermissionResponse::Default,
         })
-        .invoke_handler(tauri::generate_handler![local_backend, set_backend_mode, secret_get, secret_set, secret_delete, notification_permission, notify, open_privacy_settings])
+        .invoke_handler(tauri::generate_handler![local_backend, set_backend_mode, secret_get, secret_set, secret_delete, notification_permission, notify, open_privacy_settings, external::open_external])
         .setup(|app| {
             let handle = app.handle().clone();
+            // The main window is built here (not from tauri.conf.json) for its new-window handler:
+            // target=_blank and window.open go to the default browser instead of being dropped.
+            let main = app.config().app.windows.iter().find(|w| w.label == "main").cloned().ok_or("no main window config")?;
+            let opener = handle.clone();
+            tauri::WebviewWindowBuilder::from_config(&handle, &main)?
+                .on_new_window(move |url, _features| { external::new_window(&opener, &url); tauri::webview::NewWindowResponse::Deny })
+                .build()?;
             let config = load_config(&handle);
             let shortcut = config.global_shortcut.clone();
             app.manage(Backend { config: Mutex::new(config), status: Mutex::new(Status::Off), child: Mutex::new(None) });

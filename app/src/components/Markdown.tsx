@@ -1,8 +1,9 @@
 import { memo, type ReactNode } from 'react'
-import { Linking, Platform, ScrollView, Text, View, type TextStyle } from 'react-native'
+import { Platform, ScrollView, Text, View, type TextStyle } from 'react-native'
 import { useColorScheme } from 'nativewind'
 import { Renderer, useMarkdown, type useMarkdownHookOptions } from 'react-native-marked'
 import { THEME } from '@/lib/theme'
+import { openExternal } from '@/lib/desktop'
 import { isWebDesktop } from '@/lib/web-input'
 import { CodeBlock } from './CodeBlock'
 
@@ -33,8 +34,10 @@ class HermesRenderer extends Renderer {
   }
   link(children: string | ReactNode[], href: string, styles?: TextStyle): ReactNode {
     return (
-      <Text key={this.key()} accessibilityRole="link" style={styles} onPress={() => { Linking.openURL(href).catch(() => {}) }}
-        {...(Platform.OS === 'web' ? ({ href, hrefAttrs: { target: '_blank', rel: 'noreferrer noopener' } } as object) : {})}>
+      // Web: a real <a> (right click → copy link works); the desktop shell routes its clicks to the
+      // default browser (desktop.web.ts interceptExternalLinks). Native: the system opens it.
+      <Text key={this.key()} accessibilityRole="link" style={styles}
+        {...(Platform.OS === 'web' ? ({ href, hrefAttrs: { target: '_blank', rel: 'noreferrer noopener' } } as object) : { onPress: () => { openExternal(href) } })}>
         {children}
       </Text>
     )

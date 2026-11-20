@@ -98,6 +98,23 @@ The token and the pairing are kept in the macOS Keychain (service = the bundle i
 
 Closing the window keeps the app in the tray (notifications keep coming); quit with ⌘Q or the tray menu.
 
+## Links
+
+Links in chats (Markdown, tool and Paseo output) and "Open image" open in the **default browser** (or
+mail app for `mailto:`); right click → copy link keeps working. Three layers make sure nothing is
+dropped and nothing replaces the app in its own window:
+
+1. The page: `openExternal(url)` (`app/src/lib/desktop.web.ts`) and a click interceptor for `<a>`
+   elements (plain, ⌘/Ctrl and middle click; also `window.open`) installed by `PlatformShell.web.tsx`.
+2. The Rust command `open_external` (`src-tauri/src/external.rs`) opens only `http(s):` and `mailto:`
+   through tauri-plugin-opener's Rust API; the page has no opener permission of its own.
+3. A navigation guard (plugin `external-links`) and the main window's new-window handler send any other
+   navigation or `target=_blank` / `window.open` to the browser as well. `javascript:`, `file:`, `data:`
+   and custom schemes are dropped everywhere. The rules live twice, in `app/src/lib/links.ts` and
+   `external.rs`, each with tests.
+
+The main window is therefore built in `setup()` from its `tauri.conf.json` entry (`"create": false`).
+
 ## Configuration
 
 `desktop.json` in `~/Library/Application Support/io.github.hermes-ui.desktop/` (written by the app; every

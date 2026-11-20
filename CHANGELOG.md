@@ -5,6 +5,16 @@ All notable changes. The backend + web UI and the app share one repository; app 
 
 ## Unreleased – universal spike
 
+### Desktop app: external links open in the default browser (app 0.5.2)
+- Fixed: in the desktop app a click on a link did nothing (copy via the context menu worked). WKWebView
+  drops `target=_blank` and `window.open`, and the opener permission had no URL scope. Links now go to
+  the default browser (`mailto:` to the mail app), through a Rust command limited to `http(s)` and
+  `mailto:`; a navigation guard and a new-window handler catch anything else, so no link can replace
+  the app in its window. `javascript:`, `file:`, `data:` and custom schemes are dropped. Details in
+  [desktop-app.md](docs/desktop-app.md#links).
+- Same entry point (`openExternal`) for the app on phones and the web build; tests for the URL rules in
+  `server/test/links.test.mjs` and `cargo test` (`src-tauri/src/external.rs`).
+
 ### Board: newest chats first, older ones page in while scrolling (app 0.5.1)
 - Fixed: with Cron/System hidden the board could miss chats from yesterday. The backend loaded the 400
   newest sessions of the last days and only then dropped cron runs in JavaScript; with ~85 cron runs an

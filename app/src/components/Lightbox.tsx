@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Linking, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Image } from 'expo-image'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
@@ -10,6 +10,7 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { useLayer } from '@/lib/nav'
 import { fitImage, imageLabel } from '@/lib/lightbox'
+import { openExternal } from '@/lib/desktop'
 
 const MARGIN = 24
 
@@ -93,7 +94,7 @@ export function Lightbox({ uri: openUri, source, onClose }: { uri: string | null
                 <Text selectable numberOfLines={3} className="text-center font-mono text-xs" style={styles.dim}>{imageLabel(source || uri)}</Text>
                 {/* Only plain web URLs: a backend URL carries the access token, which does not belong in a browser's history. */}
                 {/^https?:/.test(uri) && !/[?&]token=/.test(uri) && (
-                  <Pressable onPress={() => { Linking.openURL(uri).catch(() => {}) }} accessibilityRole="link" style={styles.link}>
+                  <Pressable onPress={() => { openExternal(uri) }} accessibilityRole="link" style={styles.link}>
                     <Icon as={ExternalLink} size={14} color="#fff" />
                     <Text className="text-sm" style={styles.white}>{t('Bild öffnen')}</Text>
                   </Pressable>

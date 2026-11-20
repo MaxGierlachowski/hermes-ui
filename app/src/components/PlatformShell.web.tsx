@@ -1,10 +1,11 @@
 // Web / desktop wrapper: desktop-grade defaults the RN-web reset does not give (focus rings for the
 // keyboard only, selectable message text, thin overlay scrollbars, no rubber-banding of the whole
-// window), the dock badge and the window title with the inbox count. Keyboard shortcuts and native
-// menu actions are handled by DesktopHome, where the state they act on lives.
+// window), the dock badge, the window title with the inbox count, and links to other origins opening
+// in the default browser (desktop shell). Keyboard shortcuts and native menu actions are handled by
+// DesktopHome, where the state they act on lives.
 import { useEffect, type ReactNode } from 'react'
 import { badgeCount, useStore } from '@/lib/store'
-import { isDesktop, onShellEvent, setBadge } from '@/lib/desktop'
+import { interceptExternalLinks, isDesktop, onShellEvent, setBadge } from '@/lib/desktop'
 import { setupNotifications } from '@/lib/notify'
 import { setTab } from '@/lib/store'
 import { showThread } from '@/lib/nav'
@@ -78,7 +79,8 @@ export function PlatformShell({ children }: { children: ReactNode }) {
     el.textContent = CSS
     document.head.appendChild(el)
     const stopTips = setupTooltips()
-    return () => { el.remove(); stopTips() }
+    const stopLinks = interceptExternalLinks()
+    return () => { el.remove(); stopTips(); stopLinks() }
   }, [])
   useEffect(() => { setBadge(badge) }, [badge])
   useEffect(() => { document.title = badge ? `(${badge}) Hermes UI` : 'Hermes UI' }, [badge])
