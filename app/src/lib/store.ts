@@ -193,7 +193,7 @@ export async function connectLocal(baseUrl: string, token: string) {
 }
 
 /** Demo mode: the app with sample data and no backend, e.g. for a first look or an app review. */
-export async function startDemo(opts: { longThread?: number } = {}) {
+export async function startDemo(opts: { longThread?: number; board?: number } = {}) {
   clearTimeout(retryTimer)
   stopEvents()
   clearCache()

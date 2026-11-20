@@ -156,6 +156,19 @@ function addLongThread(d: Data, n: number) {
   })
 }
 
+/** A big board: n finished chats in Done (performance measurements, /demo?board=250). */
+function addBoard(d: Data, n: number) {
+  const T = now()
+  const topics = [L('Update the dependencies', 'Abhängigkeiten aktualisieren'), L('Answer the support ticket', 'Support-Ticket beantworten'), L('Write the release notes', 'Release Notes schreiben'), L('Check the nightly backup', 'Nächtliches Backup prüfen'), L('Tidy up the issue tracker', 'Issue-Tracker aufräumen')]
+  for (let i = 0; i < n; i++) {
+    const id = `demo-board-${i + 1}`
+    d.sessions.set(id, {
+      id, title: `${topics[i % topics.length]} #${i + 1}`, source: i % 3 ? 'kanban' : 'cli', system: false, column: 'done', autoColumn: 'done', override: false, running: false,
+      activity: L('💬 Done', '💬 Fertig'), initialPrompt: topics[i % topics.length], createdAt: T - 90000 - i * 600, updatedAt: T - 86400 - i * 600, messageCount: 2 + (i % 9), test: false, pending: [], paseo: [], paseoNote: '',
+    })
+  }
+}
+
 export class DemoBackend implements Backend {
   readonly gateway = { endpointId: 'demo' }
   readonly endpointId = 'demo'
@@ -164,10 +177,11 @@ export class DemoBackend implements Backend {
   private timers = new Set<ReturnType<typeof setTimeout>>()
   private nextId = 1000
 
-  /** `longThread`: adds a chat with that many messages (performance measurements, /demo?long=450). */
-  constructor(opts: { longThread?: number } = {}) {
+  /** `longThread`: adds a chat with that many messages (/demo?long=450); `board`: that many chats in Done (/demo?board=250). */
+  constructor(opts: { longThread?: number; board?: number } = {}) {
     this.data = build()
     if (opts.longThread) addLongThread(this.data, opts.longThread)
+    if (opts.board) addBoard(this.data, opts.board)
   }
 
   connectionInfo() { return { kind: 'direct' as const, paths: [{ kind: 'demo', addr: 'demo', selected: true, rttMs: 0 }] } }

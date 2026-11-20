@@ -7,7 +7,7 @@ import { showThread } from '@/lib/nav'
 
 /**
  * <scheme>://demo starts the demo mode without the pairing screen (for reviewers and screenshots).
- * Optional: ?tab=inbox, ?thread=<demo chat id>, ?long=<n> (adds a chat with n messages, id demo-long),
+ * Optional: ?tab=inbox, ?thread=<demo chat id>, ?long=<n> (adds a chat with n messages, id demo-long), ?board=<n> (n chats in Done),
  * ?selftest=microphone|camera (asks for the device at once; checks a build's permission setup). Ignored while the app is paired with a backend.
  */
 async function selfTest(kind: 'microphone' | 'camera') {
@@ -18,13 +18,13 @@ async function selfTest(kind: 'microphone' | 'camera') {
 }
 
 export default function DemoRoute() {
-  const { tab, thread, long, selftest } = useLocalSearchParams<{ tab?: string; thread?: string; long?: string; selftest?: string }>()
+  const { tab, thread, long, board, selftest } = useLocalSearchParams<{ tab?: string; thread?: string; long?: string; board?: string; selftest?: string }>()
   const auth = useStore((s) => s.auth)
   const demo = useStore((s) => s.demo)
   useEffect(() => {
     if (auth === 'unknown') return
     ;(async () => {
-      if (!demo && auth !== 'ok') await startDemo({ longThread: Number(long) || undefined })
+      if (!demo && auth !== 'ok') await startDemo({ longThread: Number(long) || undefined, board: Number(board) || undefined })
       setTab(tab === 'inbox' ? 'inbox' : 'board')
       router.replace('/')
       if (thread) showThread(thread)
