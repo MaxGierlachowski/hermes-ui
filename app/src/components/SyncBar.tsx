@@ -30,9 +30,13 @@ export function SyncBar() {
   // A segment of 35 % of the width sweeps from just off the left edge to just off the right one.
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: (-0.35 + x.value * 1.35) * width }] }))
   return (
-    <View className="h-0.5 overflow-hidden" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} accessibilityLabel={shown ? t('Aktualisiere …') : undefined}>
-      {/* The Animated.View only moves; the bar's looks sit on a plain View (NativeWind does not style reanimated's views on the web). */}
-      {shown && width > 0 && <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: width * 0.35 }, style]}><View className="h-0.5 w-full rounded-full bg-primary" /></Animated.View>}
+    // No height of its own: the line lies over the top edge of what follows, so it adds no gap between a
+    // header and the content below it (the board's column tabs sat 1.75 dp lower than their padding).
+    <View className="z-10 h-0" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} accessibilityLabel={shown ? t('Aktualisiere …') : undefined}>
+      <View pointerEvents="none" className="absolute inset-x-0 top-0 h-0.5 overflow-hidden">
+        {/* The Animated.View only moves; the bar's looks sit on a plain View (NativeWind does not style reanimated's views on the web). */}
+        {shown && width > 0 && <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: width * 0.35 }, style]}><View className="h-0.5 w-full rounded-full bg-primary" /></Animated.View>}
+      </View>
     </View>
   )
 }

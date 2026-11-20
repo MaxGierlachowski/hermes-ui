@@ -5,6 +5,19 @@ All notable changes. The backend + web UI and the app share one repository; app 
 
 ## Unreleased – universal spike
 
+### App: Summary pill visible on phones, even tab padding (app 0.5.3)
+- Fixed: on Android (and iOS with a home indicator) the Summary pill was hidden behind the composer;
+  only its top edge showed. It hung out of the composer box with `bottom: '100%'`, and on native a
+  percentage inset ignores the box's safe-area padding, so the pill sank by that inset and the
+  composer drawn after it covered it. The pill now floats at the bottom of the message list, inside
+  its box (`ThreadPane.tsx`, `SummaryPill.tsx`); visible and tappable with and without the keyboard.
+- Fixed: on the phone board the active column tab's pill touched the line below the tabs. It had a
+  fixed 48 dp height and 6 dp offset while the tabs, styled with NativeWind (rem = 14 on native), are
+  42 dp high with 5.25 dp padding. The pill now fills the tab row, so the gap is the same above and
+  below. The sync progress line (`SyncBar`) no longer takes height of its own; it lies over the edge
+  below the header instead of pushing the tabs down by 1.75 dp.
+- Demo mode: `/demo?board=<n>` adds n finished chats in Done (performance measurements, like `?long=`).
+
 ### Desktop app: external links open in the default browser (app 0.5.2)
 - Fixed: in the desktop app a click on a link did nothing (copy via the context menu worked). WKWebView
   drops `target=_blank` and `window.open`, and the opener permission had no URL scope. Links now go to

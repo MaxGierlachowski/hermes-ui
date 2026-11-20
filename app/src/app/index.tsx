@@ -67,12 +67,14 @@ function ColumnTabs({ counts, pending, page, progress, onPick }: { counts: Recor
   const { colorScheme } = useColorScheme()
   return (
     // The web UI's segment: a muted pill behind the current column, here following the finger while swiping.
-    <View className="border-b border-border py-1.5" onLayout={(e) => setWidth(e.nativeEvent.layout.width - 16)}>
-      {seg > 0 && (
-        // Plain styles: NativeWind classes do not reach an Animated.View on the web.
-        <Animated.View style={{ position: 'absolute', left: 8, top: 6, height: 48, borderRadius: 8, backgroundColor: THEME[colorScheme === 'dark' ? 'dark' : 'light'].muted, width: seg, transform: [{ translateX: Animated.multiply(progress, seg) }] }} />
-      )}
-      <View className="flex-row px-2">
+    <View className="border-b border-border px-2 py-1.5">
+      {/* The pill fills the row of tabs (top 0 to bottom 0), so the bar's padding is the same above and
+          below it. Fixed dp did not match on native, where NativeWind's rem is 14 (h-12 = 42 dp). */}
+      <View className="flex-row" onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        {seg > 0 && (
+          // Plain styles: NativeWind classes do not reach an Animated.View on the web.
+          <Animated.View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 8, backgroundColor: THEME[colorScheme === 'dark' ? 'dark' : 'light'].muted, width: seg, transform: [{ translateX: Animated.multiply(progress, seg) }] }} />
+        )}
         {COLUMNS.map((c, i) => {
           const on = i === page
           return (

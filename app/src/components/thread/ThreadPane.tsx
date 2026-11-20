@@ -152,24 +152,29 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
       </View>
       <SyncBar />
       <KeyboardAvoidingView behavior="padding" className="flex-1" keyboardVerticalOffset={0} enabled={!embedded}>
-        {loading && !messages.length ? (
-          <View className="flex-1 items-center justify-center"><ActivityIndicator /></View>
-        ) : (
-          <TransitionReady.Provider value={ready}>
-            <ThreadList
-              rows={rows}
-              renderRow={(item) => item.kind === 'msg'
-                ? <MessageView m={item.m} sessionId={sessionId} chips={chips} onImage={openImage} />
-                : item.kind === 'stream'
-                  ? <View className="opacity-90"><Markdown text={stripMediaTags(item.text)} /></View>
-                  : <View className="gap-3">{session?.pending.map((p) => <PendingPrompt key={p.promptId} sessionId={sessionId} prompt={p} />)}</View>}
-              footer={session?.initialPrompt && !messages.length ? <Text className="text-center text-sm text-muted-foreground">„{session.initialPrompt}“</Text> : undefined}
-              bottomInset={summary.state === 'hidden' ? 0 : SUMMARY_PILL_SPACE}
-            />
-          </TransitionReady.Provider>
-        )}
-        <View style={{ paddingBottom: embedded ? 0 : insets.bottom }} className="relative bg-background">
+        {/* The Summary pill floats over the bottom of the list (inside its box), not out of the composer:
+            Android only draws and hit-tests children inside their parent, and a percentage offset there
+            ignores the parent's safe-area padding (the pill sank behind the composer). */}
+        <View className="min-h-0 flex-1">
+          {loading && !messages.length ? (
+            <View className="flex-1 items-center justify-center"><ActivityIndicator /></View>
+          ) : (
+            <TransitionReady.Provider value={ready}>
+              <ThreadList
+                rows={rows}
+                renderRow={(item) => item.kind === 'msg'
+                  ? <MessageView m={item.m} sessionId={sessionId} chips={chips} onImage={openImage} />
+                  : item.kind === 'stream'
+                    ? <View className="opacity-90"><Markdown text={stripMediaTags(item.text)} /></View>
+                    : <View className="gap-3">{session?.pending.map((p) => <PendingPrompt key={p.promptId} sessionId={sessionId} prompt={p} />)}</View>}
+                footer={session?.initialPrompt && !messages.length ? <Text className="text-center text-sm text-muted-foreground">„{session.initialPrompt}“</Text> : undefined}
+                bottomInset={summary.state === 'hidden' ? 0 : SUMMARY_PILL_SPACE}
+              />
+            </TransitionReady.Provider>
+          )}
           <SummaryPill state={summary.state} onPress={() => summary.run((text) => submit({ text, images: [], audio: null }))} />
+        </View>
+        <View style={{ paddingBottom: embedded ? 0 : insets.bottom }} className="bg-background">
           <Composer
             key={sessionId}
             draftKey={sessionId}

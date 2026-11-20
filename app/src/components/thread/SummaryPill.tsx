@@ -1,5 +1,6 @@
-// "Summary": a floating pill right above the composer. A click sends SUMMARY_PROMPT (shared/summary.ts)
-// into this chat through the composer's send path; hidden while the chat is empty or a turn runs.
+// "Summary": a floating pill at the bottom of the message list, right above the composer. A click sends
+// SUMMARY_PROMPT (shared/summary.ts) into this chat through the composer's send path; hidden while the
+// chat is empty or a turn runs.
 import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, View } from 'react-native'
 import { useColorScheme } from 'nativewind'
@@ -12,6 +13,8 @@ import { shadow } from '@/lib/shadow'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 
+/** Gap between the pill and the composer below it. */
+const SUMMARY_PILL_GAP = 6
 /** Height the pill takes above the composer: the thread list keeps this much room below its newest row. */
 export const SUMMARY_PILL_SPACE = 44
 
@@ -37,7 +40,7 @@ export function SummaryPill({ state, onPress }: { state: ReturnType<typeof summa
   const busy = state !== 'ready'
   return (
     // box-none: only the pill takes clicks, the row around it lets them through to the messages.
-    <View pointerEvents="box-none" className="absolute inset-x-0 items-center" style={{ bottom: '100%', marginBottom: 6 }}>
+    <View pointerEvents="box-none" className="absolute inset-x-0 bottom-0 items-center" style={{ paddingBottom: SUMMARY_PILL_GAP }}>
       <Pressable
         onPress={onPress}
         disabled={busy}
