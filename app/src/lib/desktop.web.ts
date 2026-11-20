@@ -7,6 +7,7 @@
 // and sends the events "menu" (native menu / tray item ids) and "deep-link".
 import { invoke as tauriInvoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { classifyLink } from './links'
 
 export const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 export const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent)
@@ -14,6 +15,47 @@ export const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.pl
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   if (!isDesktop) return null
   try { return await tauriInvoke<T>(cmd, args) } catch (e) { console.warn(`[hermes-ui] ${cmd}:`, e); return null }
+}
+
+/**
+ * Open a link outside the app: the default browser / mail app. In the desktop shell through the Rust
+ * command `open_external` (only http(s) and mailto:; the WKWebView drops window.open and _blank),
+ * in a browser as a new tab. Internal and blocked links (javascript:, file:, …) do nothing.
+ */
+export async function openExternal(url: string): Promise<boolean> {
+  if (classifyLink(url, location.origin) !== 'external') return false
+  if (isDesktop) return (await invoke<boolean>('open_external', { url })) === true
+  window.open(url, '_blank', 'noopener,noreferrer')
+  return true
+}
+
+/**
+ * Desktop shell: a click on a link (plain, ⌘ / Ctrl or middle click) to another origin or with
+ * target=_blank opens it in the default browser instead of being dropped by the webview. Links of
+ * the app itself keep working; the context menu (copy link) is untouched.
+ */
+export function interceptExternalLinks(): () => void {
+  if (!isDesktop) return () => {}
+  const onClick = (e: MouseEvent) => {
+    if (e.defaultPrevented || (e.button !== 0 && e.button !== 1)) return
+    const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+    if (!a) return
+    const href = a.getAttribute('href') || ''
+    const kind = classifyLink(href, location.origin)
+    if (kind === 'internal' && a.target !== '_blank' && !e.metaKey && !e.ctrlKey && e.button === 0) return
+    e.preventDefault()
+    if (kind !== 'internal') openExternal(a.href)
+  }
+  document.addEventListener('click', onClick, true)
+  document.addEventListener('auxclick', onClick, true)
+  // window.open from anywhere (libraries, older code): to the system browser as well.
+  const open = window.open
+  window.open = ((url?: string | URL) => { if (url) openExternal(String(url)); return null }) as typeof window.open
+  return () => {
+    document.removeEventListener('click', onClick, true)
+    document.removeEventListener('auxclick', onClick, true)
+    window.open = open
+  }
 }
 
 export type LocalBackend = { baseUrl: string; token: string; managed: boolean }
