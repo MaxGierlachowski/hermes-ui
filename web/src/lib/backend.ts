@@ -5,6 +5,8 @@
 // A pairing link looks like  <ui-url>/#iroh=<gateway endpoint id>&relay=<relay url>&pair=<one-time code>
 // The fragment never reaches any web server; the endpoint is remembered in localStorage.
 
+import { swUrl } from './sw-url'
+
 export type RemoteConfig = { endpointId: string; relayUrl?: string; name?: string }
 export type Connection =
   | { mode: 'local'; base: ''; status: 'ready' }
@@ -67,7 +69,7 @@ export async function connectIroh(cfg: RemoteConfig) {
     let sw = false
     try {
       // sw.js imports iroh-fetch's worker (iroh-sw.js) and adds push notifications: one worker per scope.
-      const r = await iroh.serviceWorker({ url: new URL('sw.js', location.href.replace(/[^/]*$/, '')).pathname, hosts: [new URL(IROH_ORIGIN).host] })
+      const r = await iroh.serviceWorker({ url: swUrl(), hosts: [new URL(IROH_ORIGIN).host] })
       sw = r.controlled
     } catch { /* no service worker (private mode, in-app browsers): images fall back to blob URLs */ }
     objectUrl = (u: string) => iroh.objectUrl(u)

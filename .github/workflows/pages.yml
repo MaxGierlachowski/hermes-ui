@@ -1,11 +1,15 @@
-# Builds the static UI (web/) and publishes it to GitHub Pages. The UI holds no data or secrets;
-# it connects to a hermes-ui backend over iroh after pairing (see README).
+# Publishes the landing page (landing/) at the root of GitHub Pages and the static UI (web/) under /app/.
+# The UI holds no data or secrets; it connects to a hermes-ui backend over iroh after pairing (see README).
+# scripts/build-pages.mjs assembles the site; it keeps the UI's service worker at the root (see there).
 name: Pages
 
 on:
   push:
     branches: [main]
-    paths: ['web/**', '.github/workflows/pages.yml']
+    paths: ['web/**', 'landing/**', 'site/**', 'scripts/build-pages.mjs', '.github/workflows/pages.yml']
+  # Pull requests build the site (the check), only pushes to main deploy it.
+  pull_request:
+    paths: ['web/**', 'landing/**', 'site/**', 'scripts/build-pages.mjs', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -14,7 +18,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
   cancel-in-progress: true
 
 jobs:
@@ -29,14 +33,20 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
         working-directory: web
-      - run: npm run build
-        working-directory: web
+      - run: node scripts/build-pages.mjs
+      - name: Check the site layout
+        run: |
+          test -f _site/index.html && test -f _site/app/index.html && test -f _site/app/manifest.webmanifest
+          test -f _site/iroh-sw.js && grep -q "HERMES_UI_APP_PATH = 'app/'" _site/sw.js
+          test ! -e _site/app/sw.js
       - uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web/dist
+          path: _site
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:
