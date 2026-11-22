@@ -7,7 +7,7 @@ import { createChat } from '@/lib/store'
 import { Composer } from '@/components/thread/Composer'
 import { t } from '@/lib/i18n'
 
-export function NewChatDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+export function NewChatDialog({ open, onOpenChange, initialText }: { open: boolean; onOpenChange: (o: boolean) => void; initialText?: string }) {
   const [title, setTitle] = useState('')
   const [draft, setDraft] = useState(false)
   return (
@@ -20,6 +20,7 @@ export function NewChatDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('Titel (optional)')} className="h-9" />
         <Composer
           autoFocus
+          initialText={initialText}
           placeholder={t('Was soll Hermes tun?')}
           onSubmit={async (m) => {
             await createChat({ ...m, title: title.trim() || undefined, draft })

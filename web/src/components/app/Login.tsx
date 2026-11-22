@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Loader } from '@/components/ui/loader'
-import { login, redeemPairing, useBoard } from '@/lib/store'
-import { forgetRemote } from '@/lib/backend'
+import { login, useBoard } from '@/lib/store'
+import { forgetRemote, pageConfig } from '@/lib/backend'
 import { useConnection } from '@/lib/useConnection'
 import { t } from '@/lib/i18n'
 
@@ -38,7 +38,7 @@ function PairingLinkForm() {
           if (!new URLSearchParams(u.hash.slice(1)).get('iroh')) throw new Error()
           location.hash = u.hash
           location.reload()
-        } catch { setError('Das ist kein Kopplungslink (#iroh=…).') }
+        } catch { setError(t('Das ist kein Kopplungslink (#iroh=…).')) }
       }}
     >
       <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder={t('Kopplungslink einfügen')} />
@@ -53,21 +53,11 @@ export function Login() {
   const conn = useConnection()
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
-  const [pairing, setPairing] = useState(false)
-
-  // Tunnel modes (Tailscale/Cloudflare): /pair#<code> from the QR code on the host.
-  useEffect(() => {
-    if (!location.pathname.endsWith('/pair') || !location.hash) return
-    const code = decodeURIComponent(location.hash.slice(1))
-    history.replaceState(null, '', location.pathname.replace(/pair$/, ''))
-    setPairing(true)
-    redeemPairing(code).catch((e) => { setError(e.message); setPairing(false) })
-  }, [])
 
   if (conn.mode === 'iroh') {
     if (conn.status === 'connecting') return <Frame subtitle={t('Verbinde über iroh …')}><div className="flex justify-center py-6"><Loader variant="dots" /></div></Frame>
     return (
-      <Frame subtitle={conn.status === 'error' ? 'iroh-Verbindung fehlgeschlagen' : t('Gerät nicht gekoppelt')}>
+      <Frame subtitle={conn.status === 'error' ? t('iroh-Verbindung fehlgeschlagen') : t('Gerät nicht gekoppelt')}>
         <p className="text-sm text-muted-foreground">
           {conn.status === 'error'
             ? t('Das Backend ist über iroh nicht erreichbar ({err}). Läuft es mit --remote iroh?', { err: conn.error || '' })
@@ -91,22 +81,30 @@ export function Login() {
     )
   }
 
+  // Behind a reverse proxy (agentbox): the proxy signs users in; there is no token here.
+  if (pageConfig.auth === 'proxy') {
+    return (
+      <Frame subtitle={t('Nicht angemeldet')}>
+        <p className="text-sm text-muted-foreground">{t('Diese Hermes UI läuft hinter einem Proxy, der die Anmeldung übernimmt. Melde dich dort an und öffne sie erneut.')}</p>
+        <Button className="w-full" onClick={() => location.reload()}>{t('Erneut versuchen')}</Button>
+      </Frame>
+    )
+  }
+
   return (
-    <Frame subtitle={pairing ? t('Gerät wird gekoppelt …') : t('Anmelden')}>
-      {!pairing && (
-        <form
-          className="space-y-3"
-          onSubmit={async (e) => {
-            e.preventDefault()
-            setError('')
-            try { await login(token.trim()) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
-          }}
-        >
-          <Input type="password" autoComplete="current-password" placeholder={t('Token (HERMES_UI_TOKEN aus .env)')} value={token} onChange={(e) => setToken(e.target.value)} autoFocus />
-          <Button className="w-full" disabled={!token.trim()}>{t('Anmelden')}</Button>
-          <p className="text-xs text-muted-foreground">{t('Am Handy einfacher: am Rechner unter Fernzugriff „Gerät koppeln“ und den QR-Code scannen.')}</p>
-        </form>
-      )}
+    <Frame subtitle={t('Anmelden')}>
+      <form
+        className="space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          setError('')
+          try { await login(token.trim()) } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+        }}
+      >
+        <Input type="password" autoComplete="current-password" placeholder={t('Token (HERMES_UI_TOKEN aus .env)')} value={token} onChange={(e) => setToken(e.target.value)} autoFocus />
+        <Button className="w-full" disabled={!token.trim()}>{t('Anmelden')}</Button>
+        <p className="text-xs text-muted-foreground">{t('Am Handy einfacher: am Rechner unter Fernzugriff „Gerät koppeln“ und den QR-Code scannen.')}</p>
+      </form>
       {error && <p className="text-sm text-destructive">{error}</p>}
     </Frame>
   )
