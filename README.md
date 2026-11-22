@@ -169,6 +169,7 @@ launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
 - **Thread panel:**
   - Full transcript with tool calls (collapsible) and images, live streaming, stop button.
   - Composer with text, images (paste or drag & drop) and voice messages. Voice is recorded with MediaRecorder and transcribed by Hermes' own STT.
+- **New chat:** title, text, images or voice, "only create" (lands in New Task without starting), and a **model picker** that pins the model for that one chat. It lists the providers and models Hermes itself offers (`model.options`, providers you are signed in to only) and is hidden when the gateway cannot list them. Leave it on "Default" and the chat uses the gateway's configured model, as before.
 - **Approvals and questions:** shown on the card and inline in the thread.
   - Approval: approve with the options Hermes offers (once / session / always) or deny.
   - Clarify: answer with buttons, multi-select or free text, or skip. A countdown shows when Hermes gives a time limit.
@@ -207,7 +208,7 @@ Standard Web Push with VAPID. The backend generates its key pair on first start 
 ## How it talks to Hermes
 
 - **Read:** `$HERMES_HOME/state.db`, opened read-only (`node:sqlite`) and polled every 1.5 s, plus the Hermes gateway's event stream.
-- **Write:** like the Hermes desktop app does it. The backend gets a single-use ticket from `gateway.sock`, then uses the gateway WebSocket with JSON-RPC `session.create`, `prompt.submit`, `session.resume`, `session.interrupt`, `approval.respond` and `clarify.respond`. Images go through `/api/chat/image-upload`, voice through `/api/audio/transcribe`.
+- **Write:** like the Hermes desktop app does it. The backend gets a single-use ticket from `gateway.sock`, then uses the gateway WebSocket with JSON-RPC `session.create` (with `model` + `provider` when a new chat pins a model), `model.options` (the new-chat model list), `prompt.submit`, `session.resume`, `session.interrupt`, `approval.respond` and `clarify.respond`. Images go through `/api/chat/image-upload`, voice through `/api/audio/transcribe`.
 - **Never:** it writes nothing under `$HERMES_HOME`, never restarts the Hermes gateway, and sends no commands to the Paseo daemon. The one write to Paseo is your own answer to a permission request from the inbox, through paseo-mcp.
 
 ## Development
