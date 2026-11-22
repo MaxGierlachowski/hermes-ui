@@ -25,6 +25,7 @@ import { Push } from './src/push.mjs';
 import { parseUserMessage, previewOf } from './src/user-markers.mjs';
 import { Outbox, queuedRow } from './src/outbox.mjs';
 import { callsOf, paseoItem, paseoTool } from './src/paseo-calls.mjs';
+import { LiveStream, buildReader } from './src/live.mjs';
 import QRCode from 'qrcode';
 
 const cfg = loadConfig(process.argv.slice(2));
@@ -305,11 +306,9 @@ function cardById(id) {
 }
 
 // ---------- SSE ----------
-const clients = new Set();
-function broadcast(event, data) {
-  const frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const res of clients) res.write(frame);
-}
+// hello (bootId, build) on connect and a ping every 15 s: clients detect dead streams and resync.
+const sse = new LiveStream({ build: cfg.ui ? buildReader(WEB_DIST) : () => null });
+function broadcast(event, data) { sse.broadcast(event, data); }
 const pushTimers = new Map();
 // Cards whose column only changes with time (cron shells that never ran, idle -> done) get re-checked.
 const timeWatch = new Map(); // id -> last pushed column
@@ -329,7 +328,6 @@ function pushCard(id, now = false) {
   if (now) { clearTimeout(pushTimers.get(id)); send(); return; }
   if (!pushTimers.has(id)) pushTimers.set(id, setTimeout(send, 350));
 }
-setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 20000);
 
 gateway.on('status', (ok) => { console.log(`gateway ${ok ? 'connected' : 'disconnected'}`); broadcast('gateway', { connected: ok }); });
 gateway.on('log', (m) => console.log(m));
@@ -1006,16 +1004,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/api/events') {
-      // X-Accel-Buffering: tunnels must not buffer the stream.
-      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-      res.write(`event: gateway\ndata: ${JSON.stringify({ connected: gateway.connected })}\n\n`);
-      res.write(`event: remote\ndata: ${JSON.stringify(remoteView())}\n\n`);
-      res.write(`event: inbox\ndata: ${JSON.stringify({ open: openItems(), unread: inbox.unread() })}\n\n`);
-      clients.add(res);
-      req.on('close', () => clients.delete(res));
+      sse.attach(req, res, [
+        ['gateway', { connected: gateway.connected }],
+        ['remote', remoteView()],
+        ['inbox', { open: openItems(), unread: inbox.unread() }],
+      ]);
       return;
     }
-    if (p === '/api/health') return send(res, 200, { ok: true, gateway: gateway.connected, origin: gateway.origin });
+    if (p === '/api/health') return send(res, 200, { ok: true, gateway: gateway.connected, origin: gateway.origin, bootId: sse.bootId, build: sse.build() });
 
     let m;
     if ((m = p.match(/^\/api\/media\/([^/]+)\/([^/]+)$/))) {

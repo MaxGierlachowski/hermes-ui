@@ -104,6 +104,8 @@ export const EN: Record<string, string> = {
   'Laufenden Turn stoppen': 'Stop the running turn',
   'Live mit dem Hermes-Gateway verbunden': 'Live, connected to the Hermes gateway',
   'Live-Stream unterbrochen': 'Live stream interrupted',
+  'Neue Version verfügbar': 'New version available',
+  'Neu laden': 'Reload',
   'Gateway nicht verbunden (nur Lesen)': 'Gateway not connected (read-only)',
   'Manuell verschoben': 'Moved by hand',
   'Mikrofon nicht verfügbar: {err}': 'Microphone not available: {err}',
