@@ -30,7 +30,7 @@ Options (each also as env var, see README):
   --paseo-url <ws-url>  PASEO_DAEMON_URL       Paseo daemon (default from paseo-mcp config or ws://127.0.0.1:6767/ws)
   --iroh-relay <url>    IROH_RELAY_URL         own iroh relay instead of the public n0 relays
   --data-dir <dir>      HERMES_UI_DATA_DIR     board state, devices, push keys
-  --env-file <file>     HERMES_UI_ENV_FILE     .env file to read (default ./.env)
+  (env only)            HERMES_UI_ENV_FILE     .env file to read (default ./.env; node itself claims --env-file)
 `;
 
 async function api(path, init = {}) {
