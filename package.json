@@ -19,7 +19,7 @@
     "test:ui": "npm run build && npm --prefix web run test:ui"
   },
   "dependencies": {
-    "@getpaseo/client": "0.15.0",
+    "@getpaseo/client": "0.17.3",
     "@modelcontextprotocol/sdk": "1.32.2",
     "qrcode": "^1.5.4",
     "web-push": "4.0.0"
