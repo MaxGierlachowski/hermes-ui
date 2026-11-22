@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { api, Unauthorized } from './api'
 import { apiUrl, getConnection, connectIroh, consumePairCode, sameOriginBackend, savedRemote, takePairingFragment } from './backend'
+import { LiveEvents, type ResyncReason } from './live'
 import type { Column, Device, InboxItem, OpenItem, OutgoingMessage, RemoteState, Session, Tab, ThreadMessage } from './types'
 
 type State = {
@@ -96,19 +97,23 @@ const handle = (err: unknown) => {
 }
 
 // ---------- loading ----------
-export async function loadSessions() {
+type Quiet = { quiet?: boolean }
+// quiet: background refresh; only a lost login is reported (as the login screen), no error toasts.
+const fail = (err: unknown, quiet?: boolean) => { if (!quiet || err instanceof Unauthorized) handle(err) }
+
+export async function loadSessions({ quiet }: Quiet = {}) {
   try {
     const { sessions, gateway } = await api<{ sessions: Session[]; gateway: boolean }>(`/api/sessions?days=${state.days}&system=${state.system ? 1 : 0}`)
     set({ auth: 'ok', gateway, sessions: Object.fromEntries(sessions.map((s) => [s.id, withMove(s)])) })
     return true
-  } catch (err) { handle(err); return false }
+  } catch (err) { fail(err, quiet); return false }
 }
 
-export async function loadRemote() {
+export async function loadRemote({ quiet }: Quiet = {}) {
   try {
     const r = await api<{ remote: RemoteState; devices: Device[]; local: boolean }>('/api/remote')
     set({ remote: r.remote, devices: r.devices, isLocal: r.local })
-  } catch (err) { handle(err) }
+  } catch (err) { fail(err, quiet) }
 }
 
 export function setFilter(patch: Partial<Pick<State, 'days' | 'system' | 'search' | 'source'>>) {
@@ -141,13 +146,13 @@ export async function searchChats(q: string, archived: boolean, signal?: AbortSi
   return api<{ q: string; title: SearchHit[]; content: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}${archived ? '&archived=1' : ''}`, { signal })
 }
 
-export async function refreshThread(id: string) {
+export async function refreshThread(id: string, { quiet }: Quiet = {}) {
   try {
     const { session, messages } = await api<{ session: Session; messages: ThreadMessage[] }>(`/api/sessions/${encodeURIComponent(id)}`)
     if (state.openId !== id) return
     upsert(session)
     set({ messages: withPending(id, messages), loadingThread: false })
-  } catch (err) { set({ loadingThread: false }); handle(err) }
+  } catch (err) { set({ loadingThread: false }); fail(err, quiet) }
 }
 
 // ---------- routing: #/board, #/board/<session>, #/inbox, #/inbox/<session>[?confirm=<prompt>&choice=<c>] ----------
@@ -179,11 +184,11 @@ export function applyHash(hash = location.hash) {
 export const clearConfirm = () => set({ confirm: null })
 
 // ---------- inbox ----------
-export async function loadInbox() {
+export async function loadInbox({ quiet }: Quiet = {}) {
   try {
     const r = await api<{ open: OpenItem[]; items: InboxItem[]; unread: number; paseo: { connected: boolean; canRespond: boolean } }>('/api/inbox')
     set({ inbox: { ...r, loaded: true } })
-  } catch (err) { handle(err) }
+  } catch (err) { fail(err, quiet) }
 }
 export async function markRead(ids: string[] | 'all') {
   if (ids !== 'all' && !ids.length) return
@@ -343,43 +348,87 @@ function deviceName() {
 }
 
 // ---------- live events ----------
-let es: EventSource | null = null
+// The stream itself (heartbeat, reconnects, wake-ups) lives in live.ts; here: what each event changes,
+// and a full resync whenever events may have been missed.
 let reloadTimer: ReturnType<typeof setTimeout> | undefined
-export function connectEvents() {
-  es?.close()
-  es = new EventSource(apiUrl('/api/events'), { withCredentials: true })
-  es.onopen = () => set({ live: true })
-  es.onerror = () => set({ live: false })
-  const on = <T,>(name: string, fn: (d: T) => void) => es!.addEventListener(name, (e) => fn(JSON.parse((e as MessageEvent).data)))
-  on<Session>('session', (s) => {
-    if (s.system && !state.system && !state.sessions[s.id]) return
-    upsert(s)
-  })
-  on<{ id: string }>('removed', ({ id }) => remove(id))
-  on<{ connected: boolean }>('gateway', ({ connected }) => set({ gateway: connected }))
-  on<RemoteState>('remote', (remote) => set({ remote }))
-  on<Device[]>('devices', (devices) => set({ devices }))
-  on<{ open: OpenItem[]; unread: number }>('inbox', ({ open, unread }) => set((st) => ({ inbox: { ...st.inbox, open, unread } })))
-  on<InboxItem>('inbox-item', (item) => {
-    const known = state.inbox.items.some((x) => x.id === item.id)
-    set((st) => ({ inbox: { ...st.inbox, items: known ? st.inbox.items.map((x) => (x.id === item.id ? item : x)) : [item, ...st.inbox.items] } }))
-    if (!known) toastFor(item)
-  })
-  on<{ ids: string[] | 'all' }>('inbox-read', ({ ids }) => set((st) => ({ inbox: { ...st.inbox, items: st.inbox.items.map((x) => (ids === 'all' || ids.includes(x.id) ? { ...x, read: true } : x)) } })))
-  on<{ id: string; text: string }>('delta', ({ id, text }) => {
-    set((st) => ({ streaming: { id, text: (st.streaming?.id === id ? st.streaming.text : '') + text } }))
-  })
-  on<{ id: string; message: ThreadMessage }>('message', ({ id, message }) => {
-    if (id !== state.openId) return
-    set((st) => ({ messages: [...st.messages, message] }))
-  })
-  on<{ id: string; final: boolean }>('reload', ({ id, final }) => {
-    if (final && state.streaming?.id === id) set({ streaming: null })
-    if (id !== state.openId) return
-    clearTimeout(reloadTimer)
-    reloadTimer = setTimeout(() => refreshThread(id), 250)
-  })
+const live = new LiveEvents({
+  url: () => apiUrl('/api/events'),
+  enabled: () => state.auth === 'ok',
+  onLive: (l) => { if (state.live !== l) set({ live: l }) },
+  onHello: (h) => checkBuild(h.build),
+  onResync: (why) => resync(why),
+  on: {
+    session: (s: Session) => {
+      if (s.system && !state.system && !state.sessions[s.id]) return
+      upsert(s)
+    },
+    removed: ({ id }: { id: string }) => remove(id),
+    gateway: ({ connected }: { connected: boolean }) => set({ gateway: connected }),
+    remote: (remote: RemoteState) => set({ remote }),
+    devices: (devices: Device[]) => set({ devices }),
+    inbox: ({ open, unread }: { open: OpenItem[]; unread: number }) => set((st) => ({ inbox: { ...st.inbox, open, unread } })),
+    'inbox-item': (item: InboxItem) => {
+      const known = state.inbox.items.some((x) => x.id === item.id)
+      set((st) => ({ inbox: { ...st.inbox, items: known ? st.inbox.items.map((x) => (x.id === item.id ? item : x)) : [item, ...st.inbox.items] } }))
+      if (!known) toastFor(item)
+    },
+    'inbox-read': ({ ids }: { ids: string[] | 'all' }) => set((st) => ({ inbox: { ...st.inbox, items: st.inbox.items.map((x) => (ids === 'all' || ids.includes(x.id) ? { ...x, read: true } : x)) } })),
+    delta: ({ id, text }: { id: string; text: string }) => {
+      set((st) => ({ streaming: { id, text: (st.streaming?.id === id ? st.streaming.text : '') + text } }))
+    },
+    message: ({ id, message }: { id: string; message: ThreadMessage }) => {
+      if (id !== state.openId) return
+      set((st) => ({ messages: [...st.messages, message] }))
+    },
+    reload: ({ id, final }: { id: string; final: boolean }) => {
+      if (final && state.streaming?.id === id) set({ streaming: null })
+      if (id !== state.openId) return
+      clearTimeout(reloadTimer)
+      reloadTimer = setTimeout(() => refreshThread(id), 250)
+    },
+  },
+})
+export const connectEvents = () => live.start()
+
+// Board, inbox, open thread and remote state from scratch, without error toasts (the header shows the
+// connection state). Runs coalesced: a trigger during a run queues exactly one more run.
+let resyncing: Promise<void> | null = null
+let resyncAgain = false
+let lastResync = 0
+export function resync(why: ResyncReason = 'reconnect'): Promise<void> {
+  // Focus fires on every window switch: skip it right after a resync.
+  if (why === 'focus' && Date.now() - lastResync < 5000) return resyncing || Promise.resolve()
+  // A missed `reload final` would leave a finished reply "streaming"; the thread refetch has the full text.
+  if (why === 'reconnect' || why === 'restart') set({ streaming: null })
+  if (resyncing) { resyncAgain = true; return resyncing }
+  resyncing = (async () => {
+    do {
+      resyncAgain = false
+      lastResync = Date.now()
+      const id = state.openId
+      await Promise.all([loadSessions({ quiet: true }), loadInbox({ quiet: true }), loadRemote({ quiet: true }), id ? refreshThread(id, { quiet: true }) : null])
+    } while (resyncAgain && state.auth === 'ok')
+  })().finally(() => { resyncing = null })
+  return resyncing
 }
+
+// A backend that serves a newer UI build than the one running here: reload, but never mid-typing and
+// at most once per build. Only when the backend serves this UI (a static host has its own builds).
+declare const __HERMES_UI_BUILD__: string
+let newBuild: string | null = null
+function checkBuild(build: string | null) {
+  if (!import.meta.env.PROD || !build || build === __HERMES_UI_BUILD__ || getConnection().mode !== 'local') return
+  if (sessionStorage.getItem('hk_reload_build') === build) return
+  newBuild = build
+  if (document.visibilityState === 'hidden' && !typing()) { reloadForBuild(); return }
+  toast(t('Neue Version verfügbar'), { id: 'new-build', duration: Infinity, action: { label: t('Neu laden'), onClick: reloadForBuild } })
+}
+function reloadForBuild() {
+  if (newBuild) sessionStorage.setItem('hk_reload_build', newBuild)
+  location.reload()
+}
+const typing = () => Array.from(document.querySelectorAll<HTMLTextAreaElement | HTMLInputElement>('textarea, input[type=text], input:not([type])')).some((el) => el.value.trim())
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (newBuild && document.visibilityState === 'hidden' && !typing()) reloadForBuild() })
 
 // ---------- startup ----------
 // 1. a pairing link (#iroh=…&pair=…) → connect over iroh and redeem the code

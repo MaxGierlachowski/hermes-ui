@@ -184,6 +184,7 @@ launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
   - *Needs you:* every open Hermes approval and clarify question of every followed session, answerable in place with the same controls and countdown as in the thread, and every Paseo agent with a pending permission (agent, tool, command or description), answerable with Allow / Deny via paseo-mcp's `paseo_respond_permission`. Each entry names its chat and links to the thread.
   - *History:* requests and how they were answered (here, elsewhere, expired), finished chats, errors, Paseo agents that finished, failed or hit a usage limit. Read/unread, "mark all read", filters by kind and source, grouped by day. Stored in `<data-dir>/inbox.json` (30 days / 1000 entries by default).
   - A Hermes chat counts as *done* only when Hermes' turn is over **and** none of the Paseo agents it started or steers is still running or waiting for a permission (the same rule as the columns). A Paseo agent finishing is its own entry.
+- **Live updates that cannot go stale:** one Server-Sent Events stream (`/api/events`, locally and over iroh). It starts with a `hello` (the backend's boot id and the UI build it serves) and carries a `ping` every 15 s. The UI replaces a stream that stays silent for three heartbeats, reopens one the browser gave up on (with backoff), and refetches the board, inbox and open thread after every reconnect, after a backend restart, and whenever the app comes back (visible, restored from the back-forward cache, focused, online). When the backend serves a newer UI build, the UI offers a reload and reloads by itself while hidden, unless something is typed.
 - **In-app notifications:** toasts for new requests and finished chats while the app is visible (a click opens the thread or the inbox), a badge on the Inbox tab and on the app icon (Badging API where available).
 - **Push notifications (Web Push, see below).**
 - **Search (⌘K, `/` or the search field):** full text over the titles and content of all chats, using Hermes' own FTS5 index (`messages_fts`, read-only; user and Hermes messages, no tool output). Results show title, source, column, last activity, message and Paseo-agent counts and a snippet with the hit marked; Enter opens the thread at the matching message. Archived chats on request. Also: new chat (N), theme, language, cron/system filter, remote access.
@@ -232,7 +233,7 @@ Once per machine: `npx playwright install chromium` in `web/`.
 Layout:
 
 - `server.mjs`: HTTP API and SSE.
-- `src/`: Hermes gateway client, state.db reader, Paseo adapter (`paseo.mjs`, `paseo-mcp-source.mjs`), inbox history (`inbox.mjs`), Web Push (`push.mjs`), iroh, tunnels, devices, config.
+- `src/`: Hermes gateway client, state.db reader, live event stream (`live.mjs`), Paseo adapter (`paseo.mjs`, `paseo-mcp-source.mjs`), inbox history (`inbox.mjs`), Web Push (`push.mjs`), iroh, tunnels, devices, config.
 - `bin/`: CLI.
 - `web/`: React + Vite + Tailwind + shadcn/ui.
 
