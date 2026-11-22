@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { api, Unauthorized } from './api'
 import { apiUrl, getConnection, connectIroh, consumePairCode, sameOriginBackend, savedRemote, takePairingFragment } from './backend'
-import type { Column, Device, InboxItem, OpenItem, OutgoingMessage, RemoteState, Session, Tab, ThreadMessage } from './types'
+import type { Column, Device, InboxItem, ModelOptions, OpenItem, OutgoingMessage, RemoteState, Session, Tab, ThreadMessage } from './types'
 
 type State = {
   auth: 'unknown' | 'ok' | 'required' | 'no-backend'
@@ -137,6 +137,10 @@ export async function openThread(id: string | null, opts: { highlight?: number; 
 export const clearHighlight = () => set({ highlight: null })
 
 export type SearchHit = { session: Session & { archived?: boolean }; hit?: { msgId: number; role: string; ts: number; snippet: string; hits: number }; alsoTitle?: boolean }
+export async function modelOptions() {
+  return api<ModelOptions>('/api/models')
+}
+
 export async function searchChats(q: string, archived: boolean, signal?: AbortSignal) {
   return api<{ q: string; title: SearchHit[]; content: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}${archived ? '&archived=1' : ''}`, { signal })
 }

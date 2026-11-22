@@ -108,7 +108,12 @@ export type RemoteState = {
 export type Device = { id: string; name: string; via: string; remote: boolean; irohId?: string | null; createdAt: number; lastSeen: number; expiresAt: number }
 
 export type Upload = { name?: string; type: string; data: string }
-export type OutgoingMessage = { text: string; title?: string; test?: boolean; draft?: boolean; images: Upload[]; audio: Upload | null }
+/** `model` + `provider` (both or neither) pin a NEW chat's model; omitted, the gateway's default applies. */
+export type OutgoingMessage = { text: string; title?: string; test?: boolean; draft?: boolean; model?: string; provider?: string; images: Upload[]; audio: Upload | null }
+
+/** GET /api/models: what the "new chat" picker offers (Hermes' `model.options`, usable providers only). */
+export type ModelChoice = { model: string; provider: string }
+export type ModelOptions = { current: { model: string; provider: string | null } | null; providers: { slug: string; name: string; models: string[] }[] }
 
 export type Tab = 'board' | 'inbox'
 
