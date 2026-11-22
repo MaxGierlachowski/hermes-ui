@@ -25,7 +25,7 @@ test('background process notices use display_text from display_metadata', () => 
 });
 
 test('delegation notice behind a Slack sender prefix is still an event', () => {
-  const p = parseUserMessage('[Maximilian | Slack user <@U0CGGFQMWJ0>] [ASYNC DELEGATION BATCH COMPLETE — deleg_1]\nA background fan-out unit …');
+  const p = parseUserMessage('[Alex | Slack user <@U0000000001>] [ASYNC DELEGATION BATCH COMPLETE — deleg_1]\nA background fan-out unit …');
   assert.equal(p.type, 'event');
   assert.equal(p.event.source, 'delegation');
   assert.equal(p.event.title, 'ASYNC DELEGATION BATCH COMPLETE — deleg_1');
@@ -46,7 +46,7 @@ test('steer envelope and gateway origin JSON are unwrapped to the typed text', (
 
 test('reply quote, thread context and sender become meta, not text', () => {
   const raw = '[Thread context — prior messages in this thread (not yet in conversation history):]\n[thread parent] Hermes: hi\n[End of thread context]\n\n\n\n'
-    + '[New message]\n[Maximilian | Slack user <@U0CG>] [Replying to: "Ja bitte so abschließen"]\n\nDokumentiere das';
+    + '[New message]\n[Alex | Slack user <@U0000>] [Replying to: "Ja bitte so abschließen"]\n\nDokumentiere das';
   const p = parseUserMessage(raw);
   assert.equal(p.text, 'Dokumentiere das');
   assert.equal(p.threadContext, '[thread parent] Hermes: hi');

@@ -1,4 +1,4 @@
-// Read-only access to local image files that transcripts reference by path (file:///…, /Users/…).
+// Read-only access to local image files that transcripts reference by path (file:///…, /home/…).
 // Only image types, only below allowed roots, checked on the real path (symlinks and ".." resolved).
 // Plus exactly the files assistant replies attached with MEDIA:<path> (images and audio, any directory).
 

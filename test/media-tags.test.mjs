@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractMediaTags, mediaKind } from '../src/media-tags.mjs';
 
-const home = '/Users/max';
+const home = '/home/user';
 const x = (text) => extractMediaTags(text, { home });
 
 test('path with spaces', () => {
-  const r = x('Hier der Screenshot:\nMEDIA:/Users/max/Claude outputs/report/screenshots/00 first step.png\nFertig.');
-  assert.deepEqual(r.paths, ['/Users/max/Claude outputs/report/screenshots/00 first step.png']);
+  const r = x('Hier der Screenshot:\nMEDIA:/home/user/Claude outputs/report/screenshots/00 first step.png\nFertig.');
+  assert.deepEqual(r.paths, ['/home/user/Claude outputs/report/screenshots/00 first step.png']);
   assert.equal(r.text, 'Hier der Screenshot:\n\nFertig.');
 });
 
@@ -25,7 +25,7 @@ test('tags in fenced code, inline code and quotes are ignored', () => {
 });
 
 test('~/ expands to home', () => {
-  assert.deepEqual(x('MEDIA:~/Pictures/shot.png').paths, ['/Users/max/Pictures/shot.png']);
+  assert.deepEqual(x('MEDIA:~/Pictures/shot.png').paths, ['/home/user/Pictures/shot.png']);
 });
 
 test('punctuation, quotes and emphasis around the tag', () => {
@@ -39,8 +39,8 @@ test('punctuation, quotes and emphasis around the tag', () => {
 });
 
 test('duplicates are listed once', () => {
-  const r = x('MEDIA:/tmp/a.png\nNochmal: MEDIA:/tmp/a.png\nMEDIA:~/a.png\nMEDIA:/Users/max/a.png');
-  assert.deepEqual(r.paths, ['/tmp/a.png', '/Users/max/a.png']);
+  const r = x('MEDIA:/tmp/a.png\nNochmal: MEDIA:/tmp/a.png\nMEDIA:~/a.png\nMEDIA:/home/user/a.png');
+  assert.deepEqual(r.paths, ['/tmp/a.png', '/home/user/a.png']);
 });
 
 test('no tag, relative path or unknown extension leaves the text alone', () => {

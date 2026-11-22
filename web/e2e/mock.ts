@@ -21,7 +21,7 @@ export async function mockApi(page: Page, opts: { auth?: boolean; freezeClock?: 
     if (p === '/api/remote') {
       return route.fulfill(json({
         local: true,
-        remote: { mode: 'iroh', status: 'online', url: null, loginUrl: null, error: null, endpointId: 'f0a288fe0000000000000000000000000000', relayUrl: 'https://euw1-1.relay.n0.iroh.link', uiUrl: 'https://example.github.io/hermes-ui/' },
+        remote: { mode: 'iroh', status: 'online', url: null, error: null, endpointId: 'f0a288fe0000000000000000000000000000', relayUrl: 'https://euw1-1.relay.n0.iroh.link', uiUrl: 'https://example.github.io/hermes-ui/' },
         devices: [
           { id: 'd1', name: 'iPhone · Safari', via: 'iroh', remote: true, irohId: 'ab12cd34ef', createdAt: (NOW - 86400) * 1000, lastSeen: (NOW - 120) * 1000, expiresAt: (NOW + 86400 * 80) * 1000 },
           { id: 'd2', name: 'Mac · Chrome', via: 'local', remote: false, createdAt: (NOW - 86400 * 3) * 1000, lastSeen: (NOW - 10) * 1000, expiresAt: (NOW + 86400 * 80) * 1000 },
