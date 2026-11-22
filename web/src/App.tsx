@@ -45,6 +45,21 @@ function ThemeColorSync() {
   return null
 }
 
+/**
+ * `?compose=<text>` on the app URL (e.g. a "Ask Hermes" link from another tool) opens a new chat with
+ * the composer prefilled. Nothing is sent until the user does. The parameter is removed from the URL
+ * at once, so a reload does not open it again.
+ */
+function takeComposeParam(): string {
+  const params = new URLSearchParams(location.search)
+  const text = params.get('compose')
+  if (text === null) return ''
+  params.delete('compose')
+  const rest = params.toString()
+  history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : '') + location.hash)
+  return text.slice(0, 20000)
+}
+
 function Shell() {
   const auth = useBoard((s) => s.auth)
   const openId = useBoard((s) => s.openId)
@@ -54,6 +69,7 @@ function Shell() {
   const [newOpen, setNewOpen] = useState(false)
   const [cmdOpen, setCmdOpen] = useState(false)
   const [remoteOpen, setRemoteOpen] = useState(false)
+  const [compose, setCompose] = useState(takeComposeParam)
   useKeyboardInset()
 
   useEffect(() => {
@@ -68,7 +84,6 @@ function Shell() {
   }, [])
   useEffect(() => {
     if (auth !== 'ok') return
-    if (location.pathname === '/pair') history.replaceState(null, '', '/')
     loadSessions().then((ok) => {
       if (!ok) return
       connectEvents()
@@ -98,7 +113,7 @@ function Shell() {
     return () => window.removeEventListener('keydown', onKey)
   }, [openId])
 
-  if (auth === 'required' || auth === 'no-backend' || location.pathname.endsWith('/pair')) return <Login />
+  if (auth === 'required' || auth === 'no-backend') return <Login />
   if (auth === 'unknown') return null
 
   return (
@@ -144,7 +159,7 @@ function Shell() {
         )}
       </main>
       <BottomTabBar />
-      <NewChatDialog open={newOpen} onOpenChange={setNewOpen} />
+      <NewChatDialog open={newOpen || (auth === 'ok' && !!compose)} onOpenChange={(o) => { setNewOpen(o); if (!o) setCompose('') }} initialText={compose} />
       <CommandMenu open={cmdOpen} onOpenChange={setCmdOpen} onNew={() => setNewOpen(true)} onRemote={() => setRemoteOpen(true)} onNotifications={() => setNotifyOpen(true)} />
       <RemoteDialog open={remoteOpen} onOpenChange={setRemoteOpen} />
       <NotificationSettings open={notifyOpen} onOpenChange={setNotifyOpen} />

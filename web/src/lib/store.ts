@@ -314,15 +314,11 @@ export async function respond(id: string, body: { promptId: string; choice?: str
 }
 
 export async function interrupt(id: string) {
-  try { await api(`/api/sessions/${encodeURIComponent(id)}/interrupt`, { method: 'POST' }); toast('Stopp gesendet') } catch (err) { handle(err) }
+  try { await api(`/api/sessions/${encodeURIComponent(id)}/interrupt`, { method: 'POST' }); toast(t('Stopp gesendet')) } catch (err) { handle(err) }
 }
 
 export async function login(token: string) {
   await api('/api/login', { method: 'POST', json: { token, name: deviceName() } })
-  set({ auth: 'ok' })
-}
-export async function redeemPairing(code: string) {
-  await api('/api/pair/redeem', { method: 'POST', json: { code, name: deviceName() } })
   set({ auth: 'ok' })
 }
 export async function logout() {
@@ -382,15 +378,14 @@ export function connectEvents() {
 }
 
 // ---------- startup ----------
-// 1. a pairing link (#iroh=…&pair=…) → connect over iroh and redeem the code
-// 2. a backend on our own origin → local mode (token / device cookie)
+// 1. a pairing link (#iroh=…&pair=…[&base=…]) → connect over iroh and redeem the code at {base}/api/pair/redeem
+// 2. a backend on our own origin → local mode (token / device cookie, or a proxy that signed us in)
 // 3. a remembered iroh endpoint → connect over iroh
 // 4. nothing → ask for a pairing link
 export async function bootstrap() {
   const fromLink = takePairingFragment()
   const remote = fromLink || ((await sameOriginBackend()) ? null : savedRemote())
   if (!remote) {
-    if (location.pathname.endsWith('/pair')) return // legacy tunnel pairing, handled by <Login>
     if (await sameOriginBackend()) { await loadSessions(); return }
     set({ auth: 'no-backend' })
     return

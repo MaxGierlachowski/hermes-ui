@@ -95,10 +95,13 @@ export type ThreadMessage = {
 
 export type RemoteState = {
   mode: string
-  status: 'off' | 'starting' | 'online' | 'reconnecting' | 'needs-login' | 'needs-approval' | 'error'
+  status: 'off' | 'starting' | 'online' | 'reconnecting' | 'error'
   url: string | null
-  loginUrl: string | null
   error: string | null
+  /** token = standalone (board token, device cookies); proxy = signed in by a reverse proxy (HERMES_UI_AUTH). */
+  auth?: 'token' | 'proxy'
+  /** Proxy mode: the proxy's device pairing page (HERMES_UI_PAIRING_URL). */
+  pairingUrl?: string | null
   endpointId?: string | null
   relayUrl?: string | null
   uiUrl?: string | null

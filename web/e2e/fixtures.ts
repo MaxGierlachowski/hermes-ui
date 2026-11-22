@@ -44,10 +44,10 @@ const IMG = '/tmp/hermes-ui-e2e/screenshot.png'
 
 export const MESSAGES: ThreadMessage[] = [
   { id: 1, role: 'user', text: 'Der Build der Landingpage schlägt fehl, bitte reparieren. Screenshot vom Fehler anbei.', ts: NOW - 3600, attachments: [{ kind: 'image', url: IMG }] },
-  { id: 2, role: 'tool', text: '$ npm run build\nerror: Cannot find module "@astrojs/cloudflare"', ts: NOW - 3590, toolName: 'terminal', summary: 'npm run build' },
+  { id: 2, role: 'tool', text: '$ npm run build\nerror: Cannot find module "@astrojs/node"', ts: NOW - 3590, toolName: 'terminal', summary: 'npm run build' },
   { id: 3, role: 'tool', text: '', ts: NOW - 3580, toolName: 'read_file', summary: 'astro.config.mjs' },
-  { id: 4, role: 'assistant', ts: NOW - 3500, text: 'Gefunden: Das Adapter-Paket fehlt in `package.json`.\n\n1. `@astrojs/cloudflare` installieren\n2. Build neu starten\n3. Preview prüfen\n\n```bash\npnpm add -D @astrojs/cloudflare@14\n```\n\nDetails stehen in https://docs.astro.build/en/guides/integrations-guide/cloudflare/#installation-and-configuration-of-the-adapter' },
-  { id: 5, role: 'event', ts: NOW - 3000, text: '## Deploy fehlgeschlagen\n\nWorker `move2pay-landing-staging` meldet Status 500.', event: { source: 'webhook', route: 'cloudflare', title: 'Deploy fehlgeschlagen' } },
+  { id: 4, role: 'assistant', ts: NOW - 3500, text: 'Gefunden: Das Adapter-Paket fehlt in `package.json`.\n\n1. `@astrojs/node` installieren\n2. Build neu starten\n3. Preview prüfen\n\n```bash\npnpm add -D @astrojs/node@14\n```\n\nDetails stehen in https://docs.astro.build/en/guides/integrations-guide/node/#installation' },
+  { id: 5, role: 'event', ts: NOW - 3000, text: '## Deploy fehlgeschlagen\n\nWorker `landing-site-staging` meldet Status 500.', event: { source: 'webhook', route: 'deploy', title: 'Deploy fehlgeschlagen' } },
   { id: 6, role: 'paseo', ts: NOW - 2900, text: '', paseo: { action: 'create', ref: 'a-running', agentId: 'a-running', title: 'Fix Astro build', account: '02' } },
   { id: 7, role: 'assistant', ts: NOW - 2000, text: 'Ein Paseo-Agent repariert den Build. Sobald er fertig ist, deploye ich auf Staging.' },
   { id: 8, role: 'user', ts: NOW - 600, text: 'Bitte danach auch die Lighthouse-Werte posten.', outbox: { id: 'o-1', status: 'failed', error: 'Gateway nicht erreichbar' } },
@@ -55,8 +55,8 @@ export const MESSAGES: ThreadMessage[] = [
 ]
 
 export const PASEO_AGENTS: PaseoAgent[] = [
-  { ...agent('a-running', 'Fix Astro build', 'running'), known: true, goal: 'Landingpage-Build reparieren', cwd: '/Users/dev/move2pay-landing', model: 'opus', deepLink: 'paseo://agent/a-running' },
-  { ...agent('a-done', 'Lighthouse-Check', 'finished'), known: true, cwd: '/Users/dev/move2pay-landing', deepLink: 'paseo://agent/a-done' },
+  { ...agent('a-running', 'Fix Astro build', 'running'), known: true, goal: 'Landingpage-Build reparieren', cwd: '/home/dev/work/landing-site', model: 'opus', deepLink: 'paseo://agent/a-running' },
+  { ...agent('a-done', 'Lighthouse-Check', 'finished'), known: true, cwd: '/home/dev/work/landing-site', deepLink: 'paseo://agent/a-done' },
 ]
 
 export const PASEO_TIMELINE: { agent: PaseoAgent; items: PaseoItem[]; hasOlder: boolean } = {
@@ -74,7 +74,7 @@ export const OPEN: OpenItem[] = [
   { key: 'o-approval', source: 'hermes', kind: 'approval', sessionId: 's-approval', title: 'Landingpage-Build reparieren und deployen', at: NOW - 40, prompt: approval },
   {
     key: 'o-paseo', source: 'paseo', kind: 'permission', sessionId: 's-approval', title: 'Landingpage-Build reparieren und deployen', at: NOW - 200, canRespond: true,
-    agent: { id: 'a-running', title: 'Fix Astro build', account: '02', cwd: '/Users/dev/move2pay-landing', deepLink: 'paseo://agent/a-running' },
+    agent: { id: 'a-running', title: 'Fix Astro build', account: '02', cwd: '/home/dev/work/landing-site', deepLink: 'paseo://agent/a-running' },
     permission: { id: 'perm-1', kind: 'tool', name: 'Bash', title: 'Bash: git push', description: 'Pusht den Fix auf den Feature-Branch.', command: 'git push origin fix/astro-adapter', actions: null },
   },
 ]

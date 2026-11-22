@@ -105,17 +105,22 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 
 | Env var | Flag | Default | Purpose |
 |---|---|---|---|
-| `HERMES_UI_PORT` | `--port` | `8787` | Local port. The host is always `127.0.0.1`. |
-| `HERMES_UI_TOKEN` | `--token` | generated | Login token for local browsers. |
+| `HERMES_UI_PORT` | `--port` | `8787` | Local port. |
+| `HERMES_UI_HOST` | `--host` | `127.0.0.1` | Address to bind. Loopback only (`127.0.0.1`, `::1`, `localhost`); anything else is refused. |
+| `HERMES_UI_TOKEN` | `--token` | generated | Login token for local browsers (`HERMES_UI_AUTH=token`). |
+| `HERMES_UI_AUTH` | `--auth` | `token` | `token`: board token, device cookies and pairing (standalone). `proxy`: a reverse proxy signs users in (see [Behind a reverse proxy](#behind-a-reverse-proxy-agentbox)). |
+| `HERMES_UI_PROXY_SECRET` | – (env or `.env` only) | – | Proxy mode: the shared secret the proxy sends as `X-Agentbox-Proxy-Secret`. At least 16 characters; never pass it as a flag. |
+| `HERMES_UI_BASE_PATH` | `--base-path` | – | URL prefix the browser sees, e.g. `/hermes`. Requests may arrive with the prefix stripped (Caddy `handle_path`) or kept. |
+| `HERMES_UI_PAIRING_URL` | `--pairing-url` | – | Proxy mode: the page the "Pair device" button opens (e.g. `/devices?pair=1`), instead of minting codes here. |
 | `HERMES_UI_SERVE_UI` | `--ui` | `on` | `off` = headless, API only. |
 | `HERMES_UI_DIR` | `--ui-dir` | `web/dist` | Built UI to serve. |
 | `HERMES_UI_URL` | `--ui-url` | – | Public URL of the static UI, used in iroh pairing links. |
-| `HERMES_UI_REMOTE` | `--remote` | `off` | `off` \| `iroh` \| `tailscale-funnel` \| `tailscale-serve` \| `cloudflare`. |
+| `HERMES_UI_REMOTE` | `--remote` | `off` | `off` \| `iroh`. Always `off` in proxy mode. |
 | `HERMES_UI_LANG` | `--lang` | `en` | Language of server-generated texts (`en`, `de`). The UI follows the browser; change it in ⌘K. |
-| `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state, inbox history, VAPID keys and push subscriptions. |
+| `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, iroh gateway key, inbox history, VAPID keys and push subscriptions. |
 | `HERMES_UI_IMAGE_ROOTS` | `--image-roots` | – | Extra directories (separated by `:`) whose images transcripts may show. Always allowed: Hermes' image cache, `PASEO_HOME` and Paseo's `paseo-attachments-*` temp dirs. |
 | `PASEO_HOME` | `--paseo-home` | `~/.paseo` | Paseo home, allowed as an image root. |
-| `HERMES_HOME` | `--hermes-home` | `~/.hermes` | Hermes data dir: `state.db`, `gateway.sock`. |
+| `HERMES_HOME` | `--hermes-home` | `~/.hermes` | Hermes data dir: `state.db`, `gateway.sock`. The board stays empty until `state.db` exists. |
 | `HERMES_UI_PASEO` | `--paseo` | `auto` | `off` disables the Paseo integration. |
 | `HERMES_UI_PASEO_SOURCE` | `--paseo-source` | `auto` | `mcp` (paseo-mcp ≥ 0.4.0 events), `daemon` (direct connection) or `auto` (mcp when available, otherwise daemon). |
 | `PASEO_MCP_COMMAND` | `--paseo-mcp-command` | `paseo-mcp` if it is on `PATH` | stdio command for paseo-mcp. The event subscription runs with `PASEO_MCP_READONLY=1`; only an answer to a permission from the inbox starts a second, short-lived client without it. |
@@ -130,24 +135,70 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `PASEO_MCP_CONFIG` | `--paseo-mcp-config` | `~/.config/paseo-mcp/config.json` | Where the daemon URL is read from. |
 | `PASEO_OPS_FILE` | `--paseo-ops-file` | `$HERMES_HOME/ops-loop/paseo.json` | Optional agent goal / phase file. |
 | `IROH_GATEWAY_BIN` | `--iroh-gateway-bin` | auto-download | Path to an `iroh-gateway` binary. |
+| `IROH_GATEWAY_VERSION` | `--iroh-gateway-version` | `v0.6.4` | iroh-gateway release to download. |
 | `IROH_RELAY_URL` / `IROH_RELAY_TOKEN` | `--iroh-relay` | n0 public relays | Your own [iroh-relay](https://github.com/irohkit/iroh-bridge/blob/main/deploy/relay/README.md). |
-| `TS_AUTHKEY`, `TS_HOSTNAME` | `--ts-authkey` | – / `hermes-ui` | Tailscale modes. |
-| `CLOUDFLARED_BIN`, `TAILSCALE_BIN`, `TAILSCALED_BIN` | – | from `PATH` | Tunnel binaries. |
+| `HERMES_UI_ENV_FILE` | – (env only) | `./.env` | The `.env` file to read. (Node 24 itself claims an `--env-file` argument.) |
 
-### Remote modes compared
+### Remote access
 
-| Mode | Account needed | App on the phone | Stable address | Notes |
-|---|---|---|---|---|
-| **`iroh`** (recommended) | none | no; the UI runs in the browser (WASM) | yes: the endpoint id plus a static UI URL | End-to-end encrypted through a relay (n0's public relays or your own). The gateway allow-lists paired devices. The UI has to be hosted somewhere static once. |
-| `tailscale-funnel` | Tailscale (free) | no | yes: `https://<host>.<tailnet>.ts.net` | Runs its own userspace `tailscaled` (state in the data dir). Public URL, protected by device cookies. |
-| `tailscale-serve` | Tailscale | Tailscale app | yes | Reachable only inside the tailnet. |
-| `cloudflare` (fallback) | none | no | no: a new `trycloudflare.com` URL on every start | Quick tunnels have no SLA, and Cloudflare documents no SSE support for them. Kept as a fallback only. |
+`HERMES_UI_REMOTE` is `off` (local only, or behind a reverse proxy) or `iroh`, the built-in remote access described above: end-to-end encrypted through a relay (n0's public relays or your own), no account, no open port, the gateway allow-lists paired devices, and the UI is hosted somewhere static once.
 
-In every mode the backend stays on `127.0.0.1`:
+In every mode the backend stays on loopback:
 
 - New devices can only be paired from the host.
 - Failed logins are rate-limited.
 - iroh requests are authorised by the gateway-verified `X-Iroh-Remote-Id`. It is trusted only from the local gateway child, and tokens and cookies are ignored for these requests.
+
+### Behind a reverse proxy (agentbox)
+
+hermes-ui can run behind a reverse proxy that signs users in and puts the UI below a path prefix. [agentbox](https://github.com/MaxGierlachowski/agentbox) runs it this way: its Caddy serves `/hermes/*` from `127.0.0.1:8787`, and agentbox owns sign-in, device pairing and the iroh gateway.
+
+```bash
+HERMES_UI_PORT=8787 HERMES_UI_HOST=127.0.0.1 HERMES_UI_REMOTE=off \
+HERMES_UI_AUTH=proxy HERMES_UI_PROXY_SECRET=<from a root-only env file> \
+HERMES_UI_BASE_PATH=/hermes HERMES_UI_DATA_DIR=/var/lib/agentbox/hermes-ui \
+HERMES_UI_PAIRING_URL='/devices?pair=1' HERMES_HOME=/home/agentbox/.hermes \
+PASEO_MCP_URL=<paseo-mcp HTTP endpoint> PASEO_MCP_TOKEN=<read token> \
+node hermes-ui/bin/hermes-ui.mjs serve
+```
+
+- **Auth (`HERMES_UI_AUTH=proxy`).** A request is authorised if and only if `X-Agentbox-Proxy-Secret` equals `HERMES_UI_PROXY_SECRET` (compared in constant time) **and** `X-Agentbox-User` is non-empty; otherwise `401`. The proxy must remove both headers from client requests before it sets them. In proxy mode the token login, device cookies, pairing codes (`/api/pair`, `/api/pair/redeem`, `/api/devices`) and the built-in iroh gateway are off, and no token is generated or written. `GET /api/health` answers without auth only on a direct loopback request (no forwarding headers), for health checks.
+- **Base path (`HERMES_UI_BASE_PATH=/hermes`).** The build uses relative URLs only. When the backend serves `index.html` it adds `<base href="/hermes/">` and a `<meta name="hermes-ui-config">` tag with the base path, the auth mode and the pairing URL, so assets, API calls, the event stream (SSE), media, the service worker (scope `/hermes/`) and the web manifest all stay below `/hermes/`. The same `web/dist` works at `/` and below any prefix. The backend accepts requests with the prefix stripped or kept, and redirects `/hermes` to `/hermes/`.
+- **Pairing (`HERMES_UI_PAIRING_URL`).** The remote-access dialog shows a "Pair device" button that opens this URL in a new tab instead of minting codes.
+- **Caddy**, the shape agentbox uses (its `forward_auth` sets the user):
+
+  ```caddyfile
+  redir /hermes /hermes/ 308
+  handle_path /hermes/* {
+  	request_header -X-Agentbox-User
+  	request_header -X-Agentbox-Proxy-Secret
+  	# forward_auth … copy_headers X-Agentbox-User
+  	reverse_proxy 127.0.0.1:8787 {
+  		header_up X-Agentbox-Proxy-Secret {env.HERMES_UI_PROXY_SECRET}
+  	}
+  }
+  ```
+
+- **PWA over iroh with a base path.** A pairing link may carry `base`: `<ui-url>/#iroh=<endpoint id>&pair=<code>&base=/hermes[&relay=<relay url>]`. The PWA keeps a persistent iroh identity, stores the endpoint and the base, sends `POST {base}/api/pair/redeem` with `{"code": "<code>", "name": "<device name>"}` through iroh-fetch (agentbox answers that path from its own device registry), and from then on prefixes every API call, the event stream and media with `{base}`. Without `base` nothing changes.
+- **Prefilled chats.** `?compose=<url-encoded text>` on the app URL (e.g. `/hermes/?compose=Review%20PR%2042`) opens a new chat with the composer prefilled. Nothing is sent until the user sends it.
+
+### Release tarball
+
+```bash
+npm run release:tarball      # → dist/hermes-ui-<version>.tgz and dist/hermes-ui-<version>.tgz.sha256
+```
+
+The tarball holds one directory, `hermes-ui/`, with `bin/`, `src/`, `shared/`, `server.mjs`, the prebuilt `web/dist`, production `node_modules`, `README.md`, `LICENSE` and the service-file generators. It needs no network and no `npm install`: unpack it and run `node hermes-ui/bin/hermes-ui.mjs serve` (Node 24). All dependencies are plain JavaScript; the build fails if a compiled addon or an install script shows up in `node_modules`, so one tarball serves Linux x64/arm64 and macOS alike. The `.sha256` file is in `sha256sum` format (`sha256sum -c`). The build ends with a smoke test of the unpacked copy in proxy mode below `/hermes`.
+
+### Autostart (Linux, systemd)
+
+```bash
+node scripts/systemd-unit.mjs --user hermes --environment-file /etc/hermes-ui.env \
+  --working-dir /opt/hermes-ui --node /usr/bin/node | sudo tee /etc/systemd/system/hermes-ui.service
+sudo systemctl daemon-reload && sudo systemctl enable --now hermes-ui
+```
+
+Options: `--user`, `--group`, `--environment-file` (put `HERMES_UI_*` settings and secrets there, never on the command line), `--working-dir`, `--node`, `--set KEY=VALUE` (extra non-secret `Environment=` lines); arguments after `--` go to `hermes-ui serve`.
 
 ### Autostart (macOS)
 
@@ -177,7 +228,7 @@ launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
   - The live state comes from [paseo-mcp](https://github.com/MaxGierlachowski/paseo-mcp) events (≥ 0.4.0): a subscription to the `paseo://agents` resource, with no polling. A direct daemon connection is the fallback. When the daemon is reachable it also provides richer transcripts and the app deep link.
   - The "Paseo agents" tab lists them; a transcript view shows each one read-only, updating live while the agent runs.
   - A deep link (`paseo://h/<server>/agent/<id>`) opens the agent in the Paseo app.
-  - Images that agents reference by local path (`file:///…`, `/Users/…`) are served read-only by `/api/file`: image types only, only below the allowed roots (see `HERMES_UI_IMAGE_ROOTS`), checked on the real path. Missing files show a placeholder; a click opens a lightbox.
+  - Images that agents reference by local path (`file:///…`, `/home/…`) are served read-only by `/api/file`: image types only, only below the allowed roots (see `HERMES_UI_IMAGE_ROOTS`), checked on the real path. Missing files show a placeholder; a click opens a lightbox.
   - Files Hermes attaches to a reply with `MEDIA:<path>` (what Slack shows as attachments) appear under the message: images, audio players, other files by name. Only exactly those referenced files become readable, the tags never show up in the text, not even while streaming.
 - **Tabs:** Board and Inbox, in the header on a desktop and as a bottom tab bar on a phone. The tab is part of the URL (`#/board`, `#/inbox`, `#/inbox/<session>`), so a reload or a link keeps it. `g b` / `g i` switch.
 - **Inbox (across all chats):**
@@ -216,7 +267,7 @@ Standard Web Push with VAPID. The backend generates its key pair on first start 
 npm start                 # terminal 1: backend (+ built UI)
 npm run dev               # terminal 2: Vite dev server for web/ on :5173, proxies /api to :8787
 npm run check             # syntax check of the backend
-npm test                  # backend unit tests
+npm test                  # backend unit and server tests (proxy auth, base path, …)
 npm run test:ui           # build the UI, then the Playwright UI tests (web/e2e)
 ```
 
@@ -225,6 +276,7 @@ The UI tests run the built bundle with every `/api` request answered from synthe
 - `touch-targets`: every interactive element on every screen must be hittable over 44 × 44 px (measured by hit-testing, so an enlarged hit area counts and an overlapping neighbour fails), and no field may be below 16 px.
 - `mobile-behaviour`: sheet swipe-to-close, long-press, column swipe, Enter in the composer, the keyboard inset, and the image viewer (pinch, double tap, swipe down; the page scale must stay 1).
 - `desktop-regression`: pixel comparison at 1440 × 900, light and dark, against `web/e2e/__screenshots__/`. Touch styles live behind `pointer: coarse` (Tailwind variant `touch:`) or `max-md:`, so a desktop with a mouse must not change by a single pixel. After an intended desktop change, update the images with `npx playwright test desktop --update-snapshots` (in `web/`) and review them. The images are rendered on macOS; other systems render fonts differently.
+- `desktop-agentbox`: base path (everything below `/hermes/`), proxy-mode pairing button, `?compose=`, and `base=` in pairing links.
 - `SHOTS_DIR=<dir> npx playwright test screenshots` writes one screenshot per screen, phone and theme.
 
 Once per machine: `npx playwright install chromium` in `web/`.
@@ -232,7 +284,8 @@ Once per machine: `npx playwright install chromium` in `web/`.
 Layout:
 
 - `server.mjs`: HTTP API and SSE.
-- `src/`: Hermes gateway client, state.db reader, Paseo adapter (`paseo.mjs`, `paseo-mcp-source.mjs`), inbox history (`inbox.mjs`), Web Push (`push.mjs`), iroh, tunnels, devices, config.
+- `src/`: Hermes gateway client, state.db reader, Paseo adapter (`paseo.mjs`, `paseo-mcp-source.mjs`), inbox history (`inbox.mjs`), Web Push (`push.mjs`), iroh, devices, config, `index.html` rendering for the base path (`page.mjs`).
+- `scripts/`: launchd and systemd service files, the release tarball, the GitHub Pages build.
 - `bin/`: CLI.
 - `web/`: React + Vite + Tailwind + shadcn/ui.
 
@@ -257,4 +310,3 @@ Hermes UI is released under the **MIT** license (see `LICENSE`). The components 
 | class-variance-authority | Variants | Apache-2.0 |
 | Geist | Font | OFL-1.1 |
 | qrcode | Pairing QR codes | MIT |
-| cloudflared / Tailscale (external binaries, optional) | Tunnels | Apache-2.0 / BSD-3-Clause |

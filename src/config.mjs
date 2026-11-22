@@ -45,6 +45,18 @@ const ALIASES = {
   HERMES_UI_PASEO: 'KANBAN_PASEO',
 };
 
+/** '/hermes/' → '/hermes', '/' or '' → ''. Only plain path characters, no '..'. */
+export function normalizeBasePath(raw) {
+  let p = String(raw || '').trim();
+  if (!p || p === '/') return '';
+  if (!p.startsWith('/')) p = `/${p}`;
+  p = p.replace(/\/+$/, '');
+  if (!/^(\/[A-Za-z0-9._~-]+)+$/.test(p) || p.split('/').some((s) => s === '.' || s === '..')) {
+    throw new Error(`HERMES_UI_BASE_PATH must be a URL path like /hermes, not "${raw}"`);
+  }
+  return p;
+}
+
 export function loadConfig(argv = []) {
   const flags = parseFlags(argv);
   const fromEnv = (src, key) => src[key] ?? (ALIASES[key] ? src[ALIASES[key]] : undefined);
@@ -52,8 +64,28 @@ export function loadConfig(argv = []) {
   const fileEnv = readEnvFile(envFile);
   const get = (key, flag, def) => flags[flag] ?? fromEnv(process.env, key) ?? fromEnv(fileEnv, key) ?? def;
 
-  let token = get('HERMES_UI_TOKEN', 'token', '');
-  if (!token) {
+  // Auth: "token" (standalone: board token, device cookies, pairing) or "proxy" (behind a reverse proxy
+  // such as agentbox's Caddy, which authenticates the user and adds X-Agentbox-User + the shared secret).
+  const auth = get('HERMES_UI_AUTH', 'auth', 'token');
+  if (!['token', 'proxy'].includes(auth)) throw new Error(`HERMES_UI_AUTH must be token or proxy, not "${auth}"`);
+  // The secret is read from the environment or the env file only, never from a command-line flag.
+  const proxySecret = fromEnv(process.env, 'HERMES_UI_PROXY_SECRET') ?? fromEnv(fileEnv, 'HERMES_UI_PROXY_SECRET') ?? '';
+  if (auth === 'proxy' && proxySecret.length < 16) throw new Error('HERMES_UI_AUTH=proxy needs HERMES_UI_PROXY_SECRET (at least 16 characters)');
+
+  let remote = get('HERMES_UI_REMOTE', 'remote', 'off');
+  if (!['off', 'iroh'].includes(remote)) throw new Error(`HERMES_UI_REMOTE must be off or iroh, not "${remote}"`);
+  if (auth === 'proxy' && remote !== 'off') {
+    // Remote access belongs to the proxy in front of us; the built-in gateway would bypass it.
+    console.warn('HERMES_UI_AUTH=proxy: ignoring HERMES_UI_REMOTE=iroh, the built-in iroh gateway stays off');
+    remote = 'off';
+  }
+
+  const host = get('HERMES_UI_HOST', 'host', '127.0.0.1');
+  if (!['127.0.0.1', '::1', 'localhost'].includes(host)) throw new Error(`HERMES_UI_HOST must be a loopback address (127.0.0.1, ::1 or localhost), not "${host}"`);
+
+  // In proxy mode there is no token login, so no token is generated (and nothing is written to the env file).
+  let token = auth === 'proxy' ? '' : get('HERMES_UI_TOKEN', 'token', '');
+  if (!token && auth !== 'proxy') {
     token = crypto.randomBytes(24).toString('base64url');
     fs.appendFileSync(envFile, `HERMES_UI_TOKEN=${token}\n`, { mode: 0o600 });
     console.log(`Generated HERMES_UI_TOKEN in ${envFile}`);
@@ -70,7 +102,14 @@ export function loadConfig(argv = []) {
   return {
     envFile,
     token,
-    host: '127.0.0.1', // never configurable: remote access goes through a tunnel, not an open port
+    auth,
+    proxySecret,
+    // Loopback only: remote access goes through the iroh gateway or a reverse proxy, never an open port.
+    host,
+    // URL prefix the browser sees (e.g. /hermes behind a proxy that strips it); '' = served at the root.
+    basePath: normalizeBasePath(get('HERMES_UI_BASE_PATH', 'base-path', '')),
+    // Proxy mode: where the "Pair device" button sends the user (the proxy's own device pairing page).
+    pairingUrl: get('HERMES_UI_PAIRING_URL', 'pairing-url', ''),
     port: Number(get('HERMES_UI_PORT', 'port', 8787)),
     dataDir,
     hermesHome,
@@ -84,10 +123,10 @@ export function loadConfig(argv = []) {
     uiDir: expand(get('HERMES_UI_DIR', 'ui-dir', path.join(ROOT, 'web', 'dist'))),
     // Public URL of the static UI (e.g. GitHub Pages) used in iroh pairing links. Empty = local UI only.
     uiUrl: (get('HERMES_UI_URL', 'ui-url', '') || '').replace(/\/$/, ''),
-    remote: get('HERMES_UI_REMOTE', 'remote', 'off'), // off | iroh | tailscale-funnel | tailscale-serve | cloudflare
+    remote, // off | iroh
     iroh: {
       bin: expand(get('IROH_GATEWAY_BIN', 'iroh-gateway-bin', '')),
-      version: get('IROH_GATEWAY_VERSION', 'iroh-gateway-version', 'v0.6.3'),
+      version: get('IROH_GATEWAY_VERSION', 'iroh-gateway-version', 'v0.6.4'),
       relayUrl: get('IROH_RELAY_URL', 'iroh-relay', ''),
       relayToken: get('IROH_RELAY_TOKEN', 'iroh-relay-token', ''),
       adminPort: Number(get('IROH_ADMIN_PORT', 'iroh-admin-port', 0)) || null,
@@ -103,7 +142,6 @@ export function loadConfig(argv = []) {
       maxDays: Number(get('HERMES_UI_INBOX_DAYS', 'inbox-days', 30)),
       maxItems: Number(get('HERMES_UI_INBOX_MAX', 'inbox-max', 1000)),
     },
-    tailscale: { authKey: get('TS_AUTHKEY', 'ts-authkey', ''), hostname: get('TS_HOSTNAME', 'ts-hostname', 'hermes-ui') },
     paseo: {
       mode: get('HERMES_UI_PASEO', 'paseo', 'auto'), // auto | off
       source: get('HERMES_UI_PASEO_SOURCE', 'paseo-source', 'auto'), // auto | mcp | daemon

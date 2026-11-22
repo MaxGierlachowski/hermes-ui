@@ -24,6 +24,7 @@ export function Composer({
   className,
   onStop,
   draftKey,
+  initialText,
 }: {
   onSubmit: (m: OutgoingMessage) => Promise<unknown>
   placeholder?: string
@@ -34,9 +35,11 @@ export function Composer({
   onStop?: () => void
   /** Keep unsent text under this key when the composer unmounts (e.g. the chat's id). */
   draftKey?: string
+  /** Text the field starts with (e.g. from ?compose=…); never sent by itself. */
+  initialText?: string
 }) {
   const touch = useTouchUI()
-  const [text, setTextState] = useState(() => (draftKey && drafts.get(draftKey)) || '')
+  const [text, setTextState] = useState(() => (draftKey && drafts.get(draftKey)) || initialText || '')
   const setText = (v: string) => { setTextState(v); if (draftKey) { if (v) drafts.set(draftKey, v); else drafts.delete(draftKey) } }
   const [images, setImages] = useState<Img[]>([])
   const [voice, setVoice] = useState<Voice | null>(null)

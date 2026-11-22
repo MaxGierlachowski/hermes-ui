@@ -9,6 +9,7 @@ export const lang: Lang = ((): Lang => {
   if (saved === 'de' || saved === 'en') return saved
   return typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('de') ? 'de' : 'en'
 })()
+if (typeof document !== 'undefined') document.documentElement.lang = lang
 export function setLang(l: Lang) { localStorage.setItem('hk_lang', l); location.reload() }
 
 export function t(key: string, vars: Record<string, string | number> = {}) {
