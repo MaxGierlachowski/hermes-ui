@@ -1,0 +1,30 @@
+# Builds the self-contained release tarball (npm run release:tarball) on a version tag or by hand and
+# keeps it as a workflow artifact. It does not create or publish a GitHub Release.
+name: Release tarball
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tarball:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check && npm test
+      - run: npm run release:tarball
+      - run: cd dist && sha256sum -c hermes-ui-*.tgz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hermes-ui-tarball
+          path: |
+            dist/hermes-ui-*.tgz
+            dist/hermes-ui-*.tgz.sha256
