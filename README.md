@@ -187,6 +187,11 @@ launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
 - **In-app notifications:** toasts for new requests and finished chats while the app is visible (a click opens the thread or the inbox), a badge on the Inbox tab and on the app icon (Badging API where available).
 - **Push notifications (Web Push, see below).**
 - **Search (⌘K, `/` or the search field):** full text over the titles and content of all chats, using Hermes' own FTS5 index (`messages_fts`, read-only; user and Hermes messages, no tool output). Results show title, source, column, last activity, message and Paseo-agent counts and a snippet with the hit marked; Enter opens the thread at the matching message. Archived chats on request. Also: new chat (N), theme, language, cron/system filter, remote access.
+- **Labels (optional):** slice the one board by project or context without splitting it.
+  - A managed set of labels with name and color (like GitHub issue labels): ⌘K → "Manage labels …", or the ⚙ at the end of the filter bar. Create, rename, recolor (presets or any color), delete; deleting a label removes it from every card.
+  - Any card can carry zero, one or several labels: the tag button in the thread header (a popover on a desktop, a bottom sheet on a phone). Cards show their labels as small colored pills.
+  - Filter bar above the board (above the column tabs on a phone): select one or more labels to show only the cards that have **any** of them; it combines with search and the source filter. The selection is kept per device. Also in ⌘K ("Filter by label: …").
+  - Until the first label exists the board looks exactly as before. Labels live in `<data-dir>/board.json` next to the other board state and update live on every open client (`labels` / `session` events). API: `GET|POST /api/labels`, `PATCH|DELETE /api/labels/<id>`, `PUT /api/sessions/<id>/labels` with `{ labels: [ids] }`.
 - **Light and dark mode**, English and German, a mobile layout, and installable as a PWA.
 - **Phones and tablets:** every control is at least 44 × 44 px to hit (Apple HIG; checked by a test), fields use 16 px text so iOS does not zoom in, and nothing changes for a mouse.
   - The thread opens as a bottom sheet: drag it down to close. The composer is one row (attach · text · one round button that is the mic, send, or stop), Enter makes a new line, and it stays above the keyboard on iOS too.
@@ -225,6 +230,7 @@ The UI tests run the built bundle with every `/api` request answered from synthe
 - `touch-targets`: every interactive element on every screen must be hittable over 44 × 44 px (measured by hit-testing, so an enlarged hit area counts and an overlapping neighbour fails), and no field may be below 16 px.
 - `mobile-behaviour`: sheet swipe-to-close, long-press, column swipe, Enter in the composer, the keyboard inset, and the image viewer (pinch, double tap, swipe down; the page scale must stay 1).
 - `desktop-regression`: pixel comparison at 1440 × 900, light and dark, against `web/e2e/__screenshots__/`. Touch styles live behind `pointer: coarse` (Tailwind variant `touch:`) or `max-md:`, so a desktop with a mouse must not change by a single pixel. After an intended desktop change, update the images with `npx playwright test desktop --update-snapshots` (in `web/`) and review them. The images are rendered on macOS; other systems render fonts differently.
+- `labels` (phones) and `desktop-labels`: create, rename and recolor labels, assign and remove them on a card, filter the board by label (any of the selected, kept across a reload), delete a label everywhere; on phones also the 44 px rule for the filter bar, the picker sheet and the management dialog. The label endpoints are mocked statefully in `e2e/labels-mock.ts`.
 - `SHOTS_DIR=<dir> npx playwright test screenshots` writes one screenshot per screen, phone and theme.
 
 Once per machine: `npx playwright install chromium` in `web/`.

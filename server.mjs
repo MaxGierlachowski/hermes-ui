@@ -14,6 +14,7 @@ import { IrohGateway } from './src/iroh.mjs';
 import { t, setLang } from './src/i18n.mjs';
 import { Store } from './src/store.mjs';
 import { Board } from './src/board.mjs';
+import { Labels, labelRoutes } from './src/labels.mjs';
 import { HermesGateway } from './src/hermes-ws.mjs';
 import { Remote } from './src/remote.mjs';
 import { Devices } from './src/devices.mjs';
@@ -68,6 +69,7 @@ const syncIrohAccess = () => {
 };
 setInterval(syncIrohAccess, 30000);
 const board = new Board(cfg.dataDir);
+const labels = new Labels(board);
 const outbox = new Outbox(board);
 const gateway = new HermesGateway({ hermesHome: HERMES_HOME });
 
@@ -271,6 +273,7 @@ function toCard(row) {
     updatedAt: Math.max(row.last_activity_at || row.started_at || 0, (lv?.at || 0) / 1000),
     messageCount: row.message_count,
     test: !!board.data.test[row.id] || /^TEST\b/.test(row.title || ''),
+    labels: labels.forCard(row.id),
     pending,
   };
 }
@@ -292,6 +295,7 @@ function draftCard(d) {
     updatedAt: d.createdAt,
     messageCount: 0,
     test: !!d.test,
+    labels: labels.forCard(d.id),
     pending: [],
     paseo: [],
     paseoNote: '',
@@ -642,7 +646,9 @@ async function startDraft(draftId) {
   const loadMedia = (m) => m && { type: m.type, name: m.name, data: fs.readFileSync(board.mediaPath(...m.url.split('/').slice(-2).map(decodeURIComponent))).toString('base64') };
   const id = await startSession({ title: d.title, text: d.text, test: d.test, images: (d.images || []).map(loadMedia), audio: loadMedia(d.audio) });
   delete board.data.drafts[draftId];
+  labels.move(draftId, id);
   board.save();
+  pushCard(id, true);
   broadcast('removed', { id: draftId });
   return id;
 }
@@ -875,6 +881,8 @@ const STATIC = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; c
 const SECURITY_HEADERS = { 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 const MEDIA = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.webm': 'audio/webm', '.mp4': 'audio/mp4', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav' };
 
+const handleLabels = labelRoutes(labels, { readJson, send, broadcast, cardById });
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const p = url.pathname;
@@ -1011,11 +1019,15 @@ const server = http.createServer(async (req, res) => {
       res.write(`event: gateway\ndata: ${JSON.stringify({ connected: gateway.connected })}\n\n`);
       res.write(`event: remote\ndata: ${JSON.stringify(remoteView())}\n\n`);
       res.write(`event: inbox\ndata: ${JSON.stringify({ open: openItems(), unread: inbox.unread() })}\n\n`);
+      res.write(`event: labels\ndata: ${JSON.stringify(labels.list())}\n\n`);
       clients.add(res);
       req.on('close', () => clients.delete(res));
       return;
     }
     if (p === '/api/health') return send(res, 200, { ok: true, gateway: gateway.connected, origin: gateway.origin });
+
+    // ---- labels (managed set, assigned per card; src/labels.mjs) ----
+    if (await handleLabels(req, res, p)) return;
 
     let m;
     if ((m = p.match(/^\/api\/media\/([^/]+)\/([^/]+)$/))) {
@@ -1057,7 +1069,7 @@ const server = http.createServer(async (req, res) => {
       const rows = store.listSessions({ sinceTs: since, ids: pinned });
       const cards = rows.filter((r) => !isEmptyShell(r)).map(toCard).filter((c) => system || !c.system);
       const drafts = Object.values(board.data.drafts).map(draftCard);
-      return send(res, 200, { sessions: [...drafts, ...cards], gateway: gateway.connected });
+      return send(res, 200, { sessions: [...drafts, ...cards], labels: labels.list(), gateway: gateway.connected });
     }
 
     if (p === '/api/sessions' && req.method === 'POST') {
@@ -1142,6 +1154,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (column === 'done') {
           delete board.data.drafts[id];
+          labels.forget(id);
           board.save();
           broadcast('removed', { id });
           return send(res, 200, { session: null, removed: id });

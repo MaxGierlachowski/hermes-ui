@@ -5,11 +5,13 @@ import type { Session } from '@/lib/types'
 import { SourceIcon, StatusDot } from './status'
 import { AgentChip } from '@/components/paseo/AgentChip'
 import { t } from '@/lib/i18n'
+import { CardLabels } from '@/components/labels/LabelChip'
 
 export function SessionCard({ s, selected, flash, overlay }: { s: Session; selected?: boolean; flash?: boolean; overlay?: boolean }) {
   const pending = s.pending?.[0]
   return (
     <div
+      data-card-id={s.id}
       className={cn(
         'group/card relative flex flex-col gap-2 rounded-lg border bg-card px-3 py-2.5 text-left transition-[border-color,box-shadow,transform] duration-150 motion-reduce:transition-none',
         'hover:border-foreground/20 hover:shadow-sm dark:hover:shadow-none',
@@ -37,6 +39,8 @@ export function SessionCard({ s, selected, flash, overlay }: { s: Session; selec
       ) : null}
 
       {s.paseo?.length > 0 && <PaseoChips s={s} />}
+
+      <CardLabels ids={s.labels} />
 
       {s.initialPrompt && s.initialPrompt !== s.title && !pending && (
         <div className="line-clamp-1 text-[11.5px] text-muted-foreground/70">„{s.initialPrompt}“</div>

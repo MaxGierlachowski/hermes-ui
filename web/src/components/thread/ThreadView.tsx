@@ -26,6 +26,8 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { ColumnSheet } from '@/components/board/ColumnSheet'
 import { COLUMN_COLOR } from '@/components/board/status'
 import { ChevronDown } from 'lucide-react'
+import { CardLabels } from '@/components/labels/LabelChip'
+import { LabelPicker } from '@/components/labels/LabelPicker'
 
 const MESSAGING = new Set(['kanban', 'desktop', 'cli', 'oneshot'])
 
@@ -341,8 +343,10 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
             <Tooltip><TooltipTrigger asChild><span className="max-w-40 truncate font-mono max-md:hidden">{session.id}</span></TooltipTrigger><TooltipContent>{session.id}</TooltipContent></Tooltip>
             {session.test && <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400"><FlaskConical className="size-3" />Test</span>}
           </div>
+          <CardLabels ids={session.labels} className="mt-1.5" />
         </div>
         <div className="flex shrink-0 items-center gap-1 max-md:gap-0">
+          <LabelPicker session={session} />
           {isMobile ? (
             <>
               <Button variant="ghost" size="sm" className="gap-1.5 rounded-full px-2.5 text-[13px] font-medium text-muted-foreground" onClick={() => setColumnSheet(true)} aria-label={t('Spalte')} aria-haspopup="dialog">

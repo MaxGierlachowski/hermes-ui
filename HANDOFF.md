@@ -64,7 +64,7 @@ Nie in Git. Vollständige Liste und Erklärung: `docs/secrets-and-state.md`. Auf
 | `data/iroh/` | iroh-Schlüssel = Endpoint-ID (Pairing-Links bleiben gültig) |
 | `data/devices.json` | gekoppelte Geräte |
 | `data/vapid.json`, `data/push.json` | Web-Push-Schlüssel + Abos |
-| `data/board.json`, `data/inbox.json`, `data/media/` | Board-Zustand, Inbox-Verlauf, hochgeladene Medien |
+| `data/board.json`, `data/inbox.json`, `data/media/` | Board-Zustand (inkl. Labels), Inbox-Verlauf, hochgeladene Medien |
 
 **Backup erstellen (einmal, selbst ausführen – fragt nach einer Passphrase):**
 

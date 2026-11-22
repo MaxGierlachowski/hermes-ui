@@ -63,10 +63,15 @@ export type Session = {
   updatedAt: number
   messageCount: number
   test: boolean
+  /** Ids of the card's labels (see Label), in the order of the managed list. Missing on older backends. */
+  labels?: string[]
   pending: PendingPrompt[]
   paseo: PaseoChip[]
   paseoNote: string
 }
+
+/** A managed label (GET /api/labels): cards carry zero or more of them, the board filters by them. */
+export type Label = { id: string; name: string; color: string }
 
 export type Attachment = { kind: 'image'; url: string } | { kind: 'audio'; url: string } | { kind: 'file'; name: string }
 

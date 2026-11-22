@@ -11,6 +11,7 @@ import { OverlayScroll } from '@/components/common/OverlayScroll'
 import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
 import { ColumnSheet } from './ColumnSheet'
+import { LabelFilterBar } from '@/components/labels/LabelFilterBar'
 
 type Cols = Record<Column, Session[]>
 
@@ -25,17 +26,20 @@ function useColumns(): Cols {
   const sessions = useBoard((s) => s.sessions)
   const search = useBoard((s) => s.search)
   const source = useBoard((s) => s.source)
+  const labelFilter = useBoard((s) => s.labelFilter)
   return useMemo(() => {
     const q = search.trim().toLowerCase()
     const cols: Cols = { new: [], doing: [], waiting: [], done: [] }
     for (const s of Object.values(sessions)) {
       if (source && s.source !== source) continue
+      // Labels: any of the selected ones (OR); together with search and source (AND).
+      if (labelFilter.length && !s.labels?.some((id) => labelFilter.includes(id))) continue
       if (q && !`${s.title} ${s.initialPrompt} ${s.activity}`.toLowerCase().includes(q)) continue
       cols[s.column]?.push(s)
     }
     for (const c of Object.values(cols)) c.sort(byAttention)
     return cols
-  }, [sessions, search, source])
+  }, [sessions, search, source, labelFilter])
 }
 
 function ColumnHeader({ id, label, count }: { id: Column; label: string; count: number }) {
@@ -51,7 +55,15 @@ function ColumnHeader({ id, label, count }: { id: Column; label: string; count: 
 export function Board() {
   const isMobile = useIsMobile()
   const cols = useColumns()
-  return isMobile ? <MobileBoard cols={cols} /> : <DesktopBoard cols={cols} />
+  const hasLabels = useBoard((s) => s.labels.length > 0)
+  if (isMobile) return <MobileBoard cols={cols} />
+  if (!hasLabels) return <DesktopBoard cols={cols} />
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <LabelFilterBar />
+      <div className="min-h-0 flex-1"><DesktopBoard cols={cols} /></div>
+    </div>
+  )
 }
 
 function DesktopBoard({ cols }: { cols: Cols }) {
@@ -130,6 +142,7 @@ function MobileBoard({ cols }: { cols: Cols }) {
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <LabelFilterBar mobile />
       <div role="tablist" aria-label={t('Spalten')} className="grid grid-cols-4 gap-1 border-b px-2 py-1.5">
         {COLUMNS.map(({ id, label }) => (
           <button

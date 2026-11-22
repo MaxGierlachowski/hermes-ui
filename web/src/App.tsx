@@ -12,6 +12,7 @@ import { Header } from '@/components/app/Header'
 import { NewChatDialog } from '@/components/app/NewChatDialog'
 import { CommandMenu } from '@/components/app/CommandMenu'
 import { RemoteDialog } from '@/components/app/RemoteDialog'
+import { LabelsDialog } from '@/components/labels/LabelsDialog'
 import { Login } from '@/components/app/Login'
 import { Inbox } from '@/components/inbox/Inbox'
 import { NotificationSettings } from '@/components/inbox/NotificationSettings'
@@ -147,6 +148,7 @@ function Shell() {
       <NewChatDialog open={newOpen} onOpenChange={setNewOpen} />
       <CommandMenu open={cmdOpen} onOpenChange={setCmdOpen} onNew={() => setNewOpen(true)} onRemote={() => setRemoteOpen(true)} onNotifications={() => setNotifyOpen(true)} />
       <RemoteDialog open={remoteOpen} onOpenChange={setRemoteOpen} />
+      <LabelsDialog />
       <NotificationSettings open={notifyOpen} onOpenChange={setNotifyOpen} />
       <ConfirmApproval />
     </div>

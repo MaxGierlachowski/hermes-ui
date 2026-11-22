@@ -1,11 +1,11 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Archive, BellRing, Bot, CornerDownLeft, Inbox, Languages, LayoutGrid, MessagesSquare, Moon, Plus, Smartphone, Sun, Workflow } from 'lucide-react'
+import { Archive, BellRing, Bot, Check, CornerDownLeft, Inbox, Languages, LayoutGrid, MessagesSquare, Moon, Plus, Smartphone, Sun, Tag, Workflow } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut } from '@/components/ui/command'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Loader } from '@/components/ui/loader'
-import { openThread, searchChats, setFilter, setTab, useBoard, type SearchHit } from '@/lib/store'
+import { openLabelsDialog, openThread, searchChats, setFilter, setTab, toggleLabelFilter, useBoard, type SearchHit } from '@/lib/store'
 import { relTime } from '@/lib/format'
 import { COLUMNS, type Session } from '@/lib/types'
 import { COLUMN_COLOR, SourceIcon, StatusDot } from '@/components/board/status'
@@ -18,6 +18,8 @@ type Action = { id: string; label: string; icon: ReactNode; run: () => void; sho
 export function CommandMenu({ open, onOpenChange, onNew, onRemote, onNotifications }: { open: boolean; onOpenChange: (o: boolean) => void; onNew: () => void; onRemote: () => void; onNotifications: () => void }) {
   const sessions = useBoard((s) => s.sessions)
   const system = useBoard((s) => s.system)
+  const labels = useBoard((s) => s.labels)
+  const labelFilter = useBoard((s) => s.labelFilter)
   const { resolvedTheme, setTheme } = useTheme()
   const [q, setQ] = useState('')
   const [archived, setArchived] = useState(false)
@@ -49,6 +51,13 @@ export function CommandMenu({ open, onOpenChange, onNew, onRemote, onNotificatio
     { id: 'theme', label: t('Theme wechseln'), icon: resolvedTheme === 'dark' ? <Sun /> : <Moon />, run: () => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark') },
     { id: 'lang', label: lang === 'de' ? t('Sprache: English') : t('Sprache: Deutsch'), icon: <Languages />, run: () => setLang(lang === 'de' ? 'en' : 'de'), keep: true },
     { id: 'remote', label: t('Fernzugriff & Geräte'), icon: <Smartphone />, run: onRemote },
+    { id: 'labels', label: t('Labels verwalten …'), icon: <Tag />, run: () => openLabelsDialog() },
+    ...labels.map((l) => ({
+      id: `label:${l.id}`,
+      label: t('Nach Label filtern: {name}', { name: l.name }),
+      icon: labelFilter.includes(l.id) ? <Check /> : <span className="m-0.5 size-3 rounded-full" style={{ backgroundColor: l.color }} />,
+      run: () => { setTab('board'); toggleLabelFilter(l.id) },
+    })),
   ]
   const shownActions = query ? actions.filter((a) => a.label.toLowerCase().includes(query.toLowerCase())) : actions
   const recent = useMemo(() => Object.values(sessions).filter((s) => !s.draft).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8), [sessions])

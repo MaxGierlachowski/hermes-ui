@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { api, Unauthorized } from './api'
 import { apiUrl, getConnection, connectIroh, consumePairCode, sameOriginBackend, savedRemote, takePairingFragment } from './backend'
-import type { Column, Device, InboxItem, OpenItem, OutgoingMessage, RemoteState, Session, Tab, ThreadMessage } from './types'
+import type { Column, Device, InboxItem, Label, OpenItem, OutgoingMessage, RemoteState, Session, Tab, ThreadMessage } from './types'
 
 type State = {
   auth: 'unknown' | 'ok' | 'required' | 'no-backend'
@@ -18,6 +18,9 @@ type State = {
   system: boolean
   search: string
   source: string
+  labels: Label[]
+  labelFilter: string[] // label ids; a card shows when it has any of them (empty = no filter)
+  labelsDialog: boolean
   openId: string | null
   messages: ThreadMessage[]
   loadingThread: boolean
@@ -43,6 +46,9 @@ let state: State = {
   system: localStorage.getItem('hk_system') === '1',
   search: '',
   source: '',
+  labels: [],
+  labelFilter: (() => { try { const v = JSON.parse(localStorage.getItem('hk_label_filter') || '[]'); return Array.isArray(v) ? v.map(String) : [] } catch { return [] } })(),
+  labelsDialog: false,
   openId: null,
   messages: [],
   loadingThread: false,
@@ -98,8 +104,9 @@ const handle = (err: unknown) => {
 // ---------- loading ----------
 export async function loadSessions() {
   try {
-    const { sessions, gateway } = await api<{ sessions: Session[]; gateway: boolean }>(`/api/sessions?days=${state.days}&system=${state.system ? 1 : 0}`)
+    const { sessions, gateway, labels } = await api<{ sessions: Session[]; gateway: boolean; labels?: Label[] }>(`/api/sessions?days=${state.days}&system=${state.system ? 1 : 0}`)
     set({ auth: 'ok', gateway, sessions: Object.fromEntries(sessions.map((s) => [s.id, withMove(s)])) })
+    if (labels) setLabels(labels)
     return true
   } catch (err) { handle(err); return false }
 }
@@ -116,6 +123,59 @@ export function setFilter(patch: Partial<Pick<State, 'days' | 'system' | 'search
   if ('days' in patch) localStorage.setItem('hk_days', String(patch.days))
   if ('system' in patch) localStorage.setItem('hk_system', patch.system ? '1' : '0')
   if ('days' in patch || 'system' in patch) loadSessions()
+}
+
+// ---------- labels ----------
+// A managed set (name + color); cards carry label ids. The board filter is a set of label ids, kept
+// per device: a card shows when it has ANY of them (OR), combined with search and source (AND).
+function setLabels(labels: Label[]) {
+  const known = new Set(labels.map((l) => l.id))
+  const labelFilter = state.labelFilter.filter((id) => known.has(id))
+  if (labelFilter.length !== state.labelFilter.length) localStorage.setItem('hk_label_filter', JSON.stringify(labelFilter))
+  set({ labels, labelFilter })
+}
+export function setLabelFilter(ids: string[]) {
+  localStorage.setItem('hk_label_filter', JSON.stringify(ids))
+  set({ labelFilter: ids })
+}
+export const toggleLabelFilter = (id: string) =>
+  setLabelFilter(state.labelFilter.includes(id) ? state.labelFilter.filter((x) => x !== id) : [...state.labelFilter, id])
+export const openLabelsDialog = (open = true) => set({ labelsDialog: open })
+
+export async function createLabel(name: string, color?: string) {
+  try {
+    const r = await api<{ label: Label; labels: Label[] }>('/api/labels', { method: 'POST', json: { name, color } })
+    setLabels(r.labels)
+    return r.label
+  } catch (err) { handle(err); return null }
+}
+export async function updateLabel(id: string, patch: { name?: string; color?: string }) {
+  try {
+    const r = await api<{ labels: Label[] }>(`/api/labels/${encodeURIComponent(id)}`, { method: 'PATCH', json: patch })
+    setLabels(r.labels)
+    return true
+  } catch (err) { handle(err); return false }
+}
+export async function deleteLabel(id: string) {
+  try {
+    const r = await api<{ labels: Label[]; cards: string[] }>(`/api/labels/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    setLabels(r.labels)
+    // The cards that had it come back as live `session` events; drop it here already.
+    set((st) => ({ sessions: Object.fromEntries(Object.entries(st.sessions).map(([k, s]) => [k, s.labels?.includes(id) ? { ...s, labels: s.labels.filter((x) => x !== id) } : s])) }))
+    return true
+  } catch (err) { handle(err); return false }
+}
+/** Optimistic: the card shows the new labels at once, rolled back on error. */
+export async function setCardLabels(id: string, labels: string[]) {
+  const before = state.sessions[id]
+  if (before) upsert({ ...before, labels })
+  try {
+    const r = await api<{ session: Session | null }>(`/api/sessions/${encodeURIComponent(id)}/labels`, { method: 'PUT', json: { labels } })
+    if (r.session) upsert(r.session)
+  } catch (err) {
+    if (before && state.sessions[id]) upsert({ ...state.sessions[id], labels: before.labels })
+    handle(err)
+  }
 }
 
 // ---------- thread ----------
@@ -359,6 +419,7 @@ export function connectEvents() {
   on<{ connected: boolean }>('gateway', ({ connected }) => set({ gateway: connected }))
   on<RemoteState>('remote', (remote) => set({ remote }))
   on<Device[]>('devices', (devices) => set({ devices }))
+  on<Label[]>('labels', setLabels)
   on<{ open: OpenItem[]; unread: number }>('inbox', ({ open, unread }) => set((st) => ({ inbox: { ...st.inbox, open, unread } })))
   on<InboxItem>('inbox-item', (item) => {
     const known = state.inbox.items.some((x) => x.id === item.id)
