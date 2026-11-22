@@ -25,6 +25,7 @@ import { Push } from './src/push.mjs';
 import { parseUserMessage, previewOf } from './src/user-markers.mjs';
 import { Outbox, queuedRow } from './src/outbox.mjs';
 import { callsOf, paseoItem, paseoTool } from './src/paseo-calls.mjs';
+import { modelChoice, pickerOptions } from './src/models.mjs';
 import QRCode from 'qrcode';
 
 const cfg = loadConfig(process.argv.slice(2));
@@ -618,11 +619,11 @@ setInterval(() => {
   }
 }, 5000);
 
-async function startSession({ title, text, images = [], audio = null, test = false }) {
+async function startSession({ title, text, images = [], audio = null, test = false, model, provider }) {
   const stamp = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const base = clip(String(title || text || t('voiceTitle')).replace(/^TEST\b\s*[·:]?\s*/i, ''), 40);
   const finalTitle = test ? `TEST · ${base} · ${stamp}` : title || undefined;
-  const { id } = await gateway.createSession({ title: finalTitle });
+  const { id } = await gateway.createSession({ title: finalTitle, ...modelChoice({ model, provider }) });
   board.data.created[id] = Date.now();
   if (test) board.data.test[id] = true;
   board.save();
@@ -640,7 +641,7 @@ async function startDraft(draftId) {
   const d = board.data.drafts[draftId];
   if (!d) throw new Error('draft not found');
   const loadMedia = (m) => m && { type: m.type, name: m.name, data: fs.readFileSync(board.mediaPath(...m.url.split('/').slice(-2).map(decodeURIComponent))).toString('base64') };
-  const id = await startSession({ title: d.title, text: d.text, test: d.test, images: (d.images || []).map(loadMedia), audio: loadMedia(d.audio) });
+  const id = await startSession({ title: d.title, text: d.text, test: d.test, ...modelChoice(d), images: (d.images || []).map(loadMedia), audio: loadMedia(d.audio) });
   delete board.data.drafts[draftId];
   board.save();
   broadcast('removed', { id: draftId });
@@ -1060,11 +1061,15 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { sessions: [...drafts, ...cards], gateway: gateway.connected });
     }
 
+    if (p === '/api/models' && req.method === 'GET') {
+      return send(res, 200, pickerOptions(await gateway.modelOptions()));
+    }
+
     if (p === '/api/sessions' && req.method === 'POST') {
       const body = await readJson(req);
       if (body.draft) {
         const id = `draft:${crypto.randomUUID()}`;
-        const d = { id, title: body.title || '', text: body.text || '', test: !!body.test, createdAt: Date.now() / 1000, images: [], audio: null };
+        const d = { id, title: body.title || '', text: body.text || '', test: !!body.test, ...modelChoice(body), createdAt: Date.now() / 1000, images: [], audio: null };
         for (const img of body.images || []) d.images.push({ type: img.type, name: img.name, url: board.saveMedia(id, img) });
         if (body.audio) d.audio = { type: body.audio.type, name: 'voice', url: board.saveMedia(id, { ...body.audio, name: 'voice' }) };
         board.data.drafts[id] = d;

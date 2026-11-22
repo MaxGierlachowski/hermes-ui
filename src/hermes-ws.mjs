@@ -146,17 +146,24 @@ export class HermesGateway extends EventEmitter {
 
   // ---- high-level helpers ----
 
-  async createSession({ title } = {}) {
+  // `model` + `provider` pin this one session (see models.mjs); omitted, the gateway's default applies.
+  async createSession({ title, model, provider } = {}) {
     const snap = await this.call('session.create', {
       source: 'gui',
       cwd: os.homedir(),
       ...(title ? { title } : {}),
+      ...(model && provider ? { model, provider } : {}),
       request_id: randomUUID(),
       client: { name: 'hermes-ui', version: '0.1.0' },
     });
     const id = snap.session_id || snap.stored_session_id;
     this.subscribed.add(id);
     return { id, snap };
+  }
+
+  // Provider/model inventory (credential pool + provider probe, can take seconds on the gateway side).
+  async modelOptions() {
+    return this.call('model.options', {}, 60000);
   }
 
   // Subscribes this socket to the session's live events; the snapshot carries pending prompts.
