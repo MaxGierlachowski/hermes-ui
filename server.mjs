@@ -9,13 +9,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { loadConfig } from './src/config.mjs';
+import { renderIndex } from './src/page.mjs';
 import { IrohGateway } from './src/iroh.mjs';
 import { t, setLang } from './src/i18n.mjs';
 import { Store } from './src/store.mjs';
 import { Board } from './src/board.mjs';
 import { HermesGateway } from './src/hermes-ws.mjs';
-import { Remote } from './src/remote.mjs';
 import { Devices } from './src/devices.mjs';
 import { Paseo } from './src/paseo.mjs';
 import { createImageResolver, real } from './src/local-files.mjs';
@@ -51,16 +52,17 @@ const PASEO_ON = cfg.paseo.mode !== 'off';
 const devices = new Devices(cfg.dataDir);
 const inbox = new Inbox(cfg.dataDir, cfg.inbox);
 const push = cfg.push.enabled ? new Push(cfg.dataDir, { subject: cfg.push.subject || (/^https:/.test(cfg.uiUrl) ? cfg.uiUrl : ''), fcmServiceAccount: cfg.push.fcmServiceAccount }) : null;
+// Remote access (HERMES_UI_REMOTE): off (local only, or behind a reverse proxy) or iroh (see src/iroh.mjs).
 const remote = cfg.remote === 'iroh'
   ? new IrohGateway({ port: PORT, dataDir: cfg.dataDir, iroh: cfg.iroh })
-  : new Remote({ mode: cfg.remote, port: PORT, dataDir: cfg.dataDir, authKey: cfg.tailscale.authKey, hostname: cfg.tailscale.hostname });
+  : Object.assign(new EventEmitter(), { state: { mode: 'off', status: 'off', url: null, error: null }, start() {}, stop() {} });
 let lastRemoteLog = '';
 remote.on('state', (st) => {
-  const line = `remote ${st.mode}: ${st.status}${st.url ? ` ${st.url}` : ''}${st.endpointId ? ` endpoint ${st.endpointId}` : ''}${st.relayUrl ? ` via ${st.relayUrl}` : ''}${st.loginUrl ? ` login: ${st.loginUrl}` : ''}${st.error ? ` (${st.error})` : ''}`;
+  const line = `remote ${st.mode}: ${st.status}${st.endpointId ? ` endpoint ${st.endpointId}` : ''}${st.relayUrl ? ` via ${st.relayUrl}` : ''}${st.error ? ` (${st.error})` : ''}`;
   if (line !== lastRemoteLog) console.log((lastRemoteLog = line));
   broadcast('remote', remoteView());
 });
-const remoteView = () => ({ ...remote.state, uiUrl: cfg.uiUrl || null });
+const remoteView = () => ({ ...remote.state, uiUrl: cfg.uiUrl || null, auth: cfg.auth, pairingUrl: cfg.pairingUrl || null });
 // The iroh gateway admits only paired devices (plus everyone while a pairing code is open).
 const syncIrohAccess = () => {
   if (cfg.remote !== 'iroh') return;
@@ -817,10 +819,10 @@ const tokenOk = (given) => {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 };
 // A request is local only when it reached us directly on loopback with a loopback Host header.
-// Tunnels (cloudflared, tailscaled) also connect from loopback, but carry their public Host / forwarding headers.
+// Proxies and the iroh gateway also connect from loopback, but carry forwarding headers.
 function isLocal(req) {
   const host = String(req.headers.host || '').replace(/:\d+$/, '');
-  const fwd = req.headers['x-forwarded-for'] || req.headers['cf-connecting-ip'] || req.headers['tailscale-user-login'] || req.headers['x-forwarded-host'] || req.headers['x-iroh-remote-id'];
+  const fwd = req.headers['x-forwarded-for'] || req.headers['x-forwarded-host'] || req.headers['forwarded'] || req.headers['x-iroh-remote-id'] || req.headers['x-agentbox-user'];
   return !fwd && ['127.0.0.1', 'localhost', '[::1]'].includes(host);
 }
 function cookies(req) {
@@ -831,7 +833,22 @@ function cookies(req) {
 // the gateway). It is trusted only on loopback connections, i.e. coming from our own gateway child.
 const irohId = (req) => (cfg.remote === 'iroh' && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)
   ? String(req.headers['x-iroh-remote-id'] || '') : '');
+// Proxy mode (HERMES_UI_AUTH=proxy): a reverse proxy in front of us (agentbox's Caddy) authenticated the
+// user. A request counts only with the shared secret (compared in constant time) and a non-empty user
+// header; nothing else (token, device cookie, iroh id) is accepted then.
+const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest();
+const PROXY_SECRET_HASH = cfg.auth === 'proxy' ? sha256(cfg.proxySecret) : null;
+function proxyUser(req) {
+  const given = req.headers['x-agentbox-proxy-secret'];
+  const user = String(req.headers['x-agentbox-user'] || '').trim();
+  if (typeof given !== 'string' || !given || !user) return null;
+  return crypto.timingSafeEqual(sha256(given), PROXY_SECRET_HASH) ? user.slice(0, 120) : null;
+}
 function authorized(req, url) {
+  if (cfg.auth === 'proxy') {
+    const user = proxyUser(req);
+    return user ? { via: 'proxy', user } : null;
+  }
   const rid = irohId(req);
   if (rid) {
     // Over iroh only the paired device identity counts, never a cookie or token.
@@ -850,7 +867,7 @@ function deviceCookie(req, value, maxAgeS) {
 }
 // Brute-force brake for login/pairing: 10 failures per client per 10 minutes.
 const failures = new Map();
-function clientKey(req) { return String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress); }
+function clientKey(req) { return String(req.headers['x-forwarded-for'] || req.socket.remoteAddress); }
 function limited(req) {
   const f = failures.get(clientKey(req));
   return f && f.count >= 10 && Date.now() - f.since < 600000;
@@ -875,32 +892,57 @@ const STATIC = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; c
 const SECURITY_HEADERS = { 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 const MEDIA = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.webm': 'audio/webm', '.mp4': 'audio/mp4', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav' };
 
+let indexCache = null;
+function indexHtml() {
+  const file = path.join(WEB_DIST, 'index.html');
+  const st = fs.statSync(file);
+  if (indexCache?.mtimeMs !== st.mtimeMs) indexCache = { mtimeMs: st.mtimeMs, body: renderIndex(fs.readFileSync(file, 'utf8'), cfg) };
+  return indexCache.body;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const p = url.pathname;
+  let p = url.pathname;
+  // Behind a proxy that strips HERMES_UI_BASE_PATH (Caddy handle_path) requests arrive without it;
+  // direct requests (or a proxy that keeps the prefix) carry it, so it is stripped here as well.
+  if (cfg.basePath) {
+    if (p === cfg.basePath) {
+      res.writeHead(308, { Location: `${cfg.basePath}/${url.search}` });
+      return res.end();
+    }
+    if (p.startsWith(`${cfg.basePath}/`)) p = p.slice(cfg.basePath.length);
+  }
   let m0;
   try {
     if (!p.startsWith('/api/')) {
       if (!cfg.ui) return send(res, 404, { error: 'headless: UI disabled (HERMES_UI_SERVE_UI=off)' });
-      // React build (web/dist); unknown paths fall back to index.html (client-side routes like /pair).
+      // React build (web/dist); unknown paths fall back to index.html.
       let file = path.join(WEB_DIST, decodeURIComponent(p));
       if (!file.startsWith(WEB_DIST) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(WEB_DIST, 'index.html');
       if (!fs.existsSync(file)) return send(res, 503, { error: 'frontend not built – run npm run build' });
+      if (file === path.join(WEB_DIST, 'index.html')) {
+        res.writeHead(200, { 'Content-Type': STATIC['.html'], 'Cache-Control': 'no-cache', ...SECURITY_HEADERS });
+        return res.end(indexHtml());
+      }
       const immutable = file.includes(`${path.sep}assets${path.sep}`);
       res.writeHead(200, { 'Content-Type': STATIC[path.extname(file)] || 'application/octet-stream', 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache', ...SECURITY_HEADERS });
       return fs.createReadStream(file).pipe(res);
     }
 
-    // ---- unauthenticated: login with the board token, or redeem a pairing code ----
+    // ---- unauthenticated: health (direct loopback only), login with the board token, or redeem a pairing code ----
+    if (p === '/api/health' && isLocal(req)) return send(res, 200, { ok: true, gateway: gateway.connected });
+    if (cfg.auth === 'proxy' && (p === '/api/login' || p === '/api/pair/redeem')) {
+      return send(res, 403, { error: 'Sign-in and pairing are handled by the proxy (HERMES_UI_AUTH=proxy)' });
+    }
     if (p === '/api/login' && req.method === 'POST') {
-      if (limited(req)) return send(res, 429, { error: 'Zu viele Versuche, bitte 10 Minuten warten.' });
+      if (limited(req)) return send(res, 429, { error: 'Too many attempts, please wait 10 minutes.' });
       const { token, name } = await readJson(req);
-      if (!tokenOk(token)) { fail(req); return send(res, 401, { error: 'Token falsch' }); }
+      if (!tokenOk(token)) { fail(req); return send(res, 401, { error: 'Wrong token' }); }
       const dev = devices.issue({ name: name || 'Browser', via: 'token', remote: !isLocal(req) });
       return send(res, 200, { ok: true }, { 'Set-Cookie': deviceCookie(req, dev.cookie, dev.maxAgeS) });
     }
     if (p === '/api/pair/redeem' && req.method === 'POST') {
-      if (limited(req)) return send(res, 429, { error: 'Zu viele Versuche, bitte 10 Minuten warten.' });
+      if (limited(req)) return send(res, 429, { error: 'Too many attempts, please wait 10 minutes.' });
       const { code, name } = await readJson(req);
       const rid = irohId(req);
       const dev = devices.redeem(code, { name: name || 'Device', remote: !isLocal(req), irohId: rid || null });
@@ -913,34 +955,32 @@ const server = http.createServer(async (req, res) => {
     const auth = authorized(req, url);
     if (!auth) return send(res, 401, { error: 'unauthorized' });
 
+    // Who did something, for logs and inbox entries: the paired device, the proxy's user or "token".
+    const actor = auth.device?.name || auth.user || auth.via;
     if (p === '/api/logout' && req.method === 'POST') {
       if (auth.device) { devices.revoke(auth.device.id); push?.removeDevice(auth.device.id); }
       return send(res, 200, { ok: true }, { 'Set-Cookie': deviceCookie(req, '', 0) });
     }
     if (p === '/api/remote' && req.method === 'GET') {
-      return send(res, 200, { remote: remoteView(), devices: devices.list(), local: isLocal(req), current: auth.device?.id || null });
+      return send(res, 200, { remote: remoteView(), devices: cfg.auth === 'proxy' ? [] : devices.list(), local: isLocal(req), current: auth.device?.id || null });
     }
     // Pairing codes are minted only from the Mac itself, so a leaked remote session cannot add devices.
+    if (cfg.auth === 'proxy' && (p === '/api/pair' || p.startsWith('/api/devices/'))) {
+      return send(res, 403, { error: `Devices are paired by the proxy${cfg.pairingUrl ? ` (${cfg.pairingUrl})` : ''}` });
+    }
     if (p === '/api/pair' && req.method === 'POST') {
       if (!isLocal(req)) return send(res, 403, { error: 'Pairing is only possible on the host machine' });
-      let link, code, expiresAt;
-      if (cfg.remote === 'iroh') {
-        const st = remote.state;
-        if (!st.endpointId) return send(res, 409, { error: 'iroh gateway is not online yet' });
-        // The UI is a static PWA (any host, e.g. GitHub Pages); it learns where to connect from the fragment,
-        // which never reaches a server.
-        const ui = cfg.uiUrl || `http://127.0.0.1:${PORT}`;
-        ({ code, expiresAt } = devices.pairingCode());
-        const frag = new URLSearchParams({ iroh: st.endpointId, ...(st.relayUrl ? { relay: st.relayUrl } : {}), pair: code });
-        link = `${ui}/#${frag}`;
-        syncIrohAccess();
-        setTimeout(syncIrohAccess, 10 * 60 * 1000 + 1000);
-      } else {
-        const base = remote.state.url;
-        if (!base) return send(res, 409, { error: 'Remote access is not online' });
-        ({ code, expiresAt } = devices.pairingCode());
-        link = `${base}/pair#${code}`;
-      }
+      if (cfg.remote !== 'iroh') return send(res, 409, { error: 'Remote access is off (start with HERMES_UI_REMOTE=iroh)' });
+      const st = remote.state;
+      if (!st.endpointId) return send(res, 409, { error: 'iroh gateway is not online yet' });
+      // The UI is a static PWA (any host, e.g. GitHub Pages); it learns where to connect from the fragment,
+      // which never reaches a server.
+      const ui = cfg.uiUrl || `http://127.0.0.1:${PORT}${cfg.basePath}`;
+      const { code, expiresAt } = devices.pairingCode();
+      const frag = new URLSearchParams({ iroh: st.endpointId, ...(st.relayUrl ? { relay: st.relayUrl } : {}), pair: code });
+      const link = `${ui}/#${frag}`;
+      syncIrohAccess();
+      setTimeout(syncIrohAccess, 10 * 60 * 1000 + 1000);
       const svg = await QRCode.toString(link, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
       return send(res, 200, { link, svg, expiresAt });
     }
@@ -971,7 +1011,7 @@ const server = http.createServer(async (req, res) => {
       const a = paseo.agents.get(agentId);
       if (!a || !(a.pendingPermissions || []).some((x) => x.id === rid)) return send(res, 409, { error: t('promptGone') });
       if (!inbox.has(`perm:${rid}`)) observeAgent(agentId);
-      const who = auth.device?.name || auth.via;
+      const who = actor;
       console.log(`paseo permission ${rid} of agent ${agentId}: ${decision} by ${who}`);
       const result = await paseo.respondPermission(agentId, rid, decision, decision === 'deny' ? String(message || '').slice(0, 500) || undefined : undefined);
       inbox.resolve(`perm:${rid}`, { by: 'ui', decision, device: who });
@@ -982,8 +1022,8 @@ const server = http.createServer(async (req, res) => {
     // ---- web push ----
     if (p.startsWith('/api/push')) {
       if (!push) return send(res, 404, { error: 'push disabled (HERMES_UI_PUSH=off)' });
-      const deviceKey = auth.device?.id || auth.via;
-      const deviceName = auth.device?.name || 'Browser';
+      const deviceKey = auth.device?.id || (auth.user ? `proxy:${auth.user}` : auth.via);
+      const deviceName = auth.device?.name || auth.user || 'Browser';
       if (p === '/api/push' && req.method === 'GET') return send(res, 200, { publicKey: push.publicKey, subscriptions: push.forDevice(deviceKey) });
       const body = await readJson(req);
       if (p === '/api/push/subscribe' && req.method === 'POST') return send(res, 200, push.subscribe(deviceKey, deviceName, body.subscription, body.settings));
@@ -1193,8 +1233,8 @@ const server = http.createServer(async (req, res) => {
       lv.activity = pr.kind === 'approval' ? (choice === 'deny' ? t('denied') : t('approved')) : t('answered');
       lv.at = Date.now();
       recordRequest(id, pr); // in case it was never recorded (e.g. answered right after a restart)
-      inbox.resolve(`req:${promptId}`, { by: 'ui', device: auth.device?.name || auth.via, ...(pr.kind === 'approval' ? { choice } : { answer: clip(Array.isArray(answers) ? answers.join(', ') : answer ?? '', 200) }) });
-      console.log(`hermes ${pr.kind} ${promptId} in ${id}: ${pr.kind === 'approval' ? choice : 'answered'} by ${auth.device?.name || auth.via}`);
+      inbox.resolve(`req:${promptId}`, { by: 'ui', device: actor, ...(pr.kind === 'approval' ? { choice } : { answer: clip(Array.isArray(answers) ? answers.join(', ') : answer ?? '', 200) }) });
+      console.log(`hermes ${pr.kind} ${promptId} in ${id}: ${pr.kind === 'approval' ? choice : 'answered'} by ${actor}`);
       pushCard(id, true);
       pushInbox();
       return send(res, 200, { ok: true, result, session: cardById(id) });
@@ -1215,7 +1255,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Hermes UI API on http://${HOST}:${PORT}/api${cfg.ui ? ` · UI on http://${HOST}:${PORT}/` : ' (headless)'} · token: HERMES_UI_TOKEN in ${cfg.envFile}`);
+  const where = `http://${HOST.includes(':') ? `[${HOST}]` : HOST}:${PORT}${cfg.basePath}`;
+  const auth = cfg.auth === 'proxy' ? 'auth: proxy (X-Agentbox-User + X-Agentbox-Proxy-Secret)' : `token: HERMES_UI_TOKEN in ${cfg.envFile}`;
+  console.log(`Hermes UI API on ${where}/api${cfg.ui ? ` · UI on ${where}/` : ' (headless)'} · ${auth}`);
   gateway.connect();
   syncIrohAccess();
   remote.start();

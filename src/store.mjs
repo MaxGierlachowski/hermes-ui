@@ -1,6 +1,7 @@
 // Read-only view of Hermes' session store (~/.hermes/state.db, SQLite WAL).
 // Writes never go through here: new turns go through the gateway WebSocket (see hermes-ws.mjs).
 
+import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 const SESSION_COLS = `s.id, s.source, s.created_source, s.title, s.started_at, s.ended_at, s.end_reason,
@@ -10,12 +11,26 @@ const SESSION_COLS = `s.id, s.source, s.created_source, s.title, s.started_at, s
 export class Store {
   constructor(path) {
     this.path = path;
-    this.db = new DatabaseSync(path, { readOnly: true });
-    this.db.exec('PRAGMA query_only = 1; PRAGMA busy_timeout = 3000;');
+    this.handle = null;
+    this.warned = false;
+  }
+
+  // Opened on first use: on a fresh install Hermes may create state.db only after we started.
+  // Until it exists every query returns an empty result (the board is empty, nothing crashes).
+  get db() {
+    if (this.handle) return this.handle;
+    if (!fs.existsSync(this.path)) {
+      if (!this.warned) { console.log(`Hermes state not found yet: ${this.path} (the board stays empty until Hermes creates it)`); this.warned = true; }
+      return null;
+    }
+    this.handle = new DatabaseSync(this.path, { readOnly: true });
+    this.handle.exec('PRAGMA query_only = 1; PRAGMA busy_timeout = 3000;');
+    return this.handle;
   }
 
   // One row per session plus the facts the board needs: first user prompt, last message, running turn.
   listSessions({ sinceTs, sources, ids = [] }) {
+    if (!this.db) return [];
     const where = ['s.hidden = 0', 's.archived = 0', 's.parent_session_id IS NULL'];
     const params = [];
     const idFilter = ids.length ? ` OR s.id IN (${ids.map(() => '?').join(',')})` : '';
@@ -45,6 +60,7 @@ export class Store {
   }
 
   getSession(id) {
+    if (!this.db) return undefined;
     return this.db.prepare(`
       SELECT ${SESSION_COLS},
         (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id LIMIT 1) AS first_prompt,
@@ -63,6 +79,7 @@ export class Store {
   // Only the live transcript: active = 0 rows were taken back (/undo, refused turns) or replaced
   // (a drained busy-queue row gets re-placed at the end); Hermes' own clients hide them too.
   messages(id) {
+    if (!this.db) return [];
     return this.db.prepare(`
       SELECT id, role, content, tool_calls, tool_name, tool_call_id, timestamp, display_kind, display_metadata
       FROM messages WHERE session_id = ? AND role IN ('user','assistant','tool') AND compacted = 0 AND active = 1
@@ -72,6 +89,7 @@ export class Store {
   // Hermes' durable FIFO per session (gateway-owned sessions): a prompt sent while a turn runs waits
   // here as status 'queued' and is written to messages only when its own turn starts.
   admissions(id, limit = 40) {
+    if (!this.db) return [];
     return this.db.prepare(`
       SELECT seq, admission_id, status, outcome, json_extract(payload_json, '$.text') AS text
       FROM session_admissions WHERE target_session_id = ? ORDER BY seq DESC LIMIT ?`).all(id, limit).reverse();
@@ -79,6 +97,7 @@ export class Store {
 
   // User rows after a message id, for matching messages the board sent (see outbox.mjs).
   userRowsSince(id, sinceId) {
+    if (!this.db) return [];
     return this.db.prepare(`
       SELECT id, content, display_kind, display_metadata, active FROM messages
       WHERE session_id = ? AND role = 'user' AND id > ? ORDER BY id`).all(id, sinceId);
@@ -86,6 +105,7 @@ export class Store {
 
   // Cheap change detector for the poll loop.
   watermark() {
+    if (!this.db) return 'none';
     const r = this.db.prepare(`SELECT
       (SELECT max(id) FROM messages) AS msg,
       (SELECT max(COALESCE(last_activity_at, started_at)) FROM sessions) AS act,
@@ -98,6 +118,7 @@ export class Store {
 
   // Sessions touched since a message id / activity timestamp, for incremental pushes.
   changedSince(msgId, actTs) {
+    if (!this.db) return [];
     return this.db.prepare(`
       SELECT DISTINCT s.id FROM sessions s
       WHERE COALESCE(s.last_activity_at, s.started_at) > ?
@@ -109,6 +130,7 @@ export class Store {
   // Messages that tie a session to Paseo agents: create_agent results (carry the new id) and
   // assistant tool calls to paseo_* tools (carry agent_id in their arguments).
   paseoRefs(sinceId) {
+    if (!this.db) return [];
     return this.db.prepare(`
       SELECT id, session_id, role, tool_name, content, tool_calls, timestamp FROM messages
       WHERE id > ? AND ((role = 'tool' AND tool_name = 'mcp__paseo__paseo_create_agent')
@@ -120,6 +142,7 @@ export class Store {
   // Hermes), plus a title match. Only user and assistant text; tool output and tool calls are left out.
   // Returns the best hit per session, ranked by bm25; snippets mark hits with \u0002 … \u0003.
   search(query, { includeArchived = false, limit = 30 } = {}) {
+    if (!this.db) return { title: [], content: [] };
     const tokens = String(query || '').normalize('NFC').split(/\s+/).map((t) => t.replace(/["*]/g, '')).filter(Boolean).slice(0, 8);
     if (!tokens.length) return { title: [], content: [] };
     const visible = `s.hidden = 0 AND s.parent_session_id IS NULL${includeArchived ? '' : ' AND s.archived = 0'}`;
@@ -160,6 +183,7 @@ export class Store {
   }
 
   maxIds() {
+    if (!this.db) return { msg: 0, act: 0 };
     return this.db.prepare(`SELECT (SELECT COALESCE(max(id),0) FROM messages) AS msg,
       (SELECT COALESCE(max(COALESCE(last_activity_at, started_at)),0) FROM sessions) AS act`).get();
   }
