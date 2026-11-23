@@ -5,6 +5,16 @@ All notable changes. The backend + web UI and the app share one repository; app 
 
 ## Unreleased – universal spike
 
+### Agent cards stay attached to the right chat
+- Paseo agents link to a chat by label too: `hermes_session_id`, `hermes_chat_id` or `origin_ref`
+  with a Hermes session id (contract in docs/features.md, "Linking agents to chats").
+- Successors: an agent with `predecessor=<id or prefix>` inherits its predecessor's chats
+  (recursively, archived predecessors included), so a restart after a usage limit keeps the card in
+  Doing. The agent list shows "successor of …".
+- Links found in child sessions (`parent_session_id`) count for the root card.
+- Agent list: *Attach agent…* and *Detach*, stored in `board.json`.
+- Idle agents waiting on their own background tasks: not detectable through Paseo 0.15; not guessed.
+
 ### App: Summary pill visible on phones, even tab padding (app 0.5.3)
 - Fixed: on Android (and iOS with a home indicator) the Summary pill was hidden behind the composer;
   only its top edge showed. It hung out of the composer box with `bottom: '100%'`, and on native a

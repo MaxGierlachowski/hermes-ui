@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ChevronDown, ChevronRight, ExternalLink, Eye, Lock, Wrench } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, ExternalLink, Eye, Link2, Lock, Plus, Unlink, Wrench } from 'lucide-react'
+import { toast } from 'sonner'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { clock } from '@/lib/format'
@@ -12,6 +14,8 @@ import { t } from '@/lib/i18n'
 import { MediaImage } from '@/components/common/Media'
 
 const REL_LABEL = { created: t('gestartet'), steers: t('gesteuert'), watches: t('beobachtet') } as const
+const VIA_LABEL = { label: t('per Label verknüpft'), manual: t('von Hand angehängt'), successor: null } as const
+type Candidate = { id: string; title: string | null; state: PaseoAgent['state']; account: string | null; cwd: string | null }
 
 /**
  * "Paseo-Agents" tab of a session: list of linked agents, click opens a read-only transcript.
@@ -40,6 +44,12 @@ export function PaseoPanel({ sessionId, version, open, onOpen, onBack, backLabel
   }, [sessionId])
   // `version` changes whenever the card's agent states change (pushed live), so the list follows.
   useEffect(() => { load() }, [load, version])
+  const link = useCallback(async (agentId: string, attach: boolean) => {
+    try {
+      const r = await api<{ agents: PaseoAgent[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/agents${attach ? '' : `/${agentId}`}`, attach ? { method: 'POST', json: { agentId } } : { method: 'DELETE' })
+      setAgents(r.agents)
+    } catch (e) { toast.error(attach ? t('Agent konnte nicht angehängt werden') : t('Agent konnte nicht gelöst werden'), { description: e instanceof Error ? e.message : String(e) }) }
+  }, [sessionId])
 
   if (open) return <Transcript agentId={open} onBack={onBack} backLabel={backLabel} />
   if (!agents) return <div className="flex justify-center py-8"><Loader variant="dots" /></div>
@@ -50,7 +60,7 @@ export function PaseoPanel({ sessionId, version, open, onOpen, onBack, backLabel
     <div className="flex flex-col gap-3 p-4">
       {!connected && agents.some((a) => a.provider !== 'hermes') && <p className="text-xs text-amber-600">{t('Paseo-Daemon nicht erreichbar – Status kann veraltet sein.')}</p>}
       {!agents.length && <p className="py-6 text-center text-sm text-muted-foreground">{t('Diese Session hat keine Agents gestartet oder gesteuert.')}</p>}
-      {active.map((a) => <AgentRow key={a.id} a={a} onOpen={() => onOpen(a.id)} />)}
+      {active.map((a) => <AgentRow key={a.id} a={a} onOpen={() => onOpen(a.id)} onDetach={() => link(a.id, false)} />)}
       {archived.length > 0 && (
         <Collapsible open={showArchived} onOpenChange={setShowArchived}>
           <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
@@ -58,23 +68,67 @@ export function PaseoPanel({ sessionId, version, open, onOpen, onBack, backLabel
             {archived.length} archiviert
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 flex flex-col gap-2 opacity-60">
-            {archived.map((a) => <AgentRow key={a.id} a={a} onOpen={() => onOpen(a.id)} />)}
+            {archived.map((a) => <AgentRow key={a.id} a={a} onOpen={() => onOpen(a.id)} onDetach={() => link(a.id, false)} />)}
           </CollapsibleContent>
         </Collapsible>
       )}
+      {connected && <AttachAgent linked={agents} onPick={(id) => link(id, true)} />}
       <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><Lock className="size-3" />{t('Nur lesen – Agents werden von Hermes gesteuert.')}{source && <span className="ml-auto font-mono opacity-70">{source}</span>}</p>
     </div>
   )
 }
 
-function AgentRow({ a, onOpen }: { a: PaseoAgent; onOpen: () => void }) {
+/** "Attach agent…": running and idle Paseo agents not linked yet, for agents started outside any chat. */
+function AttachAgent({ linked, onPick }: { linked: PaseoAgent[]; onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [list, setList] = useState<Candidate[] | null>(null)
+  useEffect(() => {
+    if (!open) return
+    api<{ agents: Candidate[] }>('/api/paseo/agents').then((r) => setList(r.agents)).catch(() => setList([]))
+  }, [open])
+  const have = new Set(linked.map((a) => a.id))
+  const options = (list || []).filter((a) => !have.has(a.id))
+  return (
+    <Popover open={open} onOpenChange={(o) => { if (o) setList(null); setOpen(o) }}>
+      <PopoverTrigger className="touch-hitbox inline-flex items-center gap-1.5 self-start text-xs text-muted-foreground hover:text-foreground touch:h-10 touch:text-[13px]"><Plus className="size-3.5" />{t('Agent anhängen…')}</PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-1">
+        {!list && <div className="flex justify-center py-4"><Loader variant="dots" /></div>}
+        {list && !options.length && <p className="px-2 py-3 text-center text-xs text-muted-foreground">{t('Keine laufenden oder wartenden Agents.')}</p>}
+        <div className="flex max-h-72 flex-col overflow-auto">
+          {options.map((a) => {
+            const st = AGENT_STATE[a.state] || AGENT_STATE.unknown
+            return (
+              <button key={a.id} onClick={() => { setOpen(false); onPick(a.id) }} className="flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-muted touch:py-2.5">
+                <span className="truncate text-sm">{a.title || a.id.slice(0, 8)}</span>
+                <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className={cn('inline-flex items-center gap-1', st.text)}><AgentStateDot state={a.state} />{st.label}</span>
+                  <span className="font-mono">{a.id.slice(0, 8)}</span>
+                  {a.account && <span>{a.account}</span>}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function AgentRow({ a, onOpen, onDetach }: { a: PaseoAgent; onOpen: () => void; onDetach: () => void }) {
   const st = AGENT_STATE[a.state] || AGENT_STATE.unknown
   const match = agentMatchNote(a.match)
+  const via = a.via ? VIA_LABEL[a.via] : null
   return (
-    <button onClick={onOpen} className="group flex w-full flex-col gap-1.5 rounded-lg border bg-card p-3 text-left transition-colors hover:border-foreground/20">
+    <div className="group relative">
+    {a.provider !== 'hermes' && (
+      <button onClick={onDetach} title={t('Agent von dieser Karte lösen')} aria-label={t('Lösen')} className="touch-hitbox absolute right-8 top-2.5 z-10 inline-flex items-center rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100">
+        <Unlink className="size-3.5" />
+      </button>
+    )}
+    <button onClick={onOpen} className="flex w-full flex-col gap-1.5 rounded-lg border bg-card p-3 text-left transition-colors hover:border-foreground/20">
       <div className="flex items-start gap-2">
         <AgentIcon a={a} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1 text-sm font-medium leading-snug">{a.title || a.id}</div>
+        <div className={cn('min-w-0 flex-1 text-sm font-medium leading-snug', a.provider !== 'hermes' && 'pr-6')}>{a.title || a.id}</div>
         <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 touch:opacity-100" />
       </div>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-6 text-xs text-muted-foreground">
@@ -94,7 +148,10 @@ function AgentRow({ a, onOpen }: { a: PaseoAgent; onOpen: () => void }) {
       {a.lastError && <div className="ml-6 text-xs text-red-600 dark:text-red-400">{a.lastError}</div>}
       {a.goal && a.goal !== a.title && <div className="ml-6 line-clamp-2 text-xs text-muted-foreground/80">Ziel: {a.goal}</div>}
       {match && <div className="ml-6 text-[11px] italic text-muted-foreground">{match}</div>}
+      {a.successorOf && <div className="ml-6 flex items-center gap-1 text-[11px] text-muted-foreground"><Link2 className="size-3" />{t('Nachfolger von {title}', { title: a.predecessorTitle || a.successorOf.slice(0, 8) })}</div>}
+      {via && <div className="ml-6 text-[11px] italic text-muted-foreground">{via}</div>}
     </button>
+    </div>
   )
 }
 

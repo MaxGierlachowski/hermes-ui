@@ -373,4 +373,14 @@ export const EN: Record<string, string> = {
   // Image viewer
   'Bild konnte nicht geladen werden': 'The image could not be loaded',
   'Bild öffnen': 'Open image',
+  // Linking agents to chats
+  'Nachfolger von {title}': 'Successor of {title}',
+  'per Label verknüpft': 'linked by label',
+  'von Hand angehängt': 'attached by hand',
+  'Agent anhängen…': 'Attach agent…',
+  'Lösen': 'Detach',
+  'Agent von dieser Karte lösen': 'Detach this agent from the card',
+  'Keine laufenden oder wartenden Agents.': 'No running or idle agents.',
+  'Agent konnte nicht angehängt werden': 'Could not attach the agent',
+  'Agent konnte nicht gelöst werden': 'Could not detach the agent',
 }

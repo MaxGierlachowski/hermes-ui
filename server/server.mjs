@@ -29,6 +29,7 @@ import { callsOf, paseoItem, paseoTool } from './src/paseo-calls.mjs';
 import { linkRel, mergeLink, outputIds, paseoTerminal, REL_RANK } from './src/paseo-cli.mjs';
 import { HermesAgents } from './src/hermes-agents.mjs';
 import { agentColumn, agentsBusy, sortAgents } from './src/agent-column.mjs';
+import { extraLinks, mergeCardLinks } from './src/agent-links.mjs';
 import QRCode from 'qrcode';
 
 const cfg = loadConfig(process.argv.slice(2));
@@ -161,7 +162,18 @@ const agentSessions = new Map(); // agentRef -> Set<sessionId>
 const pendingCreates = new Map(); // tool_call_id -> { sessionId, named, ts }: terminal calls whose output may name a new agent
 let paseoScanned = 0;
 const UUID = /\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/;
+const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// Lineage: links are kept under the root session (parent_session_id chain), the one the board shows.
+const roots = new Map(); // sessionId -> root id (known sessions only; parents never change)
+function rootOf(id) {
+  if (roots.has(id)) return roots.get(id);
+  const r = store.rootOf(id);
+  if (r) roots.set(id, r);
+  return r || id;
+}
+const knownSession = (id) => roots.has(id) || (rootOf(id), roots.has(id));
 function linkAgent(sessionId, ref, rel, at, opts) {
+  sessionId = rootOf(sessionId);
   if (!ref) return;
   const m = sessionAgents.get(sessionId) || new Map();
   m.set(ref, mergeLink(m.get(ref), rel, at, opts));
@@ -175,7 +187,7 @@ function scanPaseoRefs() {
     paseoScanned = Math.max(paseoScanned, r.id);
     if (r.role === 'tool') {
       const m = String(r.content || '').match(/"id"\s*:\s*"([0-9a-f-]{36})"/) || String(r.content || '').match(UUID);
-      if (m) { linkAgent(r.session_id, m[1], 'created', r.timestamp); touched.add(r.session_id); }
+      if (m) { linkAgent(r.session_id, m[1], 'created', r.timestamp); touched.add(rootOf(r.session_id)); }
       continue;
     }
     // Direct calls and calls through Hermes' tool_call wrapper alike.
@@ -184,7 +196,7 @@ function scanPaseoRefs() {
         // CLI refs count only when the daemon knows them (strict); an id in the output only when that
         // agent was created during the call (window, checked in paseoFor).
         const cli = paseoTerminal(args.command);
-        for (const { ref, rel } of cli.refs) { linkAgent(r.session_id, ref, rel, r.timestamp, { strict: true }); touched.add(r.session_id); }
+        for (const { ref, rel } of cli.refs) { linkAgent(r.session_id, ref, rel, r.timestamp, { strict: true }); touched.add(rootOf(r.session_id)); }
         if (cli.creates) pendingCreates.set(callId, { sessionId: r.session_id, named: cli.named, sure: cli.sure, ts: r.timestamp });
         continue;
       }
@@ -193,7 +205,7 @@ function scanPaseoRefs() {
       if (!ref) continue;
       const rel = /send_message|respond_permission|archive_agent/.test(name) ? 'steers' : 'watches';
       linkAgent(r.session_id, ref, rel, r.timestamp);
-      touched.add(r.session_id);
+      touched.add(rootOf(r.session_id));
     }
   }
   const now = Date.now() / 1000;
@@ -204,27 +216,68 @@ function scanPaseoRefs() {
     const ids = outputIds(res.content, p.named);
     for (const id of ids) {
       linkAgent(p.sessionId, id, 'created', p.ts, { strict: true, window: [p.ts - 10, res.timestamp + 10], single: p.sure && ids.length === 1 });
-      touched.add(p.sessionId);
+      touched.add(rootOf(p.sessionId));
     }
   }
+  if (touched.size) linksDirty = true;
   return touched;
 }
+
+// Links beyond the transcript (src/agent-links.mjs): agent labels naming a session, successors
+// (labels.predecessor) inheriting their predecessor's chats, agents attached by hand on a card.
+let links = { bySession: new Map(), predecessors: new Map(), missing: new Set() };
+let linksDirty = true;
+const agentRoots = new Map(); // agentId -> Set<root session id> (from `links`)
+const labelSig = new Map(); // agentId -> labels as last seen (a change rebuilds the links)
+// Transcript links of one agent (for what a successor inherits).
+function directLinks(agentId) {
+  const out = [];
+  const createdAt = paseo.view(agentId).createdAt;
+  for (const [sid, refs] of sessionAgents) for (const [ref, link] of refs) {
+    if (ref !== agentId && !(ref.length >= 6 && agentId.startsWith(ref))) continue;
+    const rel = linkRel(link, createdAt);
+    if (rel) out.push({ sessionId: sid, rel });
+  }
+  return out;
+}
+function extraIndex() {
+  if (!linksDirty) return links;
+  linksDirty = false;
+  const knownIds = new Set();
+  for (const refs of sessionAgents.values()) for (const ref of refs.keys()) if (FULL_ID.test(ref)) knownIds.add(ref);
+  links = extraLinks({ agents: paseo.agents, direct: directLinks, manual: board.data.attached, isSession: knownSession, rootOf, knownIds });
+  agentRoots.clear();
+  for (const [sid, m] of links.bySession) for (const aid of m.keys()) {
+    if (!agentRoots.has(aid)) agentRoots.set(aid, new Set());
+    agentRoots.get(aid).add(sid);
+  }
+  // Archived predecessors are not in the live list: load them, their 'agent' event rebuilds the chain.
+  for (const id of links.missing) paseo.ensure(id);
+  return links;
+}
+const detachedFrom = (sessionId, agentId) => !!board.data.detached[sessionId]?.[agentId];
 // Agent refs may be short prefixes (like `paseo ls` prints); resolve against what the daemon knows.
 function paseoFor(sessionId) {
-  const refs = sessionAgents.get(sessionId);
-  if (!refs) return [];
-  const out = new Map();
+  const refs = sessionAgents.get(sessionId) || new Map();
+  const extra = extraIndex().bySession.get(sessionId);
+  if (!refs.size && !extra) return [];
+  const transcript = new Map();
   for (const [ref, link] of refs) {
     const id = paseo.resolve(ref) || (!link.strict && UUID.test(ref) ? ref : null);
     if (!id) continue;
     if (!paseo.agents.has(id)) paseo.ensure(id); // archived ones load lazily and push a card update
     const rel = linkRel(link, paseo.view(id).createdAt);
     if (!rel) continue;
-    const at = link.at;
-    const prev = out.get(id);
-    if (!prev || REL_RANK[rel] > REL_RANK[prev.rel]) out.set(id, { ...paseo.view(id), rel, linkedAt: at });
+    const prev = transcript.get(id);
+    if (!prev || REL_RANK[rel] > REL_RANK[prev.rel]) transcript.set(id, { rel, linkedAt: link.at });
   }
-  return sortAgents([...out.values()]);
+  const list = [];
+  for (const [id, l] of mergeCardLinks(transcript, extra, board.data.detached[sessionId])) {
+    if (!paseo.agents.has(id)) paseo.ensure(id);
+    const pred = links.predecessors.get(id) || null;
+    list.push({ ...paseo.view(id), ...l, ...(pred ? { successorOf: pred, predecessorTitle: paseo.view(pred).title || pred.slice(0, 8) } : {}) });
+  }
+  return sortAgents(list);
 }
 // All agents of a chat: Paseo agents and Hermes' own children.
 const agentsFor = (sessionId) => sortAgents([...paseoFor(sessionId), ...hermesAgents.agentsFor(sessionId)]);
@@ -234,13 +287,23 @@ const childWatch = new Map(); // chat id -> signature of its children's states
 const sessionsOfAgent = (id) => {
   const sessions = new Set([...(agentSessions.get(id) || [])]);
   for (const [ref, set] of agentSessions) if (ref !== id && id.startsWith(ref)) set.forEach((s) => sessions.add(s));
+  extraIndex();
+  agentRoots.get(id)?.forEach((s) => sessions.add(s));
   return sessions;
 };
 paseo.on('agent', (id) => {
-  for (const sid of sessionsOfAgent(id)) pushCard(sid);
+  // New agents and changed labels can add or move links: rebuild, and update the cards before and after.
+  const before = new Set(agentRoots.get(id) || []);
+  const sig = JSON.stringify(paseo.agents.get(id)?.labels || null);
+  if (labelSig.get(id) !== sig) { labelSig.set(id, sig); linksDirty = true; }
+  for (const sid of new Set([...before, ...sessionsOfAgent(id)])) pushCard(sid);
   observeAgent(id);
 });
-paseo.on('status', (ok) => { console.log(`paseo ${ok ? `connected (${paseo.sourceLabel})` : 'disconnected'}`); for (const sid of sessionAgents.keys()) pushCard(sid); });
+paseo.on('status', (ok) => {
+  console.log(`paseo ${ok ? `connected (${paseo.sourceLabel})` : 'disconnected'}`);
+  linksDirty = true;
+  for (const sid of new Set([...sessionAgents.keys(), ...extraIndex().bySession.keys()])) pushCard(sid);
+});
 paseo.on('log', (m) => console.log(m));
 
 // Cron ticks that never ran an agent leave an empty session row behind; they are noise.
@@ -288,7 +351,7 @@ function toCard(row) {
     override: !!overridden,
     running: autoColumn === 'doing' || (!!paseoNote && column === 'doing'),
     paseoNote,
-    paseo: agents.map(({ id, title, state, status, rel, account, kind, archived, pendingPermissions, createdAt, updatedAt, provider, match }) => ({ id, title, state, status, rel, account, kind, archived, pendingCount: pendingPermissions?.length || 0, createdAt, updatedAt, ...(provider === 'hermes' ? { provider, match } : {}) })),
+    paseo: agents.map(({ id, title, state, status, rel, account, kind, archived, pendingPermissions, createdAt, updatedAt, provider, match, via, successorOf, predecessorTitle }) => ({ id, title, state, status, rel, account, kind, archived, pendingCount: pendingPermissions?.length || 0, createdAt, updatedAt, ...(provider === 'hermes' ? { provider, match } : {}), ...(via && via !== 'transcript' ? { via } : {}), ...(successorOf ? { successorOf, predecessorTitle } : {}) })),
     activity: clip(activity, 220),
     initialPrompt: clip(prompt, 400),
     createdAt: row.started_at,
@@ -718,8 +781,12 @@ function chatOfAgent(agentId) {
     for (const [ref, link] of sessionAgents.get(sid) || []) {
       if (ref !== agentId && !agentId.startsWith(ref)) continue;
       const rel = linkRel(link, paseo.view(agentId).createdAt);
-      if (rel && (!best || REL_RANK[rel] > REL_RANK[best.rel])) best = { sid, rel };
+      if (rel && !detachedFrom(sid, agentId) && (!best || REL_RANK[rel] > REL_RANK[best.rel])) best = { sid, rel };
     }
+  }
+  for (const sid of agentRoots.get(agentId) || []) {
+    const l = links.bySession.get(sid)?.get(agentId);
+    if (l && !detachedFrom(sid, agentId) && (!best || REL_RANK[l.rel] > REL_RANK[best.rel] || l.via === 'manual')) best = { sid, rel: l.rel };
   }
   return best?.sid || null;
 }
@@ -1234,6 +1301,30 @@ const server = http.createServer(async (req, res) => {
       const list = paseoFor(id);
       await Promise.all(list.filter((a) => !a.known).map((a) => paseo.ensure(a.id)));
       return send(res, 200, { connected: paseo.connected, source: paseo.sourceLabel, agents: agentsFor(id) });
+    }
+    // Manual links (board.json attached / detached): an agent started outside any chat, or one linked wrongly.
+    if (p === '/api/paseo/agents' && req.method === 'GET') {
+      const list = [...paseo.agents.keys()].map((id) => paseo.view(id)).filter((a) => a.known && !a.archived)
+        .sort((a, b) => Number(b.state === 'running') - Number(a.state === 'running') || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+      return send(res, 200, { connected: paseo.connected, agents: list.map(({ id, title, state, status, account, kind, cwd, updatedAt, createdAt }) => ({ id, title, state, status, account, kind, cwd, updatedAt, createdAt })) });
+    }
+    if ((m = p.match(/^\/api\/sessions\/([^/]+)\/agents(?:\/([0-9a-f-]{36}))?$/)) && (req.method === 'POST' || (m[2] && req.method === 'DELETE'))) {
+      const id = rootOf(decodeURIComponent(m[1]));
+      if (!store.getSession(id)) return send(res, 404, { error: 'not found' });
+      const agentId = req.method === 'POST' ? String((await readJson(req)).agentId || '').toLowerCase() : m[2];
+      if (!FULL_ID.test(agentId)) return send(res, 400, { error: 'agentId must be a full agent id' });
+      const attached = (board.data.attached[id] ||= {});
+      const detached = (board.data.detached[id] ||= {});
+      if (req.method === 'POST') { attached[agentId] = { at: Date.now() }; delete detached[agentId]; paseo.ensure(agentId); }
+      else { delete attached[agentId]; detached[agentId] = { at: Date.now() }; }
+      if (!Object.keys(attached).length) delete board.data.attached[id];
+      if (!Object.keys(detached).length) delete board.data.detached[id];
+      board.save();
+      linksDirty = true;
+      console.log(`agent ${agentId} ${req.method === 'POST' ? 'attached to' : 'detached from'} ${id} by ${auth.device?.name || auth.via}`);
+      const card = cardById(id);
+      if (card) { observeCard(card); broadcast('session', card); }
+      return send(res, 200, { session: card, agents: agentsFor(id) });
     }
     if ((m = p.match(/^\/api\/agents\/(hermes(?::|%3A)[^/]+)\/timeline$/i)) && req.method === 'GET') {
       const id = decodeURIComponent(m[1]);

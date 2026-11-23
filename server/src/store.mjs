@@ -212,6 +212,18 @@ export class Store {
       ORDER BY s.started_at LIMIT 50`).all(from, to);
   }
 
+  // Root of a session's lineage (parent_session_id: subagent rows, and continuations that Hermes writes
+  // as child sessions). The board only shows roots, so agent links found in a child count for its root.
+  // Null when the session is unknown.
+  rootOf(id) {
+    const r = this.db.prepare(`
+      WITH RECURSIVE up(id, parent, depth) AS (
+        SELECT id, parent_session_id, 0 FROM sessions WHERE id = ?
+        UNION ALL SELECT s.id, s.parent_session_id, up.depth + 1 FROM sessions s JOIN up ON s.id = up.parent WHERE up.depth < 32)
+      SELECT id, parent FROM up ORDER BY depth DESC LIMIT 1`).get(id);
+    return r ? r.id : null;
+  }
+
   sessionBrief(id) {
     return this.db.prepare(`SELECT id, source, title, started_at, ended_at, end_reason, last_activity_at, message_count, model, parent_session_id
       FROM sessions WHERE id = ?`).get(id);

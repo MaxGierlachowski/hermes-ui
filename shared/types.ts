@@ -26,7 +26,10 @@ export type AgentState = 'running' | 'idle' | 'closed' | 'error' | 'needs-attent
 // (Hermes' own parent link) or 'prompt' / 'time' (terminal runs: a heuristic, shown as such).
 export type AgentProvider = 'paseo' | 'hermes'
 export type AgentMatch = 'id' | 'goal' | 'order' | 'prompt' | 'time' | null
-export type PaseoChip = { id: string; title: string | null; state: AgentState; status: string; rel: 'created' | 'steers' | 'watches'; account: string | null; kind: string | null; archived: boolean; pendingCount: number; createdAt?: string | null; updatedAt?: string | null; provider?: AgentProvider; match?: AgentMatch }
+// How a Paseo agent is tied to the chat besides its transcript (server/src/agent-links.mjs): a label naming the
+// session, the successor of a linked agent (labels.predecessor), or attached by hand. Absent = transcript.
+export type AgentVia = 'label' | 'successor' | 'manual'
+export type PaseoChip = { id: string; title: string | null; state: AgentState; status: string; rel: 'created' | 'steers' | 'watches'; account: string | null; kind: string | null; archived: boolean; pendingCount: number; createdAt?: string | null; updatedAt?: string | null; provider?: AgentProvider; match?: AgentMatch; via?: AgentVia; successorOf?: string | null; predecessorTitle?: string | null }
 export type PaseoAgent = PaseoChip & {
   known: boolean
   pendingPermissions?: { kind: string; name: string; title: string | null }[]

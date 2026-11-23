@@ -16,6 +16,7 @@ import { relTime, t } from '@/lib/i18n'
 import { agentIcon, agentKindLabel, agentMatchNote } from '@/lib/agents'
 
 const REL: Record<string, string> = { created: 'gestartet', steers: 'gesteuert', watches: 'beobachtet' }
+const VIA = { label: 'per Label verknüpft', manual: 'von Hand angehängt' } as const
 
 function AgentRow({ a, onPress }: { a: PaseoAgent; onPress: () => void }) {
   const st = AGENT_STATE[a.state] || AGENT_STATE.unknown
@@ -30,6 +31,8 @@ function AgentRow({ a, onPress }: { a: PaseoAgent; onPress: () => void }) {
         </View>
         {!!a.goal && <Text className="text-xs text-muted-foreground" numberOfLines={2}>{t('Ziel')}: {a.goal}</Text>}
         {!!agentMatchNote(a.match) && <Text className="text-[11px] italic text-muted-foreground">{agentMatchNote(a.match)}</Text>}
+        {!!a.successorOf && <Text className="text-[11px] text-muted-foreground" numberOfLines={1}>{t('Nachfolger von {title}', { title: a.predecessorTitle || a.successorOf.slice(0, 8) })}</Text>}
+        {!!a.via && a.via !== 'successor' && <Text className="text-[11px] italic text-muted-foreground">{t(VIA[a.via])}</Text>}
       </View>
       <Icon as={ChevronRight} size={16} tone="muted-foreground" />
     </Pressable>

@@ -22,7 +22,7 @@ What the board, the thread panel and the inbox do, in detail. The mobile app: [a
   - Subagents are tied to the chat by Hermes' own ids (`parent_session_id`, subagent id). Terminal runs carry no parent id in Hermes; they are matched by prompt or start time and labelled "matched by prompt / start time (heuristic)".
   - State comes from Hermes' data: the child session ended, the delegation record, the exit code in Hermes' "process complete" notice, and whether the run's process is still alive. Details: [decisions/0013](decisions/0013-hermes-child-agents.md).
 - **Paseo agents (optional; read-only except answering permissions from the inbox):**
-  - The board finds a session's agents from the session's own `paseo_*` tool calls and shows them as chips with their live state.
+  - The board finds a session's agents from the session's own `paseo_*` tool calls and shows them as chips with their live state. Agent labels, successors and a manual attach add more: see [Linking agents to chats](#linking-agents-to-chats).
   - The live state comes from [paseo-mcp](https://github.com/MaxGierlachowski/paseo-mcp) events (≥ 0.4.0): a subscription to the `paseo://agents` resource, with no polling. A direct daemon connection is the fallback. When the daemon is reachable it also provides richer transcripts and the app deep link.
   - The "Paseo agents" tab lists them; a transcript view shows each one read-only, updating live while the agent runs.
   - A deep link (`paseo://h/<server>/agent/<id>`) opens the agent in the Paseo app.
@@ -42,6 +42,27 @@ What the board, the thread panel and the inbox do, in detail. The mobile app: [a
   - Board: column tabs, swipe sideways to switch columns, long-press a card to move it. Column choice, new chat, notifications and remote access open as bottom sheets; search is full screen.
   - Images (thread, attachments, Paseo transcripts) open full screen: pinch or double-tap to zoom the image only (the app itself never zooms), drag to pan, swipe down to close.
 - **Image viewer in the app (phone, web, desktop):** the image is shown at its own size (at most the window) on a dark backdrop, with a spinner while it loads; pinch or double-tap zooms, the X, Esc / back or a click beside the image closes it. An image that does not load shows "The image could not be loaded" with its file path (never the access token) and, for plain web URLs, a link to open it.
+
+## Linking agents to chats
+
+A card counts every Paseo agent that belongs to its chat's work: while one runs, the card stays in Doing; while one waits for a permission, the card waits. An agent belongs to a chat in four ways, all at once:
+
+1. **Transcript (automatic):** the chat itself created, steered or watched the agent: `paseo_*` tool calls through paseo-mcp, or the `paseo` CLI and scripts in the terminal tool.
+2. **Labels (set by whoever starts the agent):** an agent label whose value is a Hermes session id links the agent to that chat as *started* (it keeps the card in Doing). Any of these keys works:
+
+   | Label | Value |
+   |---|---|
+   | `hermes_session_id` | the Hermes session id (e.g. `20261123_101500_1a2b3c4d`) |
+   | `hermes_chat_id` | the same, for orchestrators that call it a chat |
+   | `origin_ref` | the same, for orchestrators that already set an origin reference |
+
+   Only values that are a session in Hermes' `state.db` count; anything else (a Slack thread id, a ticket number) is ignored. Set the label when creating the agent, for example `paseo run --label hermes_session_id=<id> …`, or `labels: { hermes_session_id: '<id>' }` in a daemon client's `agents.create`. Skills, crons and webhooks that start work for an existing chat should always set it.
+3. **Successors:** an agent with the label `predecessor=<agent id>` (the full id or a unique prefix of at least 6 hex characters, like `paseo ls` prints) inherits every chat link of that predecessor, with the predecessor's relation (*started* / *steered* / *watched*). Chains of restarts work (the predecessor's own `predecessor` is followed, cycles end the chain), and an archived predecessor still passes its links on. Use it when an agent is restarted on another account after a usage limit, or continued by another Hermes run. The agent list shows "successor of …" under the new agent; the archived one sits in the archived group.
+4. **By hand:** the agent list of a card has *Attach agent…* (running and idle agents of the daemon) and, on every Paseo agent, *Detach* (the unlink icon). Both are stored in `<data-dir>/board.json` (`attached`, `detached`) like manual column moves. A detached agent stays off that card whatever its labels or the transcript say, until it is attached again. Nothing is sent to Paseo or the agent.
+
+**Continued chats:** links to a child session (`parent_session_id`: a delegate_task subagent, or a chat Hermes continues in a new session row) count for the root session, the one the board shows as a card. A label may name either.
+
+**Waiting on background work:** an agent that ended its turn while its own background tasks still run (a `run_in_background` shell, a pipeline watcher) is reported as idle / finished by Paseo, and the card follows that. Paseo's protocol has no field for running background tasks yet; the board does not guess from the agent's text.
 
 ## Push notifications
 
