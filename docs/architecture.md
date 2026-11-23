@@ -129,8 +129,9 @@ started or steers. It is read-only, with one exception ([ADR 0002](decisions/000
   steer, `paseo logs|inspect|ls|wait` watch, ids also from `P=…/paseo; ID=<uuid>; $P send $ID` in the
   same command. A terminal command that may create an agent (`paseo run`, a client calling
   `agents.create`, paseo-mcp over stdio, a script about Paseo) links an id from its output as `created`,
-  but only when the agent was created during the call. Terminal links count only for ids the Paseo
-  daemon knows.
+  but only when the agent was created during the call (paseo-mcp reports no creation time: then only
+  the one new id in the output of a command that names no other agent). Terminal links count only for
+  ids the Paseo daemon knows.
 - **Live state** comes from paseo-mcp (≥ 0.4.0) over stdio or HTTP: a subscription to the
   `paseo://agents` resource, so there is no polling. The stdio client runs with `PASEO_MCP_READONLY=1`.
 - **Fallback:** a direct, read-only connection to the Paseo daemon (`@getpaseo/client`). When the

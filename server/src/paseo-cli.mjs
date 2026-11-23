@@ -20,7 +20,6 @@ const REL = {
 };
 const CREATES = new Set(['run', 'import']);
 
-const FULL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Full id or a prefix like `paseo ls` prints (resolved against the daemon later).
 const REF = /^[0-9a-f]{6,8}(?:-[0-9a-f-]{0,28})?$/i;
 const UUID_G = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
@@ -85,7 +84,8 @@ export function paseoCliCalls(cmd) {
 /**
  * What a terminal command does with Paseo agents: the refs it names (steers / watches), and whether it
  * may have created one whose id is then in the output (`paseo run`, a client calling agents.create,
- * paseo-mcp's create tool, or any script about Paseo that is not just `paseo ls`).
+ * paseo-mcp's create tool, or any script about Paseo that is not just `paseo ls`). sure: it creates
+ * explicitly or names no agent of its own, so a single new id in its output is the one it created.
  */
 export function paseoTerminal(cmd) {
   const s = String(cmd || '');
@@ -94,7 +94,8 @@ export function paseoTerminal(cmd) {
   const onlyReads = calls.length > 0 && calls.every((c) => c.rel === 'watches') && !/agents\.create|create_agent/.test(s)
     && !/paseo[\w./-]*\.(?:m?js|py|sh)\b/i.test(s);
   const creates = calls.some((c) => c.creates) || (!onlyReads && /paseo|agents\.create|create_agent/i.test(s));
-  return { refs, creates, named: [...new Set([...refs.map((r) => r.ref), ...(s.match(UUID_G) || []).map((u) => u.toLowerCase())])] };
+  const sure = calls.some((c) => c.creates) || /agents\.create|create_agent/.test(s) || !refs.length;
+  return { refs, creates, sure, named: [...new Set([...refs.map((r) => r.ref), ...(s.match(UUID_G) || []).map((u) => u.toLowerCase())])] };
 }
 
 /**
@@ -109,8 +110,6 @@ export function outputIds(content, named = []) {
   return ids.filter((id) => !named.some((n) => id.startsWith(n))).slice(0, 20);
 }
 
-export const isFullId = (ref) => FULL_UUID.test(String(ref || ''));
-
 // ---------- links (sessionId -> ref -> entry) ----------
 
 export const REL_RANK = { created: 3, steers: 2, watches: 1 };
@@ -119,24 +118,27 @@ export const REL_RANK = { created: 3, steers: 2, watches: 1 };
  * One chat -> agent link, merged with what was known before. strict: only an id the daemon resolves
  * counts (CLI and output refs). window [from, to]: a 'created' read from an output holds only if the
  * agent was created in it; else the link falls back to orRel (what the chat did with it before).
- * @param {{ rel: string, at: number, strict: boolean, window: number[]|null, orRel: string|null }|undefined} prev
+ * single: when the creation time is unknown (paseo-mcp does not report one), the 'created' holds only
+ * if the id was the one new id in the output of a command that creates or names no agent itself.
+ * @param {{ rel: string, at: number, strict: boolean, window: number[]|null, single?: boolean, orRel: string|null }|undefined} prev
  */
-export function mergeLink(prev, rel, at, { strict = false, window = null } = {}) {
-  if (!prev) return { rel, at, strict, window, orRel: null };
+export function mergeLink(prev, rel, at, { strict = false, window = null, single = false } = {}) {
+  if (!prev) return { rel, at, strict, window, single: !!window && single, orRel: null };
   const s = prev.strict && strict;
   if (REL_RANK[rel] > REL_RANK[prev.rel]) {
     const base = prev.window ? prev.orRel : prev.rel;
-    return { rel, at: prev.at, strict: s, window, orRel: window ? base : null };
+    return { rel, at: prev.at, strict: s, window, single: !!window && single, orRel: window ? base : null };
   }
   if (!prev.window) return { ...prev, strict: s };
-  if (rel === prev.rel) return window ? { ...prev, strict: s } : { ...prev, strict: s, window: null, orRel: null }; // confirmed by a hard link
+  if (rel === prev.rel) return window ? { ...prev, strict: s, single: prev.single || single } : { ...prev, strict: s, window: null, single: false, orRel: null }; // confirmed by a hard link
   const orRel = !prev.orRel || REL_RANK[rel] > REL_RANK[prev.orRel] ? rel : prev.orRel;
   return { ...prev, strict: s, orRel };
 }
 
-/** The rel a link stands for, given the agent's createdAt (ISO); null = not linked after all. */
+/** The rel a link stands for, given the agent's createdAt (ISO, may be unknown); null = not linked after all. */
 export function linkRel(entry, createdAt) {
   if (!entry.window) return entry.rel;
   const c = Date.parse(createdAt || '') / 1000;
-  return c >= entry.window[0] && c <= entry.window[1] ? entry.rel : entry.orRel || null;
+  const holds = Number.isFinite(c) ? c >= entry.window[0] && c <= entry.window[1] : !!entry.single;
+  return holds ? entry.rel : entry.orRel || null;
 }

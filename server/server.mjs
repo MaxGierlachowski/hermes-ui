@@ -185,7 +185,7 @@ function scanPaseoRefs() {
         // agent was created during the call (window, checked in paseoFor).
         const cli = paseoTerminal(args.command);
         for (const { ref, rel } of cli.refs) { linkAgent(r.session_id, ref, rel, r.timestamp, { strict: true }); touched.add(r.session_id); }
-        if (cli.creates) pendingCreates.set(callId, { sessionId: r.session_id, named: cli.named, ts: r.timestamp });
+        if (cli.creates) pendingCreates.set(callId, { sessionId: r.session_id, named: cli.named, sure: cli.sure, ts: r.timestamp });
         continue;
       }
       if (!paseoTool(name)) continue;
@@ -201,8 +201,9 @@ function scanPaseoRefs() {
     const res = store.toolResult(p.sessionId, callId);
     if (!res) { if (now - p.ts > 6 * 3600) pendingCreates.delete(callId); continue; }
     pendingCreates.delete(callId);
-    for (const id of outputIds(res.content, p.named)) {
-      linkAgent(p.sessionId, id, 'created', p.ts, { strict: true, window: [p.ts - 10, res.timestamp + 10] });
+    const ids = outputIds(res.content, p.named);
+    for (const id of ids) {
+      linkAgent(p.sessionId, id, 'created', p.ts, { strict: true, window: [p.ts - 10, res.timestamp + 10], single: p.sure && ids.length === 1 });
       touched.add(p.sessionId);
     }
   }

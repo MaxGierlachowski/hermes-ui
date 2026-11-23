@@ -62,7 +62,7 @@ test('output ids: from the {"output": …} JSON (paseo-mcp over stdio), minus id
 test('links: the strongest rel wins; strict only while every source was strict', () => {
   let l = mergeLink(undefined, 'watches', 10, { strict: true });
   l = mergeLink(l, 'steers', 20, { strict: true });
-  assert.deepEqual(l, { rel: 'steers', at: 10, strict: true, window: null, orRel: null });
+  assert.deepEqual(l, { rel: 'steers', at: 10, strict: true, window: null, single: false, orRel: null });
   l = mergeLink(l, 'watches', 30);
   assert.equal(l.rel, 'steers');
   assert.equal(l.strict, false);
@@ -80,4 +80,18 @@ test('links: "created" from an output holds only inside the window, else falls b
   assert.equal(linkRel(later, new Date(50 * 1000).toISOString()), 'watches');
   const confirmed = mergeLink(created, 'created', 160); // paseo_create_agent named it too
   assert.equal(linkRel(confirmed, null), 'created');
+});
+
+test('links without a creation time (paseo-mcp): "created" only for the one new id of a creating command', () => {
+  const win = { strict: true, window: [100, 140] };
+  assert.equal(linkRel(mergeLink(undefined, 'created', 100, { ...win, single: true }), null), 'created');
+  assert.equal(linkRel(mergeLink(undefined, 'created', 100, { ...win, single: false }), null), null);
+  // a later `paseo logs <id>` does not undo it; a creation time outside the window still does
+  const later = mergeLink(mergeLink(undefined, 'created', 100, { ...win, single: true }), 'watches', 150, { strict: true });
+  assert.equal(linkRel(later, null), 'created');
+  assert.equal(linkRel(later, new Date(50 * 1000).toISOString()), 'watches');
+  assert.equal(paseoTerminal('cd ~/scratch && python3 paseo_oneshot.py').sure, true);
+  assert.equal(paseoTerminal('node ~/tools/paseo-mcp/start_weekly_tmp.mjs "Weekly" weekly').sure, true);
+  assert.equal(paseoTerminal(`P=${BIN}; ID=${OLD}; $P send --no-wait $ID "x"; $P logs $ID`).sure, false);
+  assert.equal(paseoTerminal(`paseo send ${OLD} "x"; paseo run "new one"`).sure, true);
 });
