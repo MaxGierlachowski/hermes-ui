@@ -26,6 +26,7 @@ import { Push } from './src/push.mjs';
 import { parseUserMessage, previewOf } from './src/user-markers.mjs';
 import { Outbox, queuedRow } from './src/outbox.mjs';
 import { callsOf, paseoItem, paseoTool } from './src/paseo-calls.mjs';
+import { linkRel, mergeLink, outputIds, paseoTerminal, REL_RANK } from './src/paseo-cli.mjs';
 import { HermesAgents } from './src/hermes-agents.mjs';
 import { agentColumn, agentsBusy, sortAgents } from './src/agent-column.mjs';
 import QRCode from 'qrcode';
@@ -154,16 +155,16 @@ function sourceLabel(row) {
 // ---------- Paseo agents per session (derived from Hermes' own transcript) ----------
 // rel: created (session started the agent) > steers (sent it messages / answered permissions / archived it)
 //      > watches (only read it: get_agent, read_timeline, wait_for_agent).
-const REL_RANK = { created: 3, steers: 2, watches: 1 };
-const sessionAgents = new Map(); // sessionId -> Map<agentRef, { rel, at }>
+// Through paseo-mcp or through the terminal (paseo CLI, scripts that create an agent; src/paseo-cli.mjs).
+const sessionAgents = new Map(); // sessionId -> Map<agentRef, link from mergeLink()>
 const agentSessions = new Map(); // agentRef -> Set<sessionId>
+const pendingCreates = new Map(); // tool_call_id -> { sessionId, named, ts }: terminal calls whose output may name a new agent
 let paseoScanned = 0;
 const UUID = /\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/;
-function linkAgent(sessionId, ref, rel, at) {
+function linkAgent(sessionId, ref, rel, at, opts) {
   if (!ref) return;
   const m = sessionAgents.get(sessionId) || new Map();
-  const prev = m.get(ref);
-  if (!prev || REL_RANK[rel] > REL_RANK[prev.rel]) m.set(ref, { rel, at: prev?.at ?? at });
+  m.set(ref, mergeLink(m.get(ref), rel, at, opts));
   sessionAgents.set(sessionId, m);
   if (!agentSessions.has(ref)) agentSessions.set(ref, new Set());
   agentSessions.get(ref).add(sessionId);
@@ -178,13 +179,32 @@ function scanPaseoRefs() {
       continue;
     }
     // Direct calls and calls through Hermes' tool_call wrapper alike.
-    for (const { name, args } of [...callsOf(r.tool_calls).values()].flat()) {
+    for (const [callId, list] of callsOf(r.tool_calls)) for (const { name, args } of list) {
+      if (name === 'terminal') {
+        // CLI refs count only when the daemon knows them (strict); an id in the output only when that
+        // agent was created during the call (window, checked in paseoFor).
+        const cli = paseoTerminal(args.command);
+        for (const { ref, rel } of cli.refs) { linkAgent(r.session_id, ref, rel, r.timestamp, { strict: true }); touched.add(r.session_id); }
+        if (cli.creates) pendingCreates.set(callId, { sessionId: r.session_id, named: cli.named, sure: cli.sure, ts: r.timestamp });
+        continue;
+      }
       if (!paseoTool(name)) continue;
       const ref = String(args.agent_id || '').trim();
       if (!ref) continue;
       const rel = /send_message|respond_permission|archive_agent/.test(name) ? 'steers' : 'watches';
       linkAgent(r.session_id, ref, rel, r.timestamp);
       touched.add(r.session_id);
+    }
+  }
+  const now = Date.now() / 1000;
+  for (const [callId, p] of pendingCreates) {
+    const res = store.toolResult(p.sessionId, callId);
+    if (!res) { if (now - p.ts > 6 * 3600) pendingCreates.delete(callId); continue; }
+    pendingCreates.delete(callId);
+    const ids = outputIds(res.content, p.named);
+    for (const id of ids) {
+      linkAgent(p.sessionId, id, 'created', p.ts, { strict: true, window: [p.ts - 10, res.timestamp + 10], single: p.sure && ids.length === 1 });
+      touched.add(p.sessionId);
     }
   }
   return touched;
@@ -194,10 +214,13 @@ function paseoFor(sessionId) {
   const refs = sessionAgents.get(sessionId);
   if (!refs) return [];
   const out = new Map();
-  for (const [ref, { rel, at }] of refs) {
-    const id = paseo.resolve(ref) || (UUID.test(ref) ? ref : null);
+  for (const [ref, link] of refs) {
+    const id = paseo.resolve(ref) || (!link.strict && UUID.test(ref) ? ref : null);
     if (!id) continue;
     if (!paseo.agents.has(id)) paseo.ensure(id); // archived ones load lazily and push a card update
+    const rel = linkRel(link, paseo.view(id).createdAt);
+    if (!rel) continue;
+    const at = link.at;
     const prev = out.get(id);
     if (!prev || REL_RANK[rel] > REL_RANK[prev.rel]) out.set(id, { ...paseo.view(id), rel, linkedAt: at });
   }
@@ -692,9 +715,10 @@ const sessionTitle = (sid) => {
 function chatOfAgent(agentId) {
   let best = null;
   for (const sid of sessionsOfAgent(agentId)) {
-    for (const [ref, { rel }] of sessionAgents.get(sid) || []) {
+    for (const [ref, link] of sessionAgents.get(sid) || []) {
       if (ref !== agentId && !agentId.startsWith(ref)) continue;
-      if (!best || REL_RANK[rel] > REL_RANK[best.rel]) best = { sid, rel };
+      const rel = linkRel(link, paseo.view(agentId).createdAt);
+      if (rel && (!best || REL_RANK[rel] > REL_RANK[best.rel])) best = { sid, rel };
     }
   }
   return best?.sid || null;

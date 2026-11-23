@@ -11,6 +11,9 @@
 //   it is matched by start time right after the call and by its first prompt (match 'prompt' or
 //   'time', i.e. heuristic; see docs/decisions/0013-hermes-child-agents.md). The process id and pid
 //   come from the tool result, the exit code from Hermes' "process complete" notice.
+// - process: any other terminal command Hermes runs in the background (background: true, or a
+//   foreground call Hermes promoted to a tracked process). It has no session of its own: it runs from
+//   the tool result (session_id proc_…, pid) until the process_complete notice for that proc_… id.
 //
 // Everything here is pure (rows in, views out) so it can be tested without a database.
 
@@ -19,7 +22,7 @@ import { callsOf } from './paseo-calls.mjs';
 // ---------- shell command → hermes runs ----------
 
 // Tokens of a shell command, enough for `hermes … chat -q '…'`: quotes, escapes, $(…) kept as one
-// token, and the separators ; && || | & and redirections as their own tokens.
+// token, and the separators ; && || | & (a new line counts as ;) and redirections as their own tokens.
 export function shellTokens(cmd) {
   const s = String(cmd || '');
   const out = [];
@@ -46,12 +49,17 @@ export function shellTokens(cmd) {
       }
       cur = (cur ?? '') + v;
       i = j;
+    } else if (c === '\\' && s[i + 1] === '\n') {
+      i++; // line continuation
     } else if (c === '\\' && i + 1 < s.length) {
       cur = (cur ?? '') + s[++i];
     } else if (c === '$' && s[i + 1] === '(') {
       const e = subst(i);
       cur = (cur ?? '') + s.slice(i, e + 1);
       i = e;
+    } else if (c === '\n') {
+      push(); // a new line ends a command like ;
+      if (out.length && !SEPARATORS.has(out.at(-1))) out.push(';');
     } else if (/\s/.test(c)) {
       push();
     } else if (';&|<>'.includes(c)) {
@@ -153,7 +161,7 @@ export function childCalls(rows) {
       const text = String(r.content || '');
       const m = text.match(/(proc_[0-9a-zA-Z]+)[\s\S]{0,200}?exit code (-?\d+)/i);
       const p = m || text.match(/(proc_[0-9a-zA-Z]+)/);
-      if (p) procDone.set(p[1], { exitCode: m ? Number(m[2]) : null, ts: r.timestamp, killed: /killed|terminated|timed? ?out/i.test(text.slice(0, 300)) });
+      if (p) procDone.set(p[1], { exitCode: m ? Number(m[2]) : null, ts: r.timestamp, killed: /killed|terminated|timed? ?out/i.test(text.slice(0, 300)), text });
     }
   }
   for (const r of rows) {
@@ -169,6 +177,8 @@ export function childCalls(rows) {
           started = tasks.map((task) => ({ kind: 'subagent', goal: clipText(task?.goal || task?.task || '', 400) || null }));
         } else if (short === 'terminal') {
           started = hermesRuns(args.command).map((run) => ({ kind: 'terminal', command: clipText(args.command, 600), background: !!args.background, ...run }));
+          // Any other command: a candidate background process, kept below if it became one.
+          if (!started.length && args.command) started = [{ kind: 'process', command: clipText(args.command, 600), title: processTitle(args.command), background: !!args.background }];
         }
         const prev = byCall.get(callId) || [];
         const first = prev.length;
@@ -203,6 +213,18 @@ export function childCalls(rows) {
         // says nothing about the children; they are matched like those of a synchronous call.
       } else {
         c.procId = typeof body?.session_id === 'string' && body.session_id.startsWith('proc_') ? body.session_id : null;
+        if (c.kind === 'process') {
+          c.pid = Number.isInteger(body?.pid) ? body.pid : null;
+          c.promoted = !!body?.promoted_from_foreground;
+          if (c.procId && procDone.has(c.procId)) {
+            const d = procDone.get(c.procId);
+            c.exitCode = d.exitCode ?? 0;
+            c.doneTs = d.ts;
+            c.killed = d.killed;
+            c.notice = d.text;
+          }
+          continue;
+        }
         c.pid = Number.isInteger(body?.pid) ? body.pid : null;
         // A foreground run is over when its result is there; a background one when its notice arrives.
         if (!c.procId) c.exitCode = Number.isInteger(body?.exit_code) ? body.exit_code : (body?.error ? 1 : 0);
@@ -215,7 +237,26 @@ export function childCalls(rows) {
       }
     }
   }
-  return out;
+  // Foreground commands that ran to the end are no children; background ones without a result yet are.
+  return out.filter((c) => c.kind !== 'process' || c.procId || (c.background && c.resultTs == null));
+}
+
+/**
+ * Chip title of a background process: its first comment line, else the command, shortened, without
+ * leading `VAR=…;` / `cd …&&` and with path variables shown by name (`$P send …` -> `paseo send …`).
+ */
+export function processTitle(cmd) {
+  let s = String(cmd || '');
+  const comment = s.split('\n').map((l) => l.match(/^\s*#(?!!)\s*(.*\S)/)?.[1]).find(Boolean);
+  if (comment) return clipText(comment, 80);
+  const vars = new Map();
+  const lead = /^\s*(?:([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s;&]*)|cd\s+[^\s;&]+)\s*(?:;|&&|\n)\s*/;
+  for (let m = s.match(lead); m && m[0].length < s.length; m = s.match(lead)) {
+    if (m[1]) vars.set(m[1], m[2].replace(/^['"]|['"]$/g, ''));
+    s = s.slice(m[0].length);
+  }
+  s = s.replace(/\$\{?([A-Za-z_]\w*)\}?/g, (x, n) => (vars.get(n)?.includes('/') ? vars.get(n).split('/').pop() : x));
+  return clipText(s, 80) || 'process';
 }
 
 // ---------- matching ----------
@@ -336,6 +377,18 @@ export function terminalState({ call, session = null, pidAlive = null, now = Dat
   return 'unknown';
 }
 
+/**
+ * State of a background process: the exit code from its completion notice, else running while its
+ * pid lives (when the result named one). Without a notice it counts as unknown after STALE_S, so a
+ * lost notice or a reused pid never keeps a card in Doing for good.
+ */
+export function processState({ call, pidAlive = null, now = Date.now() / 1000 }) {
+  if (call.exitCode != null) return call.exitCode === 0 && !call.killed ? 'finished' : 'error';
+  if (now - (call.resultTs ?? call.ts) > STALE_S) return 'unknown';
+  if (call.pid && pidAlive === false) return 'unknown'; // gone; its notice may still be on the way
+  return 'running';
+}
+
 // ---------- views ----------
 
 export const childId = (c, sessionId, profile) => `hermes:${profile || 'default'}:${sessionId || c.subagentId || c.procId || `${c.callId}.${c.index}`}`;
@@ -352,7 +405,8 @@ export function childView(c, { session = null, state, profile = null }) {
   const file = c.queryFile || promptFileOf(c.query);
   const title = c.kind === 'subagent'
     ? clipText(session?.title && !/^Subagent:\s*CONTEXT/i.test(session.title) ? session.title.replace(/^Subagent:\s*/, '') : c.goal || 'Subagent', 120)
-    : clipText(session?.title || (file ? `hermes chat · ${file.split('/').pop()}` : c.query) || 'hermes chat', 120);
+    : c.kind === 'process' ? c.title || 'process'
+      : clipText(session?.title || (file ? `hermes chat · ${file.split('/').pop()}` : c.query) || 'hermes chat', 120);
   return {
     id: childId(c, session?.id, profile),
     provider: 'hermes',
@@ -370,14 +424,22 @@ export function childView(c, { session = null, state, profile = null }) {
     match: c.match || null,
     sessionId: session?.id || null,
     profile,
-    goal: c.kind === 'subagent' ? c.goal : clipText(c.query && !promptFileOf(c.query) ? c.query : file || '', 400) || null,
-    command: c.kind === 'terminal' ? c.command : null,
+    goal: c.kind === 'subagent' ? c.goal : c.kind === 'process' ? null : clipText(c.query && !promptFileOf(c.query) ? c.query : file || '', 400) || null,
+    command: c.kind === 'terminal' || c.kind === 'process' ? c.command : null,
+    procId: c.procId || null,
     model: session?.model || null,
     lastError: state === 'error' ? (c.failed || (c.exitCode != null ? `exit code ${c.exitCode}` : session?.end_reason || null)) : null,
     createdAt: iso(session?.started_at || c.ts),
     updatedAt: iso(session?.ended_at || session?.last_activity_at || c.doneTs || c.resultTs || c.ts),
     deepLink: null,
   };
+}
+
+/** Transcript of a background process (it has no session): the command and the completion notice. */
+export function processTimeline(c, state) {
+  const items = [{ role: 'tool', toolName: 'terminal', status: state === 'running' ? 'running' : 'completed', summary: clipText(c.command, 160), text: c.command || '', ts: c.ts }];
+  if (c.notice) items.push({ role: 'user', text: c.notice, ts: c.doneTs });
+  return items;
 }
 
 /** Transcript items (shared/types.ts PaseoItem) from a child session's messages. */

@@ -1,4 +1,4 @@
-import { Bot, GitFork, SquareTerminal } from 'lucide-react'
+import { Bot, Cog, GitFork, SquareTerminal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AgentMatch, AgentState, PaseoChip } from '@/lib/types'
 import { t } from '@/lib/i18n'
@@ -15,16 +15,17 @@ export const AGENT_STATE: Record<AgentState, { label: string; dot: string; text?
 }
 
 // Paseo agents and the agents Hermes starts itself (provider 'hermes': delegate_task subagents, terminal
-// `hermes chat` runs) share one list and one look; only label and icon differ.
+// `hermes chat` runs, background processes) share one list and one look; only label and icon differ.
 type AgentLike = Pick<PaseoChip, 'provider' | 'kind' | 'account'>
 export function AgentIcon({ a, className }: { a: AgentLike; className?: string }) {
   if (a.provider !== 'hermes') return <Bot className={className} />
+  if (a.kind === 'process') return <Cog className={className} />
   return a.kind === 'terminal' ? <SquareTerminal className={className} /> : <GitFork className={className} />
 }
-/** "Paseo" · "Subagent" · "Terminal · support" (the Hermes profile the run used). */
+/** "Paseo" · "Subagent" · "Hintergrundprozess" · "Terminal · support" (the Hermes profile the run used). */
 export function agentKindLabel(a: AgentLike) {
   if (a.provider !== 'hermes') return 'Paseo'
-  const base = a.kind === 'terminal' ? t('Terminal') : t('Subagent')
+  const base = a.kind === 'terminal' ? t('Terminal') : a.kind === 'process' ? t('Hintergrundprozess') : t('Subagent')
   return a.account ? `${base} · ${a.account}` : base
 }
 /** Terminal runs carry no parent id in Hermes; they are tied to the chat by prompt or start time. */

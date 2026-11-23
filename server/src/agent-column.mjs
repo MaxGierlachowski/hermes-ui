@@ -1,6 +1,7 @@
 // N6: Hermes' own turn is over, but agents the chat started or steers still work: the card stays in
 // Doing (or Waiting while one waits for a permission). Agents are Paseo agents and Hermes' own child
-// agents (delegate_task subagents, terminal `hermes chat` runs; provider 'hermes'), same rule for both.
+// agents (delegate_task subagents, terminal `hermes chat` runs, background processes; provider 'hermes'),
+// same rule for all.
 
 const ORDER = { 'needs-attention': 0, running: 1, error: 2, finished: 3, idle: 4, closed: 5, unknown: 6, archived: 7 };
 const REL_RANK = { created: 3, steers: 2, watches: 1 };
@@ -22,8 +23,9 @@ export function agentColumn({ autoColumn, column, overridden, pending, system, a
   const busy = owned.filter((a) => a.state === 'running');
   let note = '';
   if (pending || system || (autoColumn !== 'waiting' && autoColumn !== 'doing')) return { column, note };
-  // Paseo-only wording stays as it was; as soon as a Hermes child runs, the note says "agents".
-  const k = busy.some((a) => a.provider === 'hermes') ? 'agents' : 'paseo';
+  // Paseo-only wording stays as it was; only background processes say so; any other mix says "agents".
+  const own = busy.filter((a) => a.provider === 'hermes');
+  const k = !own.length ? 'paseo' : own.length === busy.length && own.every((a) => a.kind === 'process') ? 'procs' : 'agents';
   if (blocked.length) {
     note = t('paseoBlocked', { title: blocked[0].title });
     if (autoColumn === 'waiting' && !overridden) column = 'waiting';

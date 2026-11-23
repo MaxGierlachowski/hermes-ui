@@ -22,7 +22,7 @@ export type PendingPrompt = {
 
 export type AgentState = 'running' | 'idle' | 'closed' | 'error' | 'needs-attention' | 'finished' | 'archived' | 'unknown'
 // provider 'hermes': an agent Hermes started itself (delegate_task subagent, kind 'subagent'; a terminal
-// `hermes chat` run, kind 'terminal'). match says how it was tied to the chat: 'id' / 'goal' / 'order'
+// `hermes chat` run, kind 'terminal'; a terminal command in the background, kind 'process'). match says how it was tied to the chat: 'id' / 'goal' / 'order'
 // (Hermes' own parent link) or 'prompt' / 'time' (terminal runs: a heuristic, shown as such).
 export type AgentProvider = 'paseo' | 'hermes'
 export type AgentMatch = 'id' | 'goal' | 'order' | 'prompt' | 'time' | null

@@ -120,24 +120,38 @@ export class Store {
          OR s.id IN (SELECT conversation_id FROM session_turn_leases)`).all(actTs, msgId).map((r) => r.id);
   }
 
-  // Messages that tie a session to Paseo agents: create_agent results (carry the new id) and
-  // assistant tool calls to paseo_* tools (carry agent_id in their arguments).
+  // Messages that tie a session to Paseo agents: create_agent results (carry the new id), assistant
+  // tool calls to paseo_* tools (carry agent_id in their arguments), and terminal calls that use the
+  // paseo CLI or create an agent by script (src/paseo-cli.mjs).
   paseoRefs(sinceId) {
     return this.db.prepare(`
       SELECT id, session_id, role, tool_name, content, tool_calls, timestamp FROM messages
       WHERE id > ? AND ((role = 'tool' AND tool_name = 'mcp__paseo__paseo_create_agent')
-        OR (role = 'assistant' AND tool_calls LIKE '%mcp__paseo__paseo_%'))
+        OR (role = 'assistant' AND tool_calls LIKE '%mcp__paseo__paseo_%')
+        OR (role = 'assistant' AND tool_calls LIKE '%terminal%'
+          AND (tool_calls LIKE '%paseo%' OR tool_calls LIKE '%agents.create%' OR tool_calls LIKE '%create_agent%')))
       ORDER BY id`).all(sinceId);
   }
 
+  // The result row of one tool call (terminal calls that may have created a Paseo agent).
+  toolResult(sessionId, callId) {
+    return this.db.prepare(`
+      SELECT id, tool_call_id, substr(content, 1, 20000) AS content, timestamp FROM messages
+      WHERE session_id = ? AND role = 'tool' AND tool_call_id = ? ORDER BY id LIMIT 1`).get(sessionId, callId) || null;
+  }
+
   // Sessions that started child agents of their own (src/hermes-children.mjs): delegate_task results,
-  // and terminal calls that run `hermes … chat`. The LIKE filter is coarse; the parser decides.
+  // terminal calls that run `hermes … chat`, and terminal commands in the background (background: true,
+  // or a result with a proc_… id when Hermes promoted a foreground call). The LIKE filter is coarse;
+  // the parser decides.
   childRefs(sinceId) {
     return this.db.prepare(`
       SELECT DISTINCT session_id FROM messages
       WHERE id > ? AND ((role = 'tool' AND tool_name = 'delegate_task')
         OR (role = 'assistant' AND tool_calls LIKE '%delegate_task%')
-        OR (role = 'assistant' AND tool_calls LIKE '%terminal%' AND tool_calls LIKE '%hermes%' AND tool_calls LIKE '%chat%'))`).all(sinceId).map((r) => r.session_id);
+        OR (role = 'assistant' AND tool_calls LIKE '%terminal%' AND tool_calls LIKE '%hermes%' AND tool_calls LIKE '%chat%')
+        OR (role = 'assistant' AND tool_calls LIKE '%terminal%' AND tool_calls LIKE '%background%')
+        OR (role = 'tool' AND tool_name = 'terminal' AND content LIKE '%"session_id": "proc_%'))`).all(sinceId).map((r) => r.session_id);
   }
 
   // The rows of one chat that childCalls() reads: the calls, their results, the completion notices.
@@ -145,15 +159,22 @@ export class Store {
     const calls = this.db.prepare(`
       SELECT id, role, tool_calls, timestamp FROM messages
       WHERE session_id = ? AND role = 'assistant' AND active = 1
-        AND (tool_calls LIKE '%delegate_task%' OR (tool_calls LIKE '%terminal%' AND tool_calls LIKE '%hermes%' AND tool_calls LIKE '%chat%'))
+        AND (tool_calls LIKE '%delegate_task%' OR tool_calls LIKE '%terminal%')
       ORDER BY id`).all(sessionId);
     if (!calls.length) return [];
+    // Terminal results only with the fields childCalls() reads (their output can be large).
     const results = this.db.prepare(`
-      SELECT id, role, tool_name, tool_call_id, content, timestamp FROM messages
+      SELECT id, role, tool_name, tool_call_id, timestamp,
+        CASE WHEN tool_name = 'terminal' AND json_valid(content) THEN json_object(
+          'session_id', json_extract(content, '$.session_id'), 'pid', json_extract(content, '$.pid'),
+          'exit_code', json_extract(content, '$.exit_code'), 'error', json_extract(content, '$.error'),
+          'promoted_from_foreground', json_extract(content, '$.promoted_from_foreground') IS NOT NULL)
+        WHEN tool_name = 'terminal' THEN substr(content, 1, 600) ELSE content END AS content
+      FROM messages
       WHERE session_id = ? AND role = 'tool' AND tool_name IN ('delegate_task', 'terminal') AND id >= ?
       ORDER BY id`).all(sessionId, calls[0].id);
     const notices = this.db.prepare(`
-      SELECT id, role, substr(content, 1, 600) AS content, timestamp, display_kind FROM messages
+      SELECT id, role, substr(content, 1, 1500) AS content, timestamp, display_kind FROM messages
       WHERE session_id = ? AND role = 'user' AND display_kind IN ('process_complete', 'async_delegation_complete') AND id >= ?
       ORDER BY id`).all(sessionId, calls[0].id);
     return [...calls, ...results, ...notices].sort((a, b) => a.id - b.id);
