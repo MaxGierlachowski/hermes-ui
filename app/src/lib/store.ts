@@ -11,6 +11,7 @@ import { clearCache, initCache, readCache, trimMessages, writeCache } from './ca
 import { appInBackground, notifyInboxItem } from './notify'
 import { t } from './i18n'
 import { agentTimelinePath } from './agents'
+import { deadline, makeTrack } from './sync'
 
 export type Auth = 'unknown' | 'unpaired' | 'connecting' | 'ok' | 'refused' | 'offline'
 export type Tab = 'board' | 'inbox'
@@ -97,11 +98,8 @@ const handle = (err: unknown, quiet = false) => {
   toast(err instanceof Error ? err.message : String(err), 'error')
 }
 
-/** Counts a background load for the header's progress bar. */
-async function track<T>(p: Promise<T>): Promise<T> {
-  set((s) => ({ syncing: s.syncing + 1 }))
-  try { return await p } finally { set((s) => ({ syncing: s.syncing - 1 })) }
-}
+/** Counts a load the user waits for, for the header's progress bar; `quiet` (background refreshes) does not. */
+const track = makeTrack((d) => set((s) => ({ syncing: Math.max(0, s.syncing + d) })))
 
 // ---------- cache ----------
 type BoardCache = { sessions: Session[]; gateway: boolean }
@@ -240,11 +238,12 @@ const sessionsUrl = (before?: string) => `/api/sessions?limit=${PAGE}&system=${s
 let paged = false // a later page was loaded since the last reset
 let generation = 0 // bumped by a filter change: answers to older requests are dropped
 
-export async function loadSessions(throwing = false, reset = false) {
+/** quiet: a background refresh (live catch-up, foreground resume) that does not show the progress bar. */
+export async function loadSessions(throwing = false, reset = false, quiet = false) {
   const gen = reset ? ++generation : generation
   if (reset) paged = false
   try {
-    const page = await track(api<Page>(sessionsUrl()))
+    const page = await track(api<Page>(sessionsUrl()), quiet)
     if (gen !== generation) return true
     const first = Object.fromEntries(page.sessions.map((s) => [s.id, s]))
     set((st) => paged
@@ -313,25 +312,34 @@ function withPending(id: string, messages: ThreadMessage[]) {
 
 /** Opens a thread with what the cache has (rendered in the first frame), then refreshes it. */
 export async function openThread(id: string | null) {
-  if (id && id === state.openId) { refreshThread(id); return }
+  if (id && id === state.openId) { refreshThread(id, true); return }
   const cached = id ? readCache<ThreadMessage[]>(threadKey(id))?.data : undefined
   set({ openId: id, messages: id && cached ? withPending(id, cached) : [], loadingThread: !!id && !cached, streaming: state.streaming?.id === id ? state.streaming : null })
-  if (id) await refreshThread(id)
+  // Only a thread without a cached copy shows the progress bar (and the pane's spinner) while it loads.
+  if (id) await refreshThread(id, !!cached)
 }
 
-export async function refreshThread(id: string) {
+/**
+ * quiet: a background refresh (live reload events, catch-up, prefetch) without the progress bar.
+ * The deadline bounds a hung transport: the pane's spinner (loadingThread) always ends.
+ */
+export async function refreshThread(id: string, quiet = false) {
   try {
-    const { session, messages } = await track(api<{ session: Session; messages: ThreadMessage[] }>(`/api/sessions/${encodeURIComponent(id)}`))
+    const { session, messages } = await track(deadline(api<{ session: Session; messages: ThreadMessage[] }>(`/api/sessions/${encodeURIComponent(id)}`)), quiet)
     upsert(session)
     persistThread(id, messages)
     if (state.openId !== id) return
     set({ messages: withPending(id, messages), loadingThread: false })
-  } catch (err) { set({ loadingThread: false }); handle(err, true) }
+  } catch (err) {
+    // Another thread opened meanwhile: its own request ends its spinner (openThread reset it if cached).
+    if (state.openId === id) set({ loadingThread: false })
+    handle(err, true)
+  }
 }
 
 /** Long-press / warm-up: loads a thread into the cache without opening it. */
 export function prefetchThread(id: string) {
-  if (!readCache(threadKey(id))) refreshThread(id)
+  if (!readCache(threadKey(id))) refreshThread(id, true)
 }
 
 // Automated E2E runs mark their chats as "TEST · …" (web: localStorage hk_e2e_test). Dev builds only:
@@ -353,7 +361,7 @@ export async function sendMessage(id: string, msg: OutgoingMessage) {
   } catch (err) {
     if (err instanceof Unauthorized) { handle(err); return null }
     toast(`${t('Nachricht nicht zugestellt')}: ${err instanceof Error ? err.message : String(err)}`, 'error')
-    refreshThread(id)
+    refreshThread(id, true)
     return null
   }
   if (res.voice && !res.voice.transcribed) toast(`${t('Sprachnachricht nicht transkribiert – als Audiodatei gesendet')}${res.voice.error ? `: ${res.voice.error}` : ''}`, 'error')
@@ -368,9 +376,9 @@ export async function respond(id: string, body: { promptId: string; choice?: str
   try {
     const res = await api<{ session: Session }>(`/api/sessions/${encodeURIComponent(id)}/respond`, { method: 'POST', json: body })
     if (res.session) upsert(res.session)
-    loadInbox()
+    loadInbox(true)
     return true
-  } catch (err) { handle(err); refreshThread(id); return false }
+  } catch (err) { handle(err); refreshThread(id, true); return false }
 }
 
 export async function interrupt(id: string) {
@@ -382,7 +390,7 @@ export async function setColumn(id: string, column: Column | 'auto') {
     const res = await api<{ session: Session | null; removed?: string; replaced?: string }>(`/api/sessions/${encodeURIComponent(id)}/column`, { method: 'POST', json: { column } })
     if (res.removed || res.replaced) remove((res.removed || res.replaced)!)
     if (res.session) upsert(res.session)
-  } catch (err) { handle(err); loadSessions() }
+  } catch (err) { handle(err); loadSessions(false, false, true) }
 }
 
 export async function retryOutbox(sessionId: string, outboxId: string, retry = true) {
@@ -391,7 +399,7 @@ export async function retryOutbox(sessionId: string, outboxId: string, retry = t
     if (res.session) upsert(res.session)
     persistThread(sessionId, res.messages)
     if (state.openId === sessionId) set({ messages: res.messages })
-  } catch (err) { handle(err); refreshThread(sessionId) }
+  } catch (err) { handle(err); refreshThread(sessionId, true) }
 }
 
 export type SearchHit = { session: Session & { archived?: boolean }; hit?: { msgId: number; role: string; ts: number; snippet: string; hits: number } }
@@ -400,23 +408,24 @@ export const searchChats = (q: string) => api<{ q: string; title: SearchHit[]; c
 // Paseo: agents per chat and their transcripts, cached like threads (screen state, not the store).
 export const cachedPaseoAgents = (sessionId: string) => readCache<PaseoAgent[]>(`paseo:agents ${sessionId}`)?.data ?? null
 export const cachedPaseoTimeline = (agentId: string) => readCache<PaseoItem[]>(`paseo:timeline ${agentId}`)?.data ?? null
-export async function paseoAgents(sessionId: string) {
-  const r = await track(api<{ agents: PaseoAgent[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/paseo`))
+/** quiet: cached agents are on screen already, the refresh does not show the progress bar. */
+export async function paseoAgents(sessionId: string, quiet = false) {
+  const r = await track(api<{ agents: PaseoAgent[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/paseo`), quiet)
   writeCache(`paseo:agents ${sessionId}`, r.agents)
   return r
 }
 /** quiet: the 3-second poll of a running agent does not light up the progress bar each time. */
 export async function paseoTimeline(agentId: string, quiet = false) {
   const req = api<{ items: PaseoItem[]; agent?: PaseoAgent }>(agentTimelinePath(agentId))
-  const r = await (quiet ? req : track(req))
+  const r = await track(req, quiet)
   writeCache(`paseo:timeline ${agentId}`, trimMessages(r.items))
   return r
 }
 
 // ---------- inbox ----------
-export async function loadInbox() {
+export async function loadInbox(quiet = false) {
   try {
-    const r = await track(api<{ open: OpenItem[]; items: InboxItem[]; unread: number; paseo: { connected: boolean; canRespond: boolean } }>('/api/inbox'))
+    const r = await track(api<{ open: OpenItem[]; items: InboxItem[]; unread: number; paseo: { connected: boolean; canRespond: boolean } }>('/api/inbox'), quiet)
     set({ inbox: { ...r, loaded: true } })
     persistInbox()
   } catch (err) { handle(err, true) }
@@ -433,9 +442,9 @@ export async function respondPaseo(agentId: string, requestId: string, decision:
   try {
     await api(`/api/paseo/agents/${agentId}/permissions/${encodeURIComponent(requestId)}`, { method: 'POST', json: { decision, ...(message ? { message } : {}) } })
     toast(decision === 'allow' ? t('Paseo-Freigabe erteilt') : t('Paseo-Freigabe abgelehnt'), 'success')
-    loadInbox()
+    loadInbox(true)
     return true
-  } catch (err) { handle(err); loadInbox(); return false }
+  } catch (err) { handle(err); loadInbox(true); return false }
 }
 export const badgeCount = (st = state) => st.inbox.open.length + st.inbox.unread
 
@@ -499,13 +508,14 @@ export function connectEvents() {
         if (d.final && state.streaming?.id === d.id) set({ streaming: null })
         if (d.id !== state.openId) return
         clearTimeout(reloadTimer)
-        reloadTimer = setTimeout(() => refreshThread(d.id), 250)
+        // Every tool call of a running chat sends one: refresh quietly, the new messages are the feedback.
+        reloadTimer = setTimeout(() => refreshThread(d.id, true), 250)
         break
     }
   }, (open) => {
     set({ live: open })
     // After a reconnect: catch up on what the stream missed.
-    if (open && opened) { loadSessions(); loadInbox(); if (state.openId) refreshThread(state.openId) }
+    if (open && opened) { loadSessions(false, false, true); loadInbox(true); if (state.openId) refreshThread(state.openId, true) }
     if (open) opened = true
   })
 }
@@ -523,8 +533,8 @@ AppState.addEventListener('change', (s) => {
   if (s === 'active' && state.auth === 'offline' && !state.demo) { bootstrap(); return }
   if (s !== 'active' || state.auth !== 'ok') return
   if (!state.live) connectEvents()
-  loadSessions()
-  loadInbox()
+  loadSessions(false, false, true)
+  loadInbox(true)
 })
 
 export { ApiError }

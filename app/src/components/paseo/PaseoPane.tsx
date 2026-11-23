@@ -81,13 +81,15 @@ export function PaseoPane({ id, agent: agentParam, embedded = false, onBack }: {
   const [items, setItems] = useState<PaseoItem[] | null>(() => (agentParam ? cachedPaseoTimeline(agentParam) : null))
   const [refreshing, setRefreshing] = useState(false)
 
-  const loadAgents = useCallback(async () => { try { setAgents((await paseoAgents(id)).agents) } catch { setAgents((a) => a ?? []) } }, [id])
+  const loadAgents = useCallback(async (quiet = false) => { try { setAgents((await paseoAgents(id, quiet)).agents) } catch { setAgents((a) => a ?? []) } }, [id])
   const loadTimeline = useCallback(async (aid: string, quiet = false) => { try { setItems((await paseoTimeline(aid, quiet)).items) } catch { setItems((x) => x ?? []) } }, [])
-  useEffect(() => { loadAgents() }, [loadAgents])
+  // With a cached copy on screen, refreshes are quiet (no progress bar).
+  useEffect(() => { loadAgents(!!cachedPaseoAgents(id)) }, [loadAgents])
   useEffect(() => {
     if (!agentId) return
-    setItems(cachedPaseoTimeline(agentId))
-    loadTimeline(agentId)
+    const cached = cachedPaseoTimeline(agentId)
+    setItems(cached)
+    loadTimeline(agentId, !!cached)
     const running = agents?.find((a) => a.id === agentId)?.state === 'running'
     if (!running) return
     const timer = setInterval(() => loadTimeline(agentId, true), 3000)

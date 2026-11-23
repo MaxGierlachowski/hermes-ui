@@ -123,6 +123,37 @@ test('pinned cards and drafts come on the first page only, and are never repeate
   } finally { cleanup(); }
 });
 
+test('pinned Done cards are paged like the rest, at their own position, and keep their column', () => {
+  const { store, cleanup } = fixture((add) => {
+    for (let i = 0; i < 10; i++) add(`chat-${i}`, 'local', NOW - i * 100);
+    for (let i = 0; i < 300; i++) add(`done-${String(i).padStart(3, '0')}`, 'local', NOW - 50 - i * 100); // between the chats, then older
+    add('open-old', 'local', NOW - 86400 * 300);
+    add('done-cron', 'cron', NOW - 25);
+    add('done-ancient', 'local', NOW - 86400 * 5);
+  });
+  try {
+    const overrides = { 'open-old': 'waiting', 'done-cron': 'done', 'done-ancient': 'done' };
+    for (let i = 0; i < 300; i++) overrides[`done-${String(i).padStart(3, '0')}`] = 'done';
+    const withColumn = (row) => ({ ...toCard(row), column: overrides[row.id] || 'waiting' });
+    const extra = { pinnedIds: Object.keys(overrides), toCard: withColumn, drafts: [{ id: 'draft:1', system: false }] };
+    const { first, seen, pages } = walk(store, 'limit=50', extra);
+    // First page: draft + open pinned card + the 50 newest of chats and Done cards, merged by time.
+    assert.equal(first.sessions.length, 52);
+    assert.deepEqual(first.sessions.slice(0, 5).map((s) => s.id), ['draft:1', 'open-old', 'chat-0', 'done-000', 'chat-1']);
+    assert.equal(first.sessions.find((s) => s.id === 'done-000').column, 'done');
+    assert.ok(first.nextCursor);
+    // Every card exactly once; the system Done card stays out without system=1.
+    assert.equal(seen.length, 2 + 10 + 301);
+    assert.equal(new Set(seen).size, seen.length);
+    assert.ok(!seen.includes('done-cron'));
+    assert.equal(pages, 7);
+    assert.ok(walk(store, 'limit=50&system=1', extra).seen.includes('done-cron'));
+    // The time window applies to Done cards too.
+    const windowed = walk(store, 'days=1&limit=50', extra).seen;
+    assert.ok(windowed.includes('done-299') && !windowed.includes('done-ancient') && windowed.includes('open-old'));
+  } finally { cleanup(); }
+});
+
 test('cursor format: "<ts>:<id>", ids may contain colons; garbage is a 400', () => {
   assert.equal(formatCursor({ effective_at: 1763600000.123456, id: 'a:b' }), '1763600000.123456:a:b');
   assert.deepEqual(parseCursor('1763600000.123456:a:b'), { ts: 1763600000.123456, id: 'a:b' });

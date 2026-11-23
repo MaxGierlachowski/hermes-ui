@@ -59,6 +59,8 @@ jobs:
         working-directory: app
       - run: npm run typecheck
         working-directory: app
+      - run: npm test
+        working-directory: app
       - name: Expo config resolves (identity from the environment, no secrets)
         run: npx expo config --type public --json > /dev/null
         working-directory: app
