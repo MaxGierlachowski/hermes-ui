@@ -41,7 +41,7 @@ against the web UI in [ADR 0012](docs/decisions/0012-universal-app.md).
 
 | | |
 |---|---|
-| [Features](docs/features.md) | board, thread, inbox, search, Paseo, push in detail |
+| [Features](docs/features.md) | board, thread, inbox, search, Paseo, push in detail; [linking agents to chats](docs/features.md#linking-agents-to-chats) (label contract) |
 | [Self-hosting](docs/self-hosting.md) · [Configuration](docs/configuration.md) | install, remote modes, every setting, autostart |
 | [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md) | how the pieces fit, and why |
 | [Security](docs/security.md) | pairing, allow-list, tokens, what relays see |

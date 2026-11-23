@@ -20,6 +20,8 @@ export class Board {
     this.data.drafts ||= {}; // draftId -> { id, title, text, images, audio, test, createdAt }
     this.data.media ||= {}; // sessionId -> [{ afterMsgId, kind, url }]
     this.data.created ||= {}; // sessionId -> createdAt (sessions started from the board)
+    this.data.attached ||= {}; // sessionId -> { agentId: { at } }: agents attached by hand (src/agent-links.mjs)
+    this.data.detached ||= {}; // sessionId -> { agentId: { at } }: agents taken off a card by hand
   }
 
   save() {
