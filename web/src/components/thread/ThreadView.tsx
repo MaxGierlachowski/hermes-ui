@@ -17,7 +17,7 @@ import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { SourceIcon, StatusDot } from '@/components/board/status'
 import { Composer } from './Composer'
 import { PendingPrompt } from './PendingPrompt'
-import { MediaAudio, MediaImage } from '@/components/common/Media'
+import { MediaAudio, MediaImage, MediaVideo } from '@/components/common/Media'
 import { PaseoPanel } from '@/components/paseo/PaseoPanel'
 import { OverlayScroll } from '@/components/common/OverlayScroll'
 import { Bot, MessagesSquare } from 'lucide-react'
@@ -279,7 +279,7 @@ function MessageBody({ m }: { m: ThreadMessage }) {
   )
 }
 
-/** Files Hermes attached to a reply with MEDIA:<path>: images (lightbox on click), audio, other files by name. */
+/** Files Hermes attached to a reply with MEDIA:<path>: images (lightbox on click), audio, video, other files by name. */
 function AssistantAttachments({ atts }: { atts: Attachment[] }) {
   const images = atts.filter((a) => a.kind === 'image')
   return (
@@ -292,11 +292,13 @@ function AssistantAttachments({ atts }: { atts: Attachment[] }) {
       )}
       {atts.map((a) => (a.kind === 'audio'
         ? <MediaAudio key={a.url} url={a.url} className="h-9 w-64 max-w-full" />
-        : a.kind === 'file' && (
-          <span key={a.name} className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 text-xs text-muted-foreground" title={a.name}>
-            <FileText className="size-3.5 shrink-0" /><span className="truncate">{a.name}</span>
-          </span>
-        )))}
+        : a.kind === 'video'
+          ? <MediaVideo key={a.url} url={a.url} name={a.name} />
+          : a.kind === 'file' && (
+            <span key={a.name} className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 text-xs text-muted-foreground" title={a.name}>
+              <FileText className="size-3.5 shrink-0" /><span className="truncate">{a.name}</span>
+            </span>
+          )))}
     </div>
   )
 }

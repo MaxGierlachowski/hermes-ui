@@ -9,6 +9,7 @@ import path from 'node:path';
 
 export const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif']);
 export const AUDIO_EXTS = new Set(['.mp3', '.m4a', '.wav', '.ogg', '.opus', '.flac']);
+export const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov']);
 
 // Hermes' MEDIA_DELIVERY_EXTS (+ avif, which this UI shows inline).
 const EXTS = [
@@ -62,7 +63,7 @@ function normalize(raw, home) {
 /** MEDIA path → kind for the UI. */
 export function mediaKind(file) {
   const ext = path.extname(file).toLowerCase();
-  return IMAGE_EXTS.has(ext) ? 'image' : AUDIO_EXTS.has(ext) ? 'audio' : 'file';
+  return IMAGE_EXTS.has(ext) ? 'image' : AUDIO_EXTS.has(ext) ? 'audio' : VIDEO_EXTS.has(ext) ? 'video' : 'file';
 }
 
 /**

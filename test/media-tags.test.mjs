@@ -52,6 +52,10 @@ test('no tag, relative path or unknown extension leaves the text alone', () => {
 test('mediaKind', () => {
   assert.equal(mediaKind('/a/b.PNG'), 'image');
   assert.equal(mediaKind('/a/b.m4a'), 'audio');
+  assert.equal(mediaKind('/a/b.mp4'), 'video');
+  assert.equal(mediaKind('/a/b.WEBM'), 'video');
+  assert.equal(mediaKind('/a/b.mov'), 'video');
+  assert.equal(mediaKind('/a/b.mkv'), 'file');
   assert.equal(mediaKind('/a/b.pdf'), 'file');
   assert.equal(mediaKind('/a/b.svg'), 'file');
 });

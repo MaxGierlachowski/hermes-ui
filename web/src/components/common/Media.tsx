@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { ImageOff, X } from 'lucide-react'
+import { Download, ImageOff, Play, VideoOff, X } from 'lucide-react'
 import { TransformComponent, TransformWrapper, type ReactZoomPanPinchRef } from 'react-zoom-pan-pinch'
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useTouchUI } from '@/hooks/use-touch'
-import { IROH_ORIGIN, apiUrl, loadObjectUrl, mediaNeedsBlob } from '@/lib/backend'
+import { IROH_ORIGIN, apiUrl, linkUrl, loadObjectUrl, mediaNeedsBlob } from '@/lib/backend'
 import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 
@@ -13,7 +13,7 @@ export function resolveImageSrc(src: string) {
   return src
 }
 
-/** URL usable in <img>/<audio>: direct locally, via the iroh service worker or a blob URL remotely. */
+/** URL usable in <img>/<audio>/<video>: direct locally, via the iroh service worker or a blob URL remotely. */
 export function useMediaUrl(url: string) {
   const full = apiUrl(resolveImageSrc(url))
   const viaBlob = () => mediaNeedsBlob() && full.startsWith(IROH_ORIGIN)
@@ -170,4 +170,55 @@ function TouchViewer({ src, alt, onClose }: { src: string; alt: string; onClose:
 export function MediaAudio({ url, className }: { url: string; className?: string }) {
   const src = useMediaUrl(url)
   return <audio controls src={src || undefined} className={className} />
+}
+
+/**
+ * Video attached to a reply: the native player (the backend answers Range requests, which Safari/iOS
+ * need to play at all and every browser needs to seek) plus a download link. Over iroh without a
+ * service worker the whole file would become a blob, so it only loads on request there.
+ */
+export function MediaVideo({ url, name }: { url: string; name: string }) {
+  const full = apiUrl(url)
+  const [wanted, setWanted] = useState(() => !(mediaNeedsBlob() && full.startsWith(IROH_ORIGIN)))
+  if (!wanted) {
+    return (
+      <button type="button" onClick={() => setWanted(true)} className="inline-flex max-w-full items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
+        <Play className="size-4 shrink-0" /><span className="truncate">{t('Video laden')} · {name}</span>
+      </button>
+    )
+  }
+  return <VideoPlayer url={url} name={name} />
+}
+
+function VideoPlayer({ url, name }: { url: string; name: string }) {
+  const src = useMediaUrl(url)
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const failed = !!src && failedSrc === src
+  const href = src?.startsWith('blob:') ? src : linkUrl(apiUrl(url))
+  return (
+    <div className="flex w-full max-w-xl flex-col items-start gap-1">
+      {src === null || failed ? (
+        <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground" title={name}>
+          <VideoOff className="size-3.5 shrink-0" /><span className="truncate">{t('Video nicht verfügbar')}</span>
+        </span>
+      ) : !src ? (
+        <span className="block aspect-video w-full animate-pulse rounded-lg bg-muted" />
+      ) : (
+        <video
+          src={src}
+          controls
+          playsInline
+          preload="metadata"
+          onError={() => setFailedSrc(src)}
+          className="block max-h-[min(28rem,70dvh)] w-full rounded-lg bg-black object-contain ring-1 ring-border"
+          data-testid="media-video"
+        />
+      )}
+      {href && (
+        <a href={href} download={name} className="inline-flex max-w-full items-center gap-1 text-xs text-muted-foreground hover:text-foreground" title={t('Herunterladen')}>
+          <Download className="size-3.5 shrink-0" /><span className="truncate">{name}</span>
+        </a>
+      )}
+    </div>
+  )
 }

@@ -27,10 +27,12 @@ export function fakeUi(dir) {
 
 /**
  * @param {Record<string,string>} env extra environment (HERMES_UI_AUTH, HERMES_UI_BASE_PATH, …)
+ * @param {{ sessions?: Parameters<typeof fakeHermesState>[1] }} [opts] Hermes sessions to put into state.db
  * @returns {Promise<{ port: number, base: string, log: () => string, stop: () => Promise<void> }>}
  */
-export async function startServer(env = {}) {
+export async function startServer(env = {}, { sessions } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-ui-test-'));
+  if (sessions) await fakeHermesState(path.join(tmp, 'hermes', 'state.db'), sessions);
   const port = await freePort();
   const child = spawn(process.execPath, [path.join(ROOT, 'bin', 'hermes-ui.mjs'), 'serve'], {
     env: {
@@ -67,4 +69,34 @@ export async function startServer(env = {}) {
 /** Runs the server expecting it to refuse to start; resolves with its output. */
 export async function startupError(env) {
   try { const s = await startServer(env); await s.stop(); return null; } catch (err) { return err.output ?? String(err); }
+}
+
+/**
+ * A minimal Hermes state.db (only the tables and columns src/store.mjs reads) with the given sessions.
+ * @param {string} file path of the database to create
+ * @param {{ id: string, title?: string, source?: string, messages: { role: string, content: string }[] }[]} sessions
+ */
+export async function fakeHermesState(file, sessions) {
+  const { DatabaseSync } = await import('node:sqlite');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const db = new DatabaseSync(file);
+  db.exec(`
+    CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, created_source TEXT, title TEXT, started_at REAL, ended_at REAL,
+      end_reason TEXT, last_activity_at REAL, last_activity_description TEXT, message_count INTEGER DEFAULT 0,
+      tool_call_count INTEGER DEFAULT 0, archived INTEGER DEFAULT 0, hidden INTEGER DEFAULT 0, parent_session_id TEXT,
+      profile_name TEXT, model TEXT);
+    CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT,
+      tool_name TEXT, tool_call_id TEXT, timestamp REAL, display_kind TEXT, display_metadata TEXT,
+      active INTEGER DEFAULT 1, compacted INTEGER DEFAULT 0);
+    CREATE TABLE session_admissions (seq INTEGER PRIMARY KEY AUTOINCREMENT, admission_id TEXT, target_session_id TEXT,
+      status TEXT, outcome TEXT, payload_json TEXT);
+    CREATE TABLE session_turn_leases (conversation_id TEXT, expires_at REAL);`);
+  const now = Date.now() / 1000;
+  for (const s of sessions) {
+    db.prepare('INSERT INTO sessions (id, source, title, started_at, last_activity_at, message_count) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(s.id, s.source || 'cli', s.title || s.id, now - 60, now, s.messages.length);
+    s.messages.forEach((m, i) => db.prepare('INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)')
+      .run(s.id, m.role, m.content, now - 60 + i));
+  }
+  db.close();
 }
