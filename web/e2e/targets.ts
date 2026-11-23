@@ -36,6 +36,13 @@ export function measureTargets(page: Page, min = 44): Promise<TargetResult[]> {
       return { r, c, left: Math.max(r.left, c.left), top: Math.max(r.top, c.top), right: Math.min(r.right, c.right), bottom: Math.min(r.bottom, c.bottom) }
     }
     // Disabled controls keep their size once enabled: measure them too (they are pointer-events: none).
+    // Floating controls over the edge of a scroll area ([data-scroll-overlay], e.g. the Summary pill):
+    // a row under them is at the scroll edge for the moment (the list's padding lets it scroll clear),
+    // like a row partly scrolled away. The floating controls themselves are measured as usual.
+    const overlays = Array.from(document.querySelectorAll('[data-scroll-overlay] *'))
+      .filter((o) => getComputedStyle(o).pointerEvents !== 'none').map((o) => o.getBoundingClientRect())
+    const underOverlay = (el: Element, r: DOMRect) => !el.closest('[data-scroll-overlay]')
+      && overlays.some((o) => r.left < o.right && r.right > o.left && r.top < o.bottom && r.bottom > o.top)
     const disabled = Array.from(document.querySelectorAll<HTMLElement>(':disabled,[aria-disabled=true],[data-disabled]'))
     const saved = disabled.map((el) => el.style.pointerEvents)
     disabled.forEach((el) => { el.style.pointerEvents = 'auto' })
@@ -49,6 +56,7 @@ export function measureTargets(page: Page, min = 44): Promise<TargetResult[]> {
       if (r.width < 1 || r.height < 1) continue
       // Only elements fully on screen: partly scrolled-away ones are checked once they are scrolled in.
       if (right - left < r.width - 1 || bottom - top < r.height - 1) continue
+      if (c.bottom < vh && underOverlay(el, r)) continue // in a scroll area, under a floating control at its edge
       const cx = r.left + r.width / 2
       const cy = r.top + r.height / 2
       const own = (x: number, y: number) => { const h = document.elementFromPoint(x, y); return !!h && (h === el || el.contains(h)) }

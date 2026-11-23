@@ -1,5 +1,7 @@
 // "Summary": a floating pill right above the composer. A click sends SUMMARY_PROMPT (shared/summary.ts)
 // into this chat through the composer's send path; hidden while the chat is empty or a turn runs.
+// It floats over the bottom edge of the message list, which then gets extra bottom padding so every row
+// can be scrolled out from under it (data-scroll-overlay tells the touch-target audit, e2e/targets.ts).
 import { Check, ListChecks, Loader2 } from 'lucide-react'
 import type { summaryPillState } from '@/lib/summary'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -10,7 +12,7 @@ export function SummaryPill({ state, onClick }: { state: ReturnType<typeof summa
   if (state === 'hidden') return null
   const busy = state !== 'ready'
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-full mb-1.5 flex justify-center">
+    <div data-scroll-overlay className="pointer-events-none absolute inset-x-0 bottom-full mb-1.5 flex justify-center">
       <Tooltip>
         <TooltipTrigger asChild>
           <button
