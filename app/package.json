@@ -66,6 +66,7 @@
     "iroh:test": "cd modules/expo-iroh/rust && cargo test --release --test e2e -- --ignored --nocapture",
     "prebuild:android": "expo prebuild --platform android",
     "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/*.test.ts\"",
     "lint": "expo lint",
     "apk": "cd android && ./gradlew app:assembleRelease",
     "aab": "cd android && ./gradlew app:bundleRelease",
