@@ -11,6 +11,9 @@ A Hermes chat often hands work to agents of its own instead of (or next to) Pase
    its own conversation.
 2. **Terminal runs of Hermes itself:** `hermes [-p <profile>] chat -q …` (or `--query-file`) started
    through the terminal tool, often with `background=true`, sometimes in another profile.
+3. **Background processes:** any other terminal command with `background=true`, or a foreground call
+   Hermes promoted to a tracked process (result with `promoted_from_foreground`, `session_id: proc_…`),
+   e.g. a `paseo send` plus a poll loop, a render, a long export.
 
 The board did not see either. A chat whose turn ended went to Waiting although work it started was
 still running, and their transcripts were not reachable from the chat.
@@ -31,7 +34,7 @@ a terminal run cannot be tied to its chat by an id without a change to Hermes.
 - The backend derives a chat's child agents from the chat's own transcript (`server/src/hermes-children.mjs`,
   pure and tested; `server/src/hermes-agents.mjs` adds the databases, a cache and the process check)
   and serves them **in the same list and shape as Paseo agents** (`Session.paseo[]`, `provider: 'hermes'`,
-  `kind: 'subagent' | 'terminal'`). Inline cards sit right after the message whose tool call started
+  `kind: 'subagent' | 'terminal' | 'process'`). Inline cards sit right after the message whose tool call started
   them; the transcript is read-only from the child session(s) (`GET /api/agents/hermes:<profile>:<id>/timeline`).
 - **Matching, strongest first** (field `match`):
   - `id`: subagent id from the result = `_subagent_id` of the child row (hard).
@@ -47,9 +50,16 @@ a terminal run cannot be tied to its chat by an id without a change to Hermes.
   `async_delegations.state`, and for background terminal runs whether the `pid` from the result is
   alive (`kill(pid, 0)`, which sends nothing). A row that is open but proves nothing any more (no
   delegation record, no activity for 6 h) is `unknown`, not `running`.
+- **Background processes** (`kind: 'process'`) have no session: they run from the tool result
+  (`session_id` `proc_…`, `pid`) until the `process_complete` notice with the same `proc_…` id (exit
+  code). Without a notice: `running` while the `pid` is alive, `unknown` when it is gone or after 6 h,
+  so a lost notice or a reused pid never keeps a card in Doing. Title: the first comment line of the
+  command, else the command without its `VAR=…;` / `cd …&&` set-up. The transcript is the command and
+  the notice.
 - **Doing rule** (`server/src/agent-column.mjs`, tested): unchanged from 0010 and now shared by both
   providers: a chat whose turn is over stays in Doing while an agent it started runs. The note reads
-  "Agents running (n)" as soon as a Hermes child is among them.
+  "Agents running (n)" as soon as a Hermes child is among them ("Background processes running (n)"
+  when only background processes run).
 - Running children are re-checked every 5 s (a process can end without a write to the main `state.db`,
   and profile databases are not part of the poll).
 

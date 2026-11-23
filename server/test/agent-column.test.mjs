@@ -41,3 +41,15 @@ test('watched or archived agents do not keep a chat busy', () => {
 test('order: blocked, running, failed, finished', () => {
   assert.deepEqual(sortAgents([hermes('finished', 'a'), hermes('error', 'b'), paseo('needs-attention', 'c'), hermes('running', 'd')]).map((a) => a.title), ['c', 'd', 'b', 'a']);
 });
+
+test('a running background process keeps the chat in Doing; with other agents the note says "agents"', () => {
+  const proc = (state, title = 'npm run build') => ({ ...hermes(state, title), kind: 'process' });
+  assert.deepEqual(agentColumn({ ...base, agents: [proc('running'), proc('finished', 'old')] }), { column: 'doing', note: 'procsRunningList:1:npm run build' });
+  assert.deepEqual(agentColumn({ ...base, agents: [proc('unknown')] }), { column: 'waiting', note: '' });
+  assert.equal(agentColumn({ ...base, agents: [proc('running'), paseo('running')] }).note, 'agentsRunningList:2:npm run build, Fix');
+  assert.equal(agentColumn({ ...base, autoColumn: 'doing', column: 'doing', agents: [proc('running')] }).note, 'procsRunning:1');
+});
+
+test('a Paseo agent the chat steers through the CLI keeps it in Doing like one steered through MCP', () => {
+  assert.deepEqual(agentColumn({ ...base, agents: [{ ...paseo('running'), rel: 'steers' }] }), { column: 'doing', note: 'paseoRunningList:1:Fix' });
+});

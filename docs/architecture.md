@@ -125,7 +125,12 @@ started or steers. It is read-only, with one exception ([ADR 0002](decisions/000
 - **Which agents belong to a session** comes from Hermes' own transcript: `paseo_create_agent`
   results (`created`), `paseo_send_message` / `paseo_respond_permission` / `paseo_archive_agent`
   calls (`steers`) and read calls (`watches`). Both direct calls and calls through Hermes' `tool_call`
-  wrapper count.
+  wrapper count, and so does the terminal (`server/src/paseo-cli.mjs`): `paseo send|run|archive|permit`
+  steer, `paseo logs|inspect|ls|wait` watch, ids also from `P=…/paseo; ID=<uuid>; $P send $ID` in the
+  same command. A terminal command that may create an agent (`paseo run`, a client calling
+  `agents.create`, paseo-mcp over stdio, a script about Paseo) links an id from its output as `created`,
+  but only when the agent was created during the call. Terminal links count only for ids the Paseo
+  daemon knows.
 - **Live state** comes from paseo-mcp (≥ 0.4.0) over stdio or HTTP: a subscription to the
   `paseo://agents` resource, so there is no polling. The stdio client runs with `PASEO_MCP_READONLY=1`.
 - **Fallback:** a direct, read-only connection to the Paseo daemon (`@getpaseo/client`). When the

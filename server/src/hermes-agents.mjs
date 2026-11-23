@@ -1,12 +1,12 @@
-// Hermes' own child agents per chat (delegate_task subagents and terminal `hermes chat` runs), read
-// from state.db and the profiles' state.db files, read-only. The parsing and matching rules live in
+// Hermes' own child agents per chat (delegate_task subagents, terminal `hermes chat` runs, background
+// processes), read from state.db and the profiles' state.db files, read-only. The parsing and matching rules live in
 // hermes-children.mjs; this class adds the databases, the process check and a cache.
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Store } from './store.mjs';
-import { childCalls, childTimeline, childView, matchSubagents, matchTerminal, parseChildId, promptFileOf, subagentState, terminalState } from './hermes-children.mjs';
+import { childCalls, childTimeline, childView, matchSubagents, matchTerminal, parseChildId, processState, processTimeline, promptFileOf, subagentState, terminalState } from './hermes-children.mjs';
 
 const PROFILE_RE = /^[A-Za-z0-9_.-]+$/;
 
@@ -117,6 +117,12 @@ export class HermesAgents {
       this.index.set(v.id, { parent: chatId, profile: c.profile, sessionId: session?.id || null, segments: session ? [session.id] : [] });
       out.push({ ...v, linkedAt: c.ts, msgId: c.msgId, callId: c.callId, index: c.index });
     }
+    for (const c of entry.calls.filter((x) => x.kind === 'process')) {
+      const state = processState({ call: c, pidAlive: c.pid && c.exitCode == null ? this.isAlive(c.pid) : null, now });
+      const v = childView(c, { state });
+      this.index.set(v.id, { parent: chatId, profile: null, sessionId: null, segments: [], items: processTimeline(c, state) });
+      out.push({ ...v, linkedAt: c.ts, msgId: c.msgId, callId: c.callId, index: c.index });
+    }
     return out;
   }
 
@@ -128,6 +134,7 @@ export class HermesAgents {
       if (!p) return null;
       known = { profile: p.profile, sessionId: p.ref, segments: [p.ref] };
     }
+    if (known.items) return { items: known.items.slice(-limit), hasOlder: known.items.length > limit, source: 'hermes' };
     const db = this.storeFor(known.profile);
     const rows = [];
     if (db) for (const sid of known.segments || []) if (db.sessionBrief(sid)) rows.push(...db.messages(sid));
