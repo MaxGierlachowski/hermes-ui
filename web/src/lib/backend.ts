@@ -109,3 +109,15 @@ export async function connectIroh(cfg: RemoteConfig) {
 let objectUrl: ((u: string) => Promise<string>) | null = null
 export const mediaNeedsBlob = () => conn.mode === 'iroh' && !conn.serviceWorker
 export const loadObjectUrl = (u: string) => (objectUrl ? objectUrl(u) : Promise.resolve(u))
+
+/**
+ * URL for links the browser opens itself (downloads): the API URL locally; over iroh the service
+ * worker's same-origin /__iroh__/<host>/… route, as it can't catch navigations to the virtual origin.
+ * null over iroh without a service worker.
+ */
+export function linkUrl(full: string) {
+  if (!full.startsWith(IROH_ORIGIN)) return full
+  if (conn.mode !== 'iroh' || !conn.serviceWorker) return null
+  const scope = new URL('./', new URL(swUrl(), location.href)) // the worker's default scope
+  return `${scope.href}__iroh__/${new URL(IROH_ORIGIN).host}${full.slice(IROH_ORIGIN.length)}`
+}

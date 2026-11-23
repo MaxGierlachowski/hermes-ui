@@ -19,7 +19,7 @@ import { Board } from './src/board.mjs';
 import { HermesGateway } from './src/hermes-ws.mjs';
 import { Devices } from './src/devices.mjs';
 import { Paseo } from './src/paseo.mjs';
-import { createImageResolver, real } from './src/local-files.mjs';
+import { createImageResolver, real, sendFile } from './src/local-files.mjs';
 import { extractMediaTags, mediaKind } from './src/media-tags.mjs';
 import { Inbox } from './src/inbox.mjs';
 import { Push } from './src/push.mjs';
@@ -525,13 +525,13 @@ function threadMessages(id) {
   return out;
 }
 
-// A file referenced by path in a transcript: images through the image resolver, audio only as this
-// exact file (like MEDIA attachments), anything else just by name.
+// A file referenced by path in a transcript: images through the image resolver, audio and video only
+// as this exact file (like MEDIA attachments), anything else just by name.
 function fileAttachment(f) {
   if (f.kind === 'file') return { kind: 'file', name: f.name || path.basename(f.path) };
-  if (f.kind === 'audio') {
+  if (f.kind === 'audio' || f.kind === 'video') {
     const resolved = real(f.path);
-    if (!resolved || mediaKind(f.path) !== 'audio') return { kind: 'file', name: f.name || path.basename(f.path) };
+    if (!resolved || mediaKind(f.path) !== f.kind) return { kind: 'file', name: f.name || path.basename(f.path) };
     mediaFiles.add(resolved);
   } else if (f.kind !== 'image') {
     return { kind: 'file', name: path.basename(f.path) };
@@ -539,7 +539,9 @@ function fileAttachment(f) {
     const resolved = real(f.path);
     if (resolved) mediaFiles.add(resolved);
   }
-  return { kind: f.kind, url: `/api/hermes-file?path=${encodeURIComponent(f.path)}` };
+  const url = `/api/hermes-file?path=${encodeURIComponent(f.path)}`;
+  // Videos carry their name for the download link (and for clients that show them as a file chip).
+  return f.kind === 'video' ? { kind: 'video', url, name: f.name || path.basename(f.path) } : { kind: f.kind, url };
 }
 
 // ---------- sending ----------
@@ -890,6 +892,8 @@ async function readJson(req) {
 }
 const STATIC = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
 const SECURITY_HEADERS = { 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
+// Files the board saved itself (data/media): pasted images and voice recordings (MediaRecorder:
+// audio/webm in Chrome, audio/mp4 in Safari), hence audio types for .webm/.mp4. Not MEDIA attachments.
 const MEDIA = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.webm': 'audio/webm', '.mp4': 'audio/mp4', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav' };
 
 let indexCache = null;
@@ -1060,17 +1064,19 @@ const server = http.createServer(async (req, res) => {
     let m;
     if ((m = p.match(/^\/api\/media\/([^/]+)\/([^/]+)$/))) {
       const file = board.mediaPath(decodeURIComponent(m[1]), decodeURIComponent(m[2]));
-      if (!file || !fs.existsSync(file)) return send(res, 404, { error: 'not found' });
-      res.writeHead(200, { 'Content-Type': MEDIA[path.extname(file)] || 'application/octet-stream' });
-      return fs.createReadStream(file).pipe(res);
+      const st = file && fs.statSync(file, { throwIfNoEntry: false });
+      if (!st?.isFile()) return send(res, 404, { error: 'not found' });
+      return sendFile(req, res, { file, type: MEDIA[path.extname(file)] || 'application/octet-stream', size: st.size, mtimeMs: st.mtimeMs });
     }
 
     if (p === '/api/file' || p === '/api/hermes-file') {
       // Images referenced by local path in transcripts and MEDIA attachments; see src/local-files.mjs.
       const img = resolveImage(url.searchParams.get('path'));
       if (!img) return send(res, 404, { error: 'not found' });
-      res.writeHead(200, { 'Content-Type': img.type, 'Content-Length': img.size, 'Cache-Control': 'private, max-age=3600', 'Content-Security-Policy': "default-src 'none'; sandbox", ...SECURITY_HEADERS });
-      return fs.createReadStream(img.file).pipe(res);
+      // Opened directly (new tab, iOS download preview) the browser shows its own media document: Chrome
+      // won't load media in a sandboxed one, Safari not under media-src 'none'. Still no script anywhere.
+      const csp = /^(audio|video)\//.test(img.type) ? "default-src 'none'; media-src 'self'" : "default-src 'none'; sandbox";
+      return sendFile(req, res, img, { 'Cache-Control': 'private, max-age=3600', 'Content-Security-Policy': csp, ...SECURITY_HEADERS });
     }
 
     if (p === '/api/search' && req.method === 'GET') {

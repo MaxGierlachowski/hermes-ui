@@ -33,7 +33,7 @@ The backend and its `iroh-gateway` stay unchanged.
 |---|---|
 | Pairing: QR scan, deep link, pasted link; identity in the keystore | ✅ |
 | Board: the columns as a swipe pager (tabs follow the finger, counts, last column remembered), live status dots, Paseo chips, pull to refresh, live via SSE | ✅ |
-| Thread: Markdown, streaming replies, tool chips, event cards, inline Paseo cards, images with pinch-zoom lightbox, audio | ✅ |
+| Thread: Markdown, streaming replies, tool chips, event cards, inline Paseo cards, images with pinch-zoom lightbox, audio; videos only by name for now (playing them needs `expo-video`) | ✅ |
 | Composer: text, gallery / camera images, voice messages, send / stop, above the keyboard | ✅ |
 | Inbox: open approvals and clarify questions (answer in place), Paseo permissions, history | ✅ |
 | New chat, search, Paseo agents + read-only transcripts, settings (path, theme, board, notifications) | ✅ |

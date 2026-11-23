@@ -1,7 +1,7 @@
 import { memo, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { router } from 'expo-router'
-import { AlertTriangle, Archive, Bell, Bot, ChevronRight, Clock, CornerDownRight, FileText, RotateCcw, ShieldCheck, Webhook, Wrench, Zap, type LucideIcon } from 'lucide-react-native'
+import { AlertTriangle, Archive, Bell, Bot, ChevronRight, Clock, CornerDownRight, FileText, Film, RotateCcw, ShieldCheck, Webhook, Wrench, Zap, type LucideIcon } from 'lucide-react-native'
 import type { Attachment, PaseoChip, ThreadMessage } from '@shared/types'
 import { stripMediaTags } from '@shared/media-tags'
 import { Text } from '@/components/ui/text'
@@ -88,8 +88,9 @@ function Attachments({ atts, onImage }: { atts: Attachment[]; onImage: (uri: str
       {atts.map((a) => (a.kind === 'image' ? <MediaImage key={a.url} url={a.url} onOpen={onImage} />
         : a.kind === 'audio' ? <MediaAudio key={a.url} url={a.url} />
           : (
+            // Video (MEDIA:…mp4/webm/mov) only by name for now: playing it needs expo-video (a native module).
             <View key={a.name} className="flex-row items-center gap-1.5 rounded-md border border-border px-2 py-1">
-              <Icon as={FileText} size={14} tone="muted-foreground" /><Text className="text-xs text-muted-foreground" numberOfLines={1}>{a.name}</Text>
+              <Icon as={a.kind === 'video' ? Film : FileText} size={14} tone="muted-foreground" /><Text className="text-xs text-muted-foreground" numberOfLines={1}>{a.name}</Text>
             </View>
           )))}
     </View>

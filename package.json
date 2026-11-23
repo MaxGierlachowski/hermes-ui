@@ -1,6 +1,6 @@
 {
   "name": "hermes-ui",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Kanban board for Hermes Agent sessions: headless backend + standalone UI, remote access over iroh.",
   "type": "module",
   "engines": {

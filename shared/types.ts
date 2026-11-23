@@ -68,7 +68,7 @@ export type Session = {
   paseoNote: string
 }
 
-export type Attachment = { kind: 'image'; url: string } | { kind: 'audio'; url: string } | { kind: 'file'; name: string }
+export type Attachment = { kind: 'image'; url: string } | { kind: 'audio'; url: string } | { kind: 'video'; url: string; name: string } | { kind: 'file'; name: string }
 
 // Sent while Hermes works, not in the transcript yet: sending → queued (Hermes' FIFO, next turn) → started →
 // gone once it is in the transcript; lost / failed → send again. id null = queued from another client.

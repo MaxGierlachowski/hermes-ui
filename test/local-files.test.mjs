@@ -51,3 +51,23 @@ test('.. and symlink escapes are refused', () => {
   assert.equal(resolve(path.join(shots, 'notes.png')), null);
   assert.equal(resolve(path.join(shots, 'notes.txt')), null);
 });
+
+test('MEDIA videos are served up to 500 MB, never from roots', () => {
+  const clip = path.join(shots, 'clip.mp4');
+  const big = path.join(shots, 'big.mov');
+  const huge = path.join(shots, 'huge.webm');
+  const longVoice = path.join(shots, 'long.mp3');
+  for (const [f, size] of [[clip, 1024], [big, 400 * 1024 * 1024], [huge, 501 * 1024 * 1024], [longVoice, 26 * 1024 * 1024]]) {
+    fs.writeFileSync(f, '');
+    fs.truncateSync(f, size); // sparse: no real disk use
+  }
+  const cachedVideo = path.join(cache, 'v.mp4');
+  fs.writeFileSync(cachedVideo, 'x');
+  const r = createImageResolver({ roots: [cache], files: new Set([clip, big, huge, longVoice, cachedVideo].map(real)) });
+  assert.deepEqual([r(clip)?.type, r(clip)?.size], ['video/mp4', 1024]);
+  assert.equal(r(big)?.type, 'video/quicktime');
+  assert.equal(r(huge), null);
+  assert.equal(r(longVoice), null); // audio and images keep the 25 MB cap
+  assert.equal(resolve(cachedVideo), null); // a root alone does not make a video readable
+  assert.equal(r(cachedVideo)?.type, 'video/mp4');
+});
