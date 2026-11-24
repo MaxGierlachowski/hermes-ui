@@ -8,6 +8,7 @@ import type { InboxItem, OpenItem, PaseoAgent, PaseoChip, PaseoItem, PendingProm
 import type { Backend } from './connection'
 import { lang } from './i18n'
 import { DEMO_IMAGE_URI } from './demo-image'
+import { DEMO_FILES_SESSION, demoFileBytes, demoFileMessages, demoFileText, demoFileUrl } from './demo-files'
 
 const L = (en: string, de: string) => (lang === 'de' ? de : en)
 const now = () => Math.floor(Date.now() / 1000)
@@ -58,6 +59,7 @@ function build(): Data {
     s('demo-idea', { title: L('Idea: test the onboarding email', 'Idee: Onboarding-Mail testen'), column: 'new', autoColumn: 'new', draft: true, messageCount: 0, updatedAt: T - 7200 }),
     s('demo-invoices', { title: L('Export last month’s invoices', 'Rechnungen vom letzten Monat exportieren'), column: 'done', autoColumn: 'done', override: true, updatedAt: T - 86400, messageCount: 12 }),
     s('demo-daily', { title: L('Daily summary', 'Tägliche Zusammenfassung'), column: 'done', autoColumn: 'done', source: 'cron', updatedAt: T - 40000, messageCount: 3 }),
+    s(DEMO_FILES_SESSION, { title: L('Q3 Lighthouse report for the landing page', 'Lighthouse-Bericht Q3 für die Landingpage'), activity: L('💬 Done: the report is attached', '💬 Fertig: Bericht hängt an'), source: 'desktop', updatedAt: T - 900, messageCount: 4 }),
   ]
 
   const messages = new Map<string, ThreadMessage[]>()
@@ -83,6 +85,7 @@ function build(): Data {
     { id: 1, role: 'user', ts: T - 400, text: L('Compare three vector databases for a small self-hosted project: setup, memory use, licence.', 'Vergleiche drei Vektordatenbanken für ein kleines selbst gehostetes Projekt: Setup, Speicherbedarf, Lizenz.') },
     { id: 2, role: 'tool', ts: T - 380, toolName: 'web_search', summary: 'self-hosted vector database comparison', text: '' },
   ])
+  messages.set(DEMO_FILES_SESSION, demoFileMessages(T, L))
   messages.set('demo-weekly', [
     { id: 1, role: 'user', ts: T - 2400, text: L('Summarise the week for the team.', 'Fass die Woche für das Team zusammen.') },
     { id: 2, role: 'assistant', ts: T - 1800, text: L(
@@ -197,16 +200,20 @@ export class DemoBackend implements Backend {
 
   /** Web: the sample image as a data URL (no file system). */
   mediaUrl(path: string) {
+    const file = demoFileUrl(path)
+    if (file) return file
     if (path !== DEMO_IMAGE) throw new Error('not found')
     return DEMO_IMAGE_URI
   }
 
   async download(path: string, fileUri: string) {
-    if (path !== DEMO_IMAGE) return { status: 404 }
-    const b64 = DEMO_IMAGE_URI.slice(DEMO_IMAGE_URI.indexOf(',') + 1)
-    const bin = atob(b64)
-    const bytes = new Uint8Array(bin.length)
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    let bytes = demoFileBytes(path)
+    if (!bytes) {
+      if (path !== DEMO_IMAGE) return { status: 404 }
+      const bin = atob(DEMO_IMAGE_URI.slice(DEMO_IMAGE_URI.indexOf(',') + 1))
+      bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    }
     const file = new File(fileUri)
     if (file.exists) file.delete()
     file.create()
@@ -223,6 +230,8 @@ export class DemoBackend implements Backend {
     const d = this.data
     let m: RegExpMatchArray | null
 
+    const fileText = demoFileText(path)
+    if (fileText) return reply(fileText.status, fileText.body)
     if (p === '/api/sessions' && method === 'GET') return reply(200, { sessions: [...d.sessions.values()], gateway: true })
     if (p === '/api/sessions' && method === 'POST') {
       const id = `demo-new-${this.nextId++}`

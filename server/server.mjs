@@ -19,8 +19,10 @@ import { HermesGateway } from './src/hermes-ws.mjs';
 import { Remote } from './src/remote.mjs';
 import { Devices } from './src/devices.mjs';
 import { Paseo } from './src/paseo.mjs';
-import { createImageResolver, real } from './src/local-files.mjs';
+import { createImageResolver, real, sendFile } from './src/local-files.mjs';
 import { extractMediaTags, mediaKind } from './src/media-tags.mjs';
+import { attachmentHeader, createFileAccess, inlineType } from './src/file-access.mjs';
+import { fileRefKeys } from '../shared/file-refs.ts';
 import { Inbox } from './src/inbox.mjs';
 import { Push } from './src/push.mjs';
 import { parseUserMessage, previewOf } from './src/user-markers.mjs';
@@ -45,6 +47,8 @@ const resolveImage = createImageResolver({
   tempPrefixes: ['paseo-attachments-'],
   files: mediaFiles,
 });
+// Files chats mention: file chips, MEDIA attachments of any type, preview and download (src/file-access.mjs).
+const files = createFileAccess({ roots: cfg.files.roots, maxPreviewBytes: cfg.files.maxPreviewMb * 1024 * 1024, maxDownloadBytes: cfg.files.maxDownloadMb * 1024 * 1024 });
 const SYSTEM_SOURCES = new Set(['cron', 'tool', 'subagent', 'oneshot', 'webhook', 'kanban', 'api_server']);
 
 const WEB_DIST = cfg.uiDir;
@@ -578,7 +582,10 @@ function threadMessages(id) {
       }
     }
     if (r.role === 'tool') {
-      out.push({ id: r.id, role: 'tool', toolName: r.tool_name || 'Tool', text: clip(r.content, 4000), ts: r.timestamp });
+      const msg = { id: r.id, role: 'tool', toolName: r.tool_name || 'Tool', text: clip(r.content, 4000), ts: r.timestamp };
+      const found = fileInfos(id, fileRefKeys(r.content));
+      if (found.length) msg.files = found;
+      out.push(msg);
       continue;
     }
     if (r.role === 'assistant' && !String(r.content || '').trim()) continue;
@@ -592,7 +599,7 @@ function threadMessages(id) {
       if (p.steer) msg.steer = true;
       if (p.threadContext) msg.threadContext = clip(p.threadContext, 6000);
       // Images, audio and documents Hermes stored for this turn are referenced by path in the text.
-      for (const f of p.files) msg.attachments.push(fileAttachment(f));
+      for (const f of p.files) msg.attachments.push(fileAttachment(f, id));
       const hasImage = p.files.some((f) => f.kind === 'image');
       for (let i = media.length - 1; i >= 0; i--) {
         if (r.id > media[i].afterMsgId) {
@@ -613,7 +620,10 @@ function threadMessages(id) {
     // become readable through /api/hermes-file, nothing else in their directories.
     const { text, paths } = extractMediaTags(msg.text);
     msg.text = text;
-    for (const file of paths) msg.attachments.push(fileAttachment({ kind: mediaKind(file), path: file }));
+    for (const file of paths) msg.attachments.push(fileAttachment({ kind: mediaKind(file), path: file }, id));
+    // Paths and file:// links in the reply: chips for the ones that exist and may be opened.
+    const found = fileInfos(id, fileRefKeys(text));
+    if (found.length) msg.files = found;
     out.push(msg);
   }
   if (after) out.push(...after);
@@ -635,21 +645,60 @@ function threadMessages(id) {
 }
 
 // A file referenced by path in a transcript: images through the image resolver, audio only as this
-// exact file (like MEDIA attachments), anything else just by name.
-function fileAttachment(f) {
-  if (f.kind === 'file') return { kind: 'file', name: f.name || path.basename(f.path) };
+// exact file (like MEDIA attachments), anything else as a file card that opens the preview when the
+// file may be opened (src/file-access.mjs), else just by name.
+function fileAttachment(f, sessionId) {
+  const asFile = () => {
+    const info = fileInfo(sessionId, f.path, { explicit: true });
+    return { kind: 'file', name: f.name || path.basename(f.path), ...(info && { file: info }) };
+  };
+  if (f.kind === 'file') return asFile();
   if (f.kind === 'audio') {
     const resolved = real(f.path);
-    if (!resolved || mediaKind(f.path) !== 'audio') return { kind: 'file', name: f.name || path.basename(f.path) };
+    if (!resolved || mediaKind(f.path) !== 'audio') return asFile();
     mediaFiles.add(resolved);
   } else if (f.kind !== 'image') {
-    return { kind: 'file', name: path.basename(f.path) };
+    return asFile();
   } else {
     const resolved = real(f.path);
     if (resolved) mediaFiles.add(resolved);
   }
   return { kind: f.kind, url: `/api/hermes-file?path=${encodeURIComponent(f.path)}` };
 }
+
+// ---------- files a chat mentions ----------
+// Every path a session's transcript mentions (key as written → attached with MEDIA / by the user, i.e.
+// allowed outside the file roots). Rebuilt when the transcript grows.
+const sessionRefCache = new Map();
+function sessionRefs(id) {
+  const row = store.getSession(id);
+  if (!row) return null;
+  const stamp = `${row.last_msg_id}:${row.message_count}`;
+  const hit = sessionRefCache.get(id);
+  if (hit?.stamp === stamp) return hit.keys;
+  const keys = new Map();
+  for (const r of store.messages(id)) {
+    const text = String(r.content || '');
+    if (r.role === 'user') {
+      for (const f of parseUserMessage(text, { kind: r.display_kind, meta: r.display_metadata }).files || []) if (f.path) keys.set(f.path, true);
+    } else if (r.role === 'assistant') {
+      for (const p of extractMediaTags(text).paths) keys.set(p, true);
+    }
+    for (const k of fileRefKeys(r.role === 'assistant' ? extractMediaTags(text).text : text)) if (!keys.has(k)) keys.set(k, false);
+  }
+  if (sessionRefCache.size > 200) sessionRefCache.delete(sessionRefCache.keys().next().value);
+  sessionRefCache.set(id, { stamp, keys });
+  return keys;
+}
+
+const fileUrl = (sessionId, key) => `/api/sessions/${encodeURIComponent(sessionId)}/file?path=${encodeURIComponent(key)}`;
+/** What the UI gets for an allowed file (shared/types.ts FileInfo), or null. */
+function fileInfo(sessionId, key, { explicit = false } = {}) {
+  const f = files.resolve(key, { explicit });
+  if (!f) return null;
+  return { key, path: f.path, name: f.name, size: f.size, mtime: Math.floor(f.mtimeMs / 1000), mime: f.mime, url: fileUrl(sessionId, key), preview: files.previewable(f) };
+}
+const fileInfos = (sessionId, keys) => keys.map((k) => fileInfo(sessionId, k)).filter(Boolean);
 
 // ---------- sending ----------
 async function sendPrompt(id, { text = '', images = [], audio = null }) {
@@ -1168,6 +1217,31 @@ const server = http.createServer(async (req, res) => {
       if (!img) return send(res, 404, { error: 'not found' });
       res.writeHead(200, { 'Content-Type': img.type, 'Content-Length': img.size, 'Cache-Control': 'private, max-age=3600', 'Content-Security-Policy': "default-src 'none'; sandbox", ...SECURITY_HEADERS });
       return fs.createReadStream(img.file).pipe(res);
+    }
+
+    if ((m = p.match(/^\/api\/sessions\/([^/]+)\/file(\/text)?$/)) && (req.method === 'GET' || req.method === 'HEAD')) {
+      // A file the chat mentions: preview (inline types only), text (JSON) or download. Everything else 404.
+      const id = decodeURIComponent(m[1]);
+      const key = url.searchParams.get('path') || '';
+      const refs = sessionRefs(id);
+      const f = refs?.has(key) ? files.resolve(key, { explicit: refs.get(key) }) : null;
+      if (!f) return send(res, 404, { error: 'not found' });
+      const { maxPreviewBytes, maxDownloadBytes } = files.limits;
+      if (m[2]) {
+        if (!files.previewable(f) || inlineType(f.file)) return send(res, 415, { error: 'no text preview for this file' });
+        return send(res, 200, files.readText(f));
+      }
+      const safe = { 'Cache-Control': 'private, max-age=300', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
+      if (url.searchParams.get('download') === '1') {
+        if (f.size > maxDownloadBytes) return send(res, 413, { error: `larger than ${cfg.files.maxDownloadMb} MB (HERMES_UI_FILE_DOWNLOAD_MB)` });
+        return sendFile(req, res, { file: f.file, type: 'application/octet-stream', size: f.size, mtimeMs: f.mtimeMs }, { ...safe, 'Content-Disposition': attachmentHeader(f.name), 'Content-Security-Policy': "default-src 'none'; sandbox", 'X-Frame-Options': 'DENY' });
+      }
+      // Inline: images (no SVG), audio, video, PDF. HTML, SVG and the rest are never rendered from here.
+      const type = inlineType(f.file);
+      if (!type || !files.previewable(f)) return send(res, 415, { error: 'not previewable' });
+      if (f.size > (type.startsWith('video/') ? maxDownloadBytes : maxPreviewBytes)) return send(res, 413, { error: 'too large for a preview' });
+      const csp = /^(audio|video)\//.test(type) ? "default-src 'none'; media-src 'self'" : type === 'application/pdf' ? "default-src 'none'; object-src 'self'" : "default-src 'none'; sandbox";
+      return sendFile(req, res, { file: f.file, type, size: f.size, mtimeMs: f.mtimeMs }, { ...safe, 'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(f.name)}`, 'Content-Security-Policy': csp });
     }
 
     if (p === '/api/search' && req.method === 'GET') {

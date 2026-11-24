@@ -12,6 +12,7 @@
 //!   shortcut to show / hide the window, launch at login, window size and position remembered,
 //!   system notifications, a single instance.
 //! - **Links**: external links open in the default browser, never inside the window (external.rs).
+//! - **Files from chats**: downloads into the Downloads folder, "Open in system" (files.rs).
 //!
 //! Configuration: `desktop.json` in the app's config dir; for development the same keys as env vars
 //! (HERMES_UI_DESKTOP_MODE / _PORT / _URL / _TOKEN / _DATA_DIR / _SIDECAR_ARGS / _SHORTCUT).
@@ -38,6 +39,7 @@ use tauri_plugin_shell::{process::CommandChild, process::CommandEvent, ShellExt}
 #[cfg(target_os = "macos")]
 mod macos_notify;
 mod external;
+mod files;
 
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -434,7 +436,7 @@ pub fn run() {
             tauri::webview::PermissionKind::Microphone | tauri::webview::PermissionKind::Camera => tauri::webview::PermissionResponse::Allow,
             _ => tauri::webview::PermissionResponse::Default,
         })
-        .invoke_handler(tauri::generate_handler![local_backend, set_backend_mode, secret_get, secret_set, secret_delete, notification_permission, notify, open_privacy_settings, external::open_external])
+        .invoke_handler(tauri::generate_handler![local_backend, set_backend_mode, secret_get, secret_set, secret_delete, notification_permission, notify, open_privacy_settings, external::open_external, files::save_download, files::open_local_file])
         .setup(|app| {
             let handle = app.handle().clone();
             // The main window is built here (not from tauri.conf.json) for its new-window handler:

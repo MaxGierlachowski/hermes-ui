@@ -5,7 +5,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Pressable, View } from 'react-
 import { useNavigation } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeft, Bot, Check, Columns3, X } from 'lucide-react-native'
-import { COLUMNS, type Column, type OutgoingMessage, type PaseoChip, type ThreadMessage } from '@shared/types'
+import { COLUMNS, type Column, type FileInfo, type OutgoingMessage, type PaseoChip, type ThreadMessage } from '@shared/types'
 import { stripMediaTags } from '@shared/media-tags'
 import { Text } from '@/components/ui/text'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,8 @@ import { Markdown } from '@/components/Markdown'
 import { PendingPrompt } from '@/components/PendingPrompt'
 import { Composer } from '@/components/Composer'
 import { Lightbox } from '@/components/Lightbox'
+import { FilePreview } from '@/components/files/FilePreview'
+import { FileOpenContext } from '@/components/files/FileChip'
 import { TransitionReady } from '@/components/Media'
 import { Sheet } from '@/components/Sheet'
 import { SyncBar } from '@/components/SyncBar'
@@ -73,6 +75,7 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
   const streaming = useStore((s) => (s.streaming && s.streaming.id === sessionId ? s.streaming.text : ''))
   const insets = useSafeAreaInsets()
   const [lightbox, setLightbox] = useState<{ uri: string; source: string } | null>(null)
+  const [file, setFile] = useState<FileInfo | null>(null)
   const [sheet, setSheet] = useState(false)
   const columnButton = useRef<ComponentRef<typeof View>>(null)
   const ready = useTransitionDone(embedded)
@@ -104,6 +107,7 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
   }
 
   const openImage = useCallback((uri: string, source: string) => setLightbox({ uri, source }), [])
+  const openFile = useCallback((f: FileInfo) => setFile(f), [])
   // The composer's send path, also used by the Summary pill.
   const submit = async (msg: OutgoingMessage) => {
     const next = await sendMessage(sessionId, msg)
@@ -160,16 +164,18 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
             <View className="flex-1 items-center justify-center"><ActivityIndicator /></View>
           ) : (
             <TransitionReady.Provider value={ready}>
-              <ThreadList
-                rows={rows}
-                renderRow={(item) => item.kind === 'msg'
-                  ? <MessageView m={item.m} sessionId={sessionId} chips={chips} onImage={openImage} />
-                  : item.kind === 'stream'
-                    ? <View className="opacity-90"><Markdown text={stripMediaTags(item.text)} /></View>
-                    : <View className="gap-3">{session?.pending.map((p) => <PendingPrompt key={p.promptId} sessionId={sessionId} prompt={p} />)}</View>}
-                footer={session?.initialPrompt && !messages.length ? <Text className="text-center text-sm text-muted-foreground">„{session.initialPrompt}“</Text> : undefined}
-                bottomInset={summary.state === 'hidden' ? 0 : SUMMARY_PILL_SPACE}
-              />
+              <FileOpenContext.Provider value={openFile}>
+                <ThreadList
+                  rows={rows}
+                  renderRow={(item) => item.kind === 'msg'
+                    ? <MessageView m={item.m} sessionId={sessionId} chips={chips} onImage={openImage} />
+                    : item.kind === 'stream'
+                      ? <View className="opacity-90"><Markdown text={stripMediaTags(item.text)} /></View>
+                      : <View className="gap-3">{session?.pending.map((p) => <PendingPrompt key={p.promptId} sessionId={sessionId} prompt={p} />)}</View>}
+                  footer={session?.initialPrompt && !messages.length ? <Text className="text-center text-sm text-muted-foreground">„{session.initialPrompt}“</Text> : undefined}
+                  bottomInset={summary.state === 'hidden' ? 0 : SUMMARY_PILL_SPACE}
+                />
+              </FileOpenContext.Provider>
             </TransitionReady.Provider>
           )}
           <SummaryPill state={summary.state} onPress={() => summary.run((text) => submit({ text, images: [], audio: null }))} />
@@ -187,6 +193,7 @@ export function ThreadPane({ sessionId, embedded = false }: { sessionId: string;
       </KeyboardAvoidingView>
       {!embedded && <ColumnSheet open={sheet} onClose={() => setSheet(false)} current={session?.column || 'new'} onPick={pickColumn} />}
       <Lightbox uri={lightbox?.uri ?? null} source={lightbox?.source} onClose={() => setLightbox(null)} />
+      <FilePreview file={file} onClose={() => setFile(null)} />
     </View>
   )
 }

@@ -18,6 +18,9 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_LANG` | `--lang` | `en` | Language of server-generated texts (`en`, `de`). The UI follows the browser; change it in ⌘K. |
 | `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state, inbox history, VAPID keys and push subscriptions. |
 | `HERMES_UI_IMAGE_ROOTS` | `--image-roots` | – | Extra directories (separated by `:`) whose images transcripts may show. Always allowed: Hermes' image cache, `PASEO_HOME` and Paseo's `paseo-attachments-*` temp dirs. |
+| `HERMES_UI_FILE_ROOTS` | `--file-roots` | home directory | Directories (separated by `:`) whose files chats may open in the preview and download, hidden directories excluded. MEDIA attachments are allowed outside them. Rules and denylist: [security.md](security.md#files-in-chats). |
+| `HERMES_UI_FILE_PREVIEW_MB` | `--file-preview-mb` | `25` | Largest image, audio or PDF shown inline in the file preview. |
+| `HERMES_UI_FILE_DOWNLOAD_MB` | `--file-download-mb` | `200` | Largest file (and video) served for download. |
 | `PASEO_HOME` | `--paseo-home` | `~/.paseo` | Paseo home, allowed as an image root. |
 | `HERMES_HOME` | `--hermes-home` | `~/.hermes` | Hermes data dir: `state.db`, `gateway.sock`. |
 | `HERMES_UI_PASEO` | `--paseo` | `auto` | `off` disables the Paseo integration. |

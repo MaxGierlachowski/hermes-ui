@@ -80,7 +80,12 @@ export type Session = {
   paseoNote: string
 }
 
-export type Attachment = { kind: 'image'; url: string } | { kind: 'audio'; url: string } | { kind: 'file'; name: string }
+// A local file the backend confirmed for this chat (exists, allowed, not on the denylist; see
+// docs/security.md "Files in chats"). `key` is the path as the message wrote it (shared/file-refs.ts),
+// `url` serves it (preview; `&download=1` as attachment), `text` its first MB as JSON for text previews.
+export type FileInfo = { key: string; path: string; name: string; size: number; mtime: number; mime: string; url: string; preview: boolean }
+
+export type Attachment = { kind: 'image'; url: string } | { kind: 'audio'; url: string } | { kind: 'file'; name: string; file?: FileInfo }
 
 // Sent while Hermes works, not in the transcript yet: sending → queued (Hermes' FIFO, next turn) → started →
 // gone once it is in the transcript; lost / failed → send again. id null = queued from another client.
@@ -98,6 +103,8 @@ export type ThreadMessage = {
   summary?: string
   live?: boolean
   attachments?: Attachment[]
+  /** Local files this message mentions that may be opened (file chips in the text, tool output). */
+  files?: FileInfo[]
   event?: { source: string; route?: string; title: string }
   meta?: { kind: 'reply' | 'origin'; text: string }[]
   steer?: boolean

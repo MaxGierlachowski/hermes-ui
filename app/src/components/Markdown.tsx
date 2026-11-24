@@ -1,11 +1,14 @@
-import { memo, type ReactNode } from 'react'
+import { memo, useMemo, type ReactNode } from 'react'
 import { Platform, ScrollView, Text, View, type TextStyle } from 'react-native'
 import { useColorScheme } from 'nativewind'
 import { Renderer, useMarkdown, type useMarkdownHookOptions } from 'react-native-marked'
 import { THEME } from '@/lib/theme'
 import { openExternal } from '@/lib/desktop'
 import { isWebDesktop } from '@/lib/web-input'
+import type { FileInfo } from '@shared/types'
+import { FILE_LINK_SCHEME, linkFileRefs } from '@shared/file-refs'
 import { CodeBlock } from './CodeBlock'
+import { FileLinkChip, MessageFilesContext } from './files/FileChip'
 
 // Type scale: the web UI's `prose-sm` on the desktop (14 / 24 px), a size up on phones.
 const SANS = Platform.OS === 'web' ? { fontFamily: '"Geist Variable", -apple-system, BlinkMacSystemFont, sans-serif' } : {}
@@ -16,6 +19,7 @@ const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'ui-
 type Colors = (typeof THEME)['light'] | (typeof THEME)['dark']
 
 // Code blocks with highlighting, inline code as a quiet chip, links that open outside, tables like the web.
+// Local files the backend confirmed are links to hermesfile:N (shared/file-refs.ts) and render as file chips.
 class HermesRenderer extends Renderer {
   constructor(private c: Colors) { super() }
   private k = 0
@@ -33,6 +37,7 @@ class HermesRenderer extends Renderer {
     )
   }
   link(children: string | ReactNode[], href: string, styles?: TextStyle): ReactNode {
+    if (href.startsWith(FILE_LINK_SCHEME)) return <FileLinkChip key={this.key()} index={Number(href.slice(FILE_LINK_SCHEME.length))}>{children}</FileLinkChip>
     return (
       // Web: a real <a> (right click → copy link works); the desktop shell routes its clicks to the
       // default browser (desktop.web.ts interceptExternalLinks). Native: the system opens it.
@@ -92,9 +97,13 @@ const options = (dark: boolean): useMarkdownHookOptions => {
 }
 const OPTIONS = { light: options(false), dark: options(true) }
 
-/** Hermes' replies (GFM) as native text: selectable, theme colours, highlighted code blocks. */
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
+const NO_FILES: FileInfo[] = []
+
+/** Hermes' replies (GFM) as native text: selectable, theme colours, highlighted code blocks, file chips for `files`. */
+export const Markdown = memo(function Markdown({ text, files = NO_FILES }: { text: string; files?: FileInfo[] }) {
   const { colorScheme } = useColorScheme()
-  const elements = useMarkdown(text, OPTIONS[colorScheme === 'dark' ? 'dark' : 'light'])
-  return <View>{elements.map((el, i) => <View key={i}>{el}</View>)}</View>
+  const source = useMemo(() => (files.length ? linkFileRefs(text, files.map((f) => f.key)) : text), [text, files])
+  const elements = useMarkdown(source, OPTIONS[colorScheme === 'dark' ? 'dark' : 'light'])
+  const body = <View>{elements.map((el, i) => <View key={i}>{el}</View>)}</View>
+  return files.length ? <MessageFilesContext.Provider value={files}>{body}</MessageFilesContext.Provider> : body
 })

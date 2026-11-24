@@ -37,6 +37,15 @@ The same app also runs in the browser and as a **desktop app for macOS** ([`desk
 Tauri 2, with the backend built in): [docs/desktop-app.md](docs/desktop-app.md). A spike, measured
 against the web UI in [ADR 0012](docs/decisions/0012-universal-app.md).
 
+## Files in chats
+
+Paths and `file://` links in replies and tool output, and `MEDIA:` attachments of any type, open in an
+in-app preview (images, audio, video, PDF, rendered Markdown, highlighted code, CSV tables; a file card
+otherwise) with Download and, in the desktop app, Open in default app. It works over iroh like images.
+Only files the chat itself mentions, below `HERMES_UI_FILE_ROOTS` (default: your home, hidden
+directories excluded), never keys, `.env` files, credentials or app databases:
+[security.md › Files in chats](docs/security.md#files-in-chats).
+
 ## Documentation
 
 | | |
