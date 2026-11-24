@@ -399,6 +399,8 @@ export const EN: Record<string, string> = {
   'Download fehlgeschlagen': 'Download failed',
   'Pfad kopieren': 'Copy path',
   'Im System öffnen': 'Open in default app',
+  'Die PDF-Vorschau ist fehlgeschlagen.': 'The PDF preview failed.',
+  'Seite {n} von {total}': 'Page {n} of {total}',
   'geändert {when}': 'modified {when}',
   'In Downloads gespeichert': 'Saved to Downloads',
   'Gespeichert': 'Saved',

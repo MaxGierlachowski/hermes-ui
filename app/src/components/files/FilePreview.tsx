@@ -2,7 +2,8 @@
 // (copyable), Download, "Open in system" (desktop app with a local backend) and close (Esc). ⌘S / Ctrl+S
 // downloads. What it shows depends on the type (shared/file-refs.ts previewKind):
 //
-//   image → the image · audio → the player · video, PDF → the platform's viewer (viewers.tsx)
+//   image → the image · audio → the player · video, PDF → the platform's viewer (viewers.tsx; on the
+//   web and the desktop app pdf.js, with the file card as the fallback when a PDF does not render)
 //   Markdown → rendered · CSV/TSV → a table (if it parses) · text and code → highlighted source
 //   (HTML and SVG too: never rendered) · anything else, or too large → a file card with Download.
 //
@@ -65,6 +66,7 @@ function Failed({ text }: { text: string }) {
 
 /** The fallback: what the file is, and the way to get it. */
 function InfoCard({ f, reason, onDownload }: { f: FileInfo; reason: string; onDownload: () => void }) {
+  const local = canOpenInSystem()
   const rows: [string, string][] = [
     [t('Größe'), formatBytes(f.size)],
     [t('Typ'), f.mime || extOf(f.name).toUpperCase()],
@@ -84,9 +86,16 @@ function InfoCard({ f, reason, onDownload }: { f: FileInfo; reason: string; onDo
           ))}
         </View>
         <Text className="text-center text-xs text-muted-foreground">{reason}</Text>
-        <Button variant="outline" onPress={onDownload} accessibilityLabel={t('Herunterladen')}>
-          <Icon as={Download} size={BUTTON_ICON} /><Text>{t('Herunterladen')}</Text>
-        </Button>
+        <View className="flex-row flex-wrap justify-center gap-2">
+          <Button variant="outline" onPress={onDownload} accessibilityLabel={t('Herunterladen')}>
+            <Icon as={Download} size={BUTTON_ICON} /><Text>{t('Herunterladen')}</Text>
+          </Button>
+          {local && (
+            <Button variant="outline" onPress={() => openInSystem(f)} accessibilityLabel={t('Im System öffnen')}>
+              <Icon as={ExternalLink} size={BUTTON_ICON} /><Text>{t('Im System öffnen')}</Text>
+            </Button>
+          )}
+        </View>
       </View>
     </ScrollView>
   )
@@ -151,11 +160,13 @@ function TextBody({ f, kind }: { f: FileInfo; kind: FilePreviewKind }) {
   )
 }
 
-function MediaBody({ f, kind }: { f: FileInfo; kind: 'image' | 'video' | 'pdf' }) {
+function MediaBody({ f, kind, onDownload }: { f: FileInfo; kind: 'image' | 'video' | 'pdf'; onDownload: () => void }) {
   const { uri, error } = useSource(f, kind)
+  const [pdfFailed, setPdfFailed] = useState(false)
   if (error) return <Failed text={t('Datei konnte nicht geladen werden')} />
+  if (pdfFailed) return <InfoCard f={f} reason={t('Die PDF-Vorschau ist fehlgeschlagen.')} onDownload={onDownload} />
   if (!uri) return <Centered><ActivityIndicator /></Centered>
-  if (kind === 'pdf') return <PdfView uri={uri} title={f.name} />
+  if (kind === 'pdf') return <PdfView uri={uri} title={f.name} onError={(e) => { console.warn('[hermes-ui] pdf preview', e); setPdfFailed(true) }} />
   if (kind === 'video') return <View className="flex-1 bg-black"><VideoView uri={uri} /></View>
   return <View className="flex-1 p-4"><Image source={{ uri }} style={{ flex: 1 }} contentFit="contain" accessibilityLabel={f.name} /></View>
 }
@@ -167,7 +178,7 @@ function Body({ f, onDownload }: { f: FileInfo; onDownload: () => void }) {
   if (!f.preview) return <InfoCard f={f} reason={t('Zu groß für eine Vorschau.')} onDownload={onDownload} />
   if (kind === 'audio') return <Centered><View className="w-full max-w-sm items-center gap-4"><Icon as={fileIcon(f.name)} size={32} tone="muted-foreground" /><MediaAudio url={f.url} /></View></Centered>
   if ((kind === 'pdf' && !canShowPdf) || (kind === 'video' && !canShowVideo)) return <InfoCard f={f} reason={none} onDownload={onDownload} />
-  if (kind === 'image' || kind === 'video' || kind === 'pdf') return <MediaBody f={f} kind={kind} />
+  if (kind === 'image' || kind === 'video' || kind === 'pdf') return <MediaBody f={f} kind={kind} onDownload={onDownload} />
   return <TextBody f={f} kind={kind} />
 }
 

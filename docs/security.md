@@ -174,6 +174,11 @@ HTML, SVG and everything else are shown as source text (JSON) or downloaded as
 downloads). Authentication is unchanged (device cookie, bearer token or the iroh allow-list); over
 iroh the preview goes through the same media path as images.
 
+PDFs are drawn by pdf.js (bundled, no CDN) onto canvases in the app's own page, on the web and in
+the desktop app: no browser PDF plugin and no frame. The desktop app's navigation guard therefore
+stays strict (only the bundled UI navigates; `blob:` and `data:` frames are refused), and its CSP
+has no `frame-src` exception.
+
 The desktop app adds two commands (`desktop-app/src-tauri/src/files.rs`): saving a download into
 the Downloads folder (never overwriting) and **Open in default app**, offered only when the backend
 runs on the same machine. It refuses directories, executables (any `x` bit) and programs, scripts,
