@@ -124,13 +124,21 @@ export function SearchPanel({ palette = false, onClose, onPick, onCommand }: { p
     else onCommand?.(it.cmd.id)
   }
   const list = useRef<FlatList<Item>>(null)
+  // Only keyboard moves scroll the list. Hover selects too, and scrolling on hover would move the
+  // next row under a resting mouse, select it, scroll again: the list drifts on its own.
+  const byKey = useRef(false)
+  const hover = (index: number) => { byKey.current = false; setSel(selectable.indexOf(index)) }
   const onKey = (key: string, e: { preventDefault(): void }) => {
-    if (key === 'ArrowDown') { e.preventDefault(); setSel((i) => Math.min(selectable.length - 1, i + 1)) }
-    else if (key === 'ArrowUp') { e.preventDefault(); setSel((i) => Math.max(0, i - 1)) }
+    if (key === 'ArrowDown') { e.preventDefault(); byKey.current = true; setSel((i) => Math.min(selectable.length - 1, i + 1)) }
+    else if (key === 'ArrowUp') { e.preventDefault(); byKey.current = true; setSel((i) => Math.max(0, i - 1)) }
     else if (key === 'Enter') { e.preventDefault(); choose(items[selIndex]) }
     else if (key === 'Escape') { e.preventDefault(); onClose() }
   }
-  useEffect(() => { if (palette && selIndex >= 0) list.current?.scrollToIndex({ index: selIndex, viewPosition: 0.5, animated: false }) }, [sel])
+  useEffect(() => {
+    if (!byKey.current) return
+    byKey.current = false
+    if (palette && selIndex >= 0) list.current?.scrollToIndex({ index: selIndex, viewPosition: 0.5, animated: false })
+  }, [sel])
 
   return (
     // Palette: the web UI's command dialog (popover surface, hairline ring, search field on top, key hints below).
@@ -160,13 +168,13 @@ export function SearchPanel({ palette = false, onClose, onPick, onCommand }: { p
         renderItem={({ item: it, index }) => it.kind === 'group' ? (
           <Text className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground">{it.label}</Text>
         ) : it.kind === 'cmd' ? (
-          <Pressable onPress={() => choose(it)} onHoverIn={() => setSel(selectable.indexOf(index))} className={cn('flex-row items-center gap-2 rounded-lg px-2', palette ? 'h-8' : 'h-12', index === selIndex && 'bg-muted')}>
+          <Pressable onPress={() => choose(it)} onHoverIn={() => hover(index)} className={cn('flex-row items-center gap-2 rounded-lg px-2', palette ? 'h-8' : 'h-12', index === selIndex && 'bg-muted')}>
             <Icon as={it.cmd.icon} size={16} tone="muted-foreground" />
             <Text className="flex-1 text-sm">{t(it.cmd.label)}</Text>
             {!!it.cmd.hint && <Text className="text-xs tracking-widest text-muted-foreground">{it.cmd.hint}</Text>}
           </Pressable>
         ) : (
-          <Pressable onPress={() => choose(it)} onHoverIn={palette ? () => setSel(selectable.indexOf(index)) : undefined} className="active:bg-accent">
+          <Pressable onPress={() => choose(it)} onHoverIn={palette ? () => hover(index) : undefined} className="active:bg-accent">
             <HitRow hit={it.hit} query={q.trim()} selected={index === selIndex} palette={palette} />
           </Pressable>
         )}
