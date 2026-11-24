@@ -38,6 +38,7 @@
         "img-src": "'self' data: blob: http://127.0.0.1:* http://localhost:*",
         "media-src": "'self' data: blob: http://127.0.0.1:* http://localhost:*",
         "font-src": "'self' data:",
+        "frame-src": "'self' blob: data:",
         "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* https: wss: blob: data:"
       },
       "dangerousDisableAssetCspModification": [

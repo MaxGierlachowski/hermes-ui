@@ -120,12 +120,12 @@ export function fileRefKeys(text: string): string[] {
 }
 
 /** The prefix of the links linkFileRefs writes; the Markdown renderer turns them into file chips. */
-export const FILE_LINK_SCHEME = 'hermes-file:'
+export const FILE_LINK_SCHEME = 'hermesfile:'
 
 const escapeLabel = (s: string) => s.replace(/([\\[\]*_`<>])/g, '\\$1')
 
 /**
- * Markdown with every confirmed reference replaced by a link `[name](hermes-file:<index>)`, index into
+ * Markdown with every confirmed reference replaced by a link `[name](hermesfile:<index>)` (letters only: react-native-marked treats `[a-z]+:` as a scheme), index into
  * `keys`; references the backend did not confirm stay as written.
  */
 export function linkFileRefs(text: string, keys: string[]): string {

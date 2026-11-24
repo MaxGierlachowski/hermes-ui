@@ -56,12 +56,12 @@ test('linkFileRefs: only confirmed references become links; labels are escaped',
   const text = 'Wrote `/Users/me/a_b.md`, see [the *plan*](~/notes/plan.txt) and /Users/me/missing.txt.';
   assert.equal(
     linkFileRefs(text, ['/Users/me/a_b.md', '~/notes/plan.txt']),
-    'Wrote [a\\_b.md](hermes-file:0), see [the \\*plan\\*](hermes-file:1) and /Users/me/missing.txt.',
+    'Wrote [a\\_b.md](hermesfile:0), see [the \\*plan\\*](hermesfile:1) and /Users/me/missing.txt.',
   );
   assert.equal(linkFileRefs(text, []), text);
   // Code blocks stay untouched even when the same path is confirmed elsewhere.
   const block = '```\n/Users/me/a.md\n```\n/Users/me/a.md';
-  assert.equal(linkFileRefs(block, ['/Users/me/a.md']), '```\n/Users/me/a.md\n```\n[a.md](hermes-file:0)');
+  assert.equal(linkFileRefs(block, ['/Users/me/a.md']), '```\n/Users/me/a.md\n```\n[a.md](hermesfile:0)');
 });
 
 test('previewKind / codeLanguage: by extension; HTML and SVG are text, never rendered', () => {

@@ -8,6 +8,7 @@ import { Text } from '@/components/ui/text'
 import { Icon } from '@/components/ui/icon'
 import { Markdown } from './Markdown'
 import { MediaAudio, MediaImage } from './Media'
+import { FileCard } from './files/FileChip'
 import { AGENT_STATE } from './status'
 import { retryOutbox } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -32,6 +33,7 @@ function ToolChip({ m }: { m: ThreadMessage }) {
         {!!m.text && <Icon as={ChevronRight} size={12} tone="muted-foreground" style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }} />}
       </Pressable>
       {open && <Text selectable className="mt-1.5 max-h-72 w-full rounded-md border border-border bg-muted/60 p-2 font-mono text-[11.5px]">{m.text}</Text>}
+      {open && !!m.files?.length && <View className="mt-1.5 gap-1.5">{m.files.map((f) => <FileCard key={f.key} f={f} name={f.name} />)}</View>}
     </View>
   )
 }
@@ -95,11 +97,12 @@ function Attachments({ atts, onImage }: { atts: Attachment[]; onImage: (uri: str
     <View className="mt-2 items-start gap-2">
       {atts.map((a) => (a.kind === 'image' ? <MediaImage key={a.url} url={a.url} onOpen={onImage} />
         : a.kind === 'audio' ? <MediaAudio key={a.url} url={a.url} />
-          : (
-            <View key={a.name} className="flex-row items-center gap-1.5 rounded-md border border-border px-2 py-1">
-              <Icon as={FileText} size={14} tone="muted-foreground" /><Text className="text-xs text-muted-foreground" numberOfLines={1}>{a.name}</Text>
-            </View>
-          )))}
+          : a.file ? <FileCard key={a.file.key} f={a.file} name={a.name} />
+            : (
+              <View key={a.name} className="flex-row items-center gap-1.5 rounded-md border border-border px-2 py-1">
+                <Icon as={FileText} size={14} tone="muted-foreground" /><Text className="text-xs text-muted-foreground" numberOfLines={1}>{a.name}</Text>
+              </View>
+            )))}
     </View>
   )
 }
@@ -145,7 +148,7 @@ export const MessageView = memo(function MessageView({ m, sessionId, chips, onIm
   if (m.role === 'system') return <Text className="text-center text-xs text-muted-foreground">{m.text}</Text>
   return (
     <View {...HOVER_MSG}>
-      {!!m.text && <Markdown text={m.live ? stripMediaTags(m.text) : m.text} />}
+      {!!m.text && <Markdown text={m.live ? stripMediaTags(m.text) : m.text} files={m.files} />}
       <Attachments atts={atts} onImage={onImage} />
       {!!m.ts && <Text {...HOVER_TS} className={cn('mt-1 text-muted-foreground', D ? 'text-[10.5px]' : 'text-[11px]')}>{clock(m.ts)}</Text>}
     </View>

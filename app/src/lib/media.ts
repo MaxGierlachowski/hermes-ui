@@ -36,7 +36,9 @@ const hash = (s: string) => {
 }
 
 const mediaPath = (url: string) => {
-  const ext = (url.split('?')[0].match(/\.(\w{2,5})$/)?.[1] || decodeURIComponent(url).match(/\.(png|jpe?g|gif|webp|heic|m4a|mp3|ogg|opus|wav|webm|mp4)\b/i)?.[1] || 'bin').toLowerCase()
+  // Files from chats (/api/sessions/…/file?path=…) keep their extension: viewers go by it.
+  const named = new URLSearchParams(url.split('?')[1] || '').get('path')?.match(/\.(\w{1,8})$/)?.[1]
+  const ext = (url.split('?')[0].match(/\.(\w{2,5})$/)?.[1] || named || decodeURIComponent(url).match(/\.(png|jpe?g|gif|webp|heic|m4a|mp3|ogg|opus|wav|webm|mp4)\b/i)?.[1] || 'bin').toLowerCase()
   return new File(mediaDir(), `${hash(url)}.${ext}`)
 }
 
