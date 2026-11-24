@@ -86,6 +86,22 @@ export class Store {
       ORDER BY id`).all(id);
   }
 
+  // Same rows, newest-first and capped: long chats don't pay for loading (and re-rendering) the
+  // full history just to show the tail. `beforeId` pages further back; `hasMore` tells the caller
+  // whether anything older than the returned window still exists.
+  messagesPage(id, { beforeId = null, limit = 60 } = {}) {
+    if (!this.db) return { rows: [], hasMore: false };
+    const cols = `id, role, content, tool_calls, tool_name, tool_call_id, timestamp, display_kind, display_metadata`;
+    const where = `session_id = ? AND role IN ('user','assistant','tool') AND compacted = 0 AND active = 1`;
+    const rows = beforeId
+      ? this.db.prepare(`SELECT ${cols} FROM messages WHERE ${where} AND id < ? ORDER BY id DESC LIMIT ?`).all(id, beforeId, limit + 1)
+      : this.db.prepare(`SELECT ${cols} FROM messages WHERE ${where} ORDER BY id DESC LIMIT ?`).all(id, limit + 1);
+    const hasMore = rows.length > limit;
+    if (hasMore) rows.pop(); // DESC order: the last row is the oldest fetched, i.e. the one beyond the page
+    rows.reverse();
+    return { rows, hasMore };
+  }
+
   // Hermes' durable FIFO per session (gateway-owned sessions): a prompt sent while a turn runs waits
   // here as status 'queued' and is written to messages only when its own turn starts.
   admissions(id, limit = 40) {

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Archive, Bell, ShieldCheck, ChevronRight, CircleStop, Clock, CornerDownRight, FileText, FlaskConical, RotateCcw, Webhook, Wrench, X, Zap } from 'lucide-react'
 import { ChatContainerContent, ChatContainerRoot, ChatContainerScrollAnchor } from '@/components/ui/chat-container'
 import { Markdown } from '@/components/ui/markdown'
@@ -12,7 +12,7 @@ import { clock } from '@/lib/format'
 import { COLUMNS, type Attachment, type Column, type OutboxState, type PaseoChip, type ThreadMessage } from '@/lib/types'
 import { AGENT_STATE, AgentStateDot } from '@/components/paseo/AgentChip'
 import { stripMediaTags } from '@/lib/media-tags'
-import { clearHighlight, dismissOutbox, getState, interrupt, openThread, retryOutbox, sendMessage, setColumn, useBoard } from '@/lib/store'
+import { clearHighlight, dismissOutbox, getState, interrupt, loadOlderMessages, openThread, retryOutbox, sendMessage, setColumn, useBoard } from '@/lib/store'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { SourceIcon, StatusDot } from '@/components/board/status'
 import { Composer } from './Composer'
@@ -45,6 +45,34 @@ function ToolChip({ m }: { m: ThreadMessage }) {
       {open && <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md bg-muted/60 p-2 font-mono text-[11.5px] ring-1 ring-border">{m.text}</pre>}
     </div>
   )
+}
+
+/** Scroll near the top of a long chat: fetch the next older page, keep the view anchored on the
+ *  same message instead of jumping (prepending above the viewport would otherwise yank it down). */
+function LoadOlder({ sessionId }: { sessionId: string }) {
+  const hasMore = useBoard((s) => s.hasMoreOlder)
+  const loading = useBoard((s) => s.loadingOlder)
+  const { scrollRef } = useStickToBottomContext()
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const scrollEl = scrollRef.current
+    const sentinel = sentinelRef.current
+    if (!scrollEl || !sentinel || !hasMore) return
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting || loading) return
+      const prevHeight = scrollEl.scrollHeight
+      const prevTop = scrollEl.scrollTop
+      loadOlderMessages(sessionId).then(() => {
+        requestAnimationFrame(() => { scrollEl.scrollTop = prevTop + (scrollEl.scrollHeight - prevHeight) })
+      })
+    }, { root: scrollEl, rootMargin: '300px 0px 0px 0px' })
+    // Opening a thread jumps to the bottom first ("initial" scroll); observing right away would
+    // catch that transient top-of-page frame and eagerly load history nobody scrolled to yet.
+    let raf = requestAnimationFrame(() => { raf = requestAnimationFrame(() => io.observe(sentinel)) })
+    return () => { cancelAnimationFrame(raf); io.disconnect() }
+  }, [scrollRef, hasMore, loading, sessionId])
+  if (!hasMore) return null
+  return <div ref={sentinelRef} className="flex justify-center py-3"><Loader variant="dots" size="sm" /></div>
 }
 
 /** Search hit: stop following the bottom, scroll the message into view and mark it briefly. */
@@ -405,6 +433,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
         <ChatContainerContent className="flex flex-col gap-4 px-4 py-4">
           {loading && !messages.length && <div className="flex justify-center py-8"><Loader variant="dots" /></div>}
           {!loading && !messages.length && !streaming && <div className="py-8 text-center text-sm text-muted-foreground">{t('Noch keine Nachrichten.')}</div>}
+          <LoadOlder sessionId={session.id} />
           <PaseoCtx.Provider value={{ chips: session.paseo || [], open: openAgent }}>
             {messages.map((m, i) => <MessageRow key={m.id ?? `l${i}`} m={m} />)}
           </PaseoCtx.Provider>
