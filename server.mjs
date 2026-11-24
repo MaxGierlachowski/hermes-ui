@@ -449,8 +449,25 @@ setInterval(() => {
 }, 15000);
 
 // ---------- thread ----------
+// Default window for a freshly opened thread: enough to feel complete without paying for a full
+// long-chat re-render. Also the page size for each "load older" fetch.
+const THREAD_PAGE_SIZE = 60;
+
 function threadMessages(id) {
   const rows = store.messages(id);
+  return mapRows(id, rows);
+}
+
+// Newest-first window, for the board (so a long chat opens instantly) and for scrolling further
+// back. `beforeId` omitted = the live tail (also merges outbox/queued-FIFO entries not in the
+// transcript yet); given = a purely historical older page, nothing pending to merge there.
+function threadMessagesPage(id, { beforeId, limit = THREAD_PAGE_SIZE } = {}) {
+  const { rows, hasMore } = store.messagesPage(id, { beforeId, limit });
+  const messages = mapRows(id, rows, { live: !beforeId });
+  return { messages, hasMore, oldestId: rows.length ? rows[0].id : null };
+}
+
+function mapRows(id, rows, { live = true } = {}) {
   const media = [...(board.data.media[id] || [])];
   const queued = new Map(outbox.forSession(id).filter((e) => e.rowId).map((e) => [e.rowId, e]));
   const calls = new Map(); // tool_call_id -> [{ name, args }], for Paseo items
@@ -509,6 +526,7 @@ function threadMessages(id) {
     out.push(msg);
   }
   // Sent from the board, not in the transcript yet (see src/outbox.mjs).
+  if (!live) return out;
   const entries = outbox.forSession(id);
   for (const e of entries) {
     if (e.rowId && rows.some((r) => r.id === e.rowId)) continue;
@@ -1137,7 +1155,22 @@ const server = http.createServer(async (req, res) => {
       openFollow = id;
       follow(id);
       reconcileOutbox(id); // a message that just landed in the transcript must not show twice
-      return send(res, 200, { session: card, messages: threadMessages(id) });
+      const { messages, hasMore } = threadMessagesPage(id);
+      return send(res, 200, { session: card, messages, hasMore });
+    }
+
+    // Older messages, paged backwards from `before` (a message id already on the client). Newest
+    // page comes from GET /api/sessions/:id above; this is only for scrolling further back.
+    if ((m = p.match(/^\/api\/sessions\/([^/]+)\/messages$/)) && req.method === 'GET') {
+      const id = decodeURIComponent(m[1]);
+      if (id.startsWith('draft:')) return send(res, 200, { messages: [], hasMore: false });
+      const card = cardById(id);
+      if (!card) return send(res, 404, { error: 'not found' });
+      const before = Number(url.searchParams.get('before'));
+      if (!before) return send(res, 400, { error: 'before required' });
+      const limit = Math.min(Number(url.searchParams.get('limit')) || THREAD_PAGE_SIZE, 200);
+      const { messages, hasMore } = threadMessagesPage(id, { beforeId: before, limit });
+      return send(res, 200, { messages, hasMore });
     }
 
     if ((m = p.match(/^\/api\/sessions\/([^/]+)\/messages$/)) && req.method === 'POST') {

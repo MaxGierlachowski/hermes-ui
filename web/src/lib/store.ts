@@ -21,6 +21,8 @@ type State = {
   openId: string | null
   messages: ThreadMessage[]
   loadingThread: boolean
+  hasMoreOlder: boolean // the open thread has messages older than the oldest one currently loaded
+  loadingOlder: boolean
   streaming: { id: string; text: string } | null
   pendingFirst: { id: string; text: string; ts: number } | null
   flash: string | null
@@ -46,6 +48,8 @@ let state: State = {
   openId: null,
   messages: [],
   loadingThread: false,
+  hasMoreOlder: false,
+  loadingOlder: false,
   streaming: null,
   pendingFirst: null,
   flash: null,
@@ -129,7 +133,7 @@ function withPending(id: string, messages: ThreadMessage[]) {
 export async function openThread(id: string | null, opts: { highlight?: number; query?: string; session?: Session } = {}) {
   // A search hit can be older than the board's window: show its card until the next reload.
   if (id && opts.session && !state.sessions[id]) upsert(opts.session)
-  set({ openId: id, messages: [], loadingThread: !!id, highlight: opts.highlight ?? null, highlightQuery: opts.query || '', streaming: state.streaming?.id === id ? state.streaming : null })
+  set({ openId: id, messages: [], loadingThread: !!id, hasMoreOlder: false, loadingOlder: false, highlight: opts.highlight ?? null, highlightQuery: opts.query || '', streaming: state.streaming?.id === id ? state.streaming : null })
   writeHash()
   if (id) await refreshThread(id)
 }
@@ -141,13 +145,38 @@ export async function searchChats(q: string, archived: boolean, signal?: AbortSi
   return api<{ q: string; title: SearchHit[]; content: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}${archived ? '&archived=1' : ''}`, { signal })
 }
 
+// The latest window keeps the thread view fast for long chats; anything older than it the user
+// already scrolled to stays put across a background refresh (reconnect, a new message arriving) —
+// only loadOlderMessages() is authoritative about whether more is still available further back.
+function mergeMessages(existing: ThreadMessage[], fresh: ThreadMessage[]) {
+  if (!existing.length) return fresh
+  const minFreshId = fresh.find((m) => m.id != null)?.id
+  const older = minFreshId == null ? existing : existing.filter((m) => m.id != null && m.id < minFreshId)
+  return [...older, ...fresh]
+}
+
 export async function refreshThread(id: string) {
   try {
-    const { session, messages } = await api<{ session: Session; messages: ThreadMessage[] }>(`/api/sessions/${encodeURIComponent(id)}`)
+    const { session, messages, hasMore } = await api<{ session: Session; messages: ThreadMessage[]; hasMore?: boolean }>(`/api/sessions/${encodeURIComponent(id)}`)
     if (state.openId !== id) return
     upsert(session)
-    set({ messages: withPending(id, messages), loadingThread: false })
+    const hadOlder = state.messages.length > 0
+    set({ messages: withPending(id, mergeMessages(state.messages, messages)), loadingThread: false, hasMoreOlder: hadOlder ? state.hasMoreOlder : !!hasMore })
   } catch (err) { set({ loadingThread: false }); handle(err) }
+}
+
+// Scrolled to the top of the thread: fetch the next older page and prepend it. The caller
+// (ThreadView) is responsible for keeping the visible scroll position stable across the prepend.
+export async function loadOlderMessages(id: string) {
+  if (state.openId !== id || state.loadingOlder || !state.hasMoreOlder) return
+  const oldest = state.messages.find((m) => m.id != null)?.id
+  if (oldest == null) return
+  set({ loadingOlder: true })
+  try {
+    const { messages, hasMore } = await api<{ messages: ThreadMessage[]; hasMore: boolean }>(`/api/sessions/${encodeURIComponent(id)}/messages?before=${oldest}`)
+    if (state.openId !== id) return
+    set({ messages: [...messages, ...state.messages], hasMoreOlder: hasMore, loadingOlder: false })
+  } catch (err) { set({ loadingOlder: false }); handle(err) }
 }
 
 // ---------- routing: #/board, #/board/<session>, #/inbox, #/inbox/<session>[?confirm=<prompt>&choice=<c>] ----------
