@@ -1742,6 +1742,7 @@ Apache-2.0 (backend only, optional integration).
 - gethostname 1.1.0 (desktop-app (Rust))
 - human-signals 2.1.0 (web)
 - human-signals 8.0.1 (web)
+- pdfjs-dist 6.5.438 (app)
 - sync_wrapper 1.0.2 (app (Rust), desktop-app (Rust))
 - tao 0.37.3 (desktop-app (Rust))
 - ts-interface-checker 0.1.13 (app)

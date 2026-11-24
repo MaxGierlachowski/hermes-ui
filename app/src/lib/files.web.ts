@@ -14,13 +14,8 @@ import { t } from './i18n'
 
 export const downloadUrl = (f: FileInfo) => `${f.url}&download=1`
 
-/** Something an <img>/<video>/<iframe> can load. PDFs become a blob URL (an iframe needs the same origin rules everywhere). */
-export async function previewSource(f: FileInfo, kind: string): Promise<string> {
-  const u = await mediaFile(f.url)
-  if (kind !== 'pdf' || u.startsWith('blob:')) return u
-  const blob = await (await fetch(u)).blob()
-  return URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
-}
+/** Something an <img>/<video> can load and fetch() can read (the PDF viewer reads the bytes itself). */
+export const previewSource = (f: FileInfo, _kind: string): Promise<string> => mediaFile(f.url)
 
 export async function downloadFile(f: FileInfo): Promise<void> {
   const u = await mediaFile(downloadUrl(f))

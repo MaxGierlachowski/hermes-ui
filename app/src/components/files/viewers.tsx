@@ -6,7 +6,7 @@ import { WebView } from 'react-native-webview'
 export const canShowPdf = Platform.OS === 'ios'
 export const canShowVideo = false
 
-export function PdfView({ uri }: { uri: string; title: string }) {
+export function PdfView({ uri }: { uri: string; title: string; onError: (e: unknown) => void }) {
   return <WebView source={{ uri }} originWhitelist={['file://*']} allowingReadAccessToURL={uri} javaScriptEnabled={false} style={{ flex: 1 }} />
 }
 

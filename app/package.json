@@ -32,6 +32,7 @@
     "iroh-fetch": "0.6.3",
     "lucide-react-native": "^1.75.0",
     "nativewind": "^4.2.7",
+    "pdfjs-dist": "6.5.438",
     "prism-react-renderer": "2.4.1",
     "prismjs": "1.30.0",
     "react": "19.3.0",
@@ -52,6 +53,7 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@types/react": "~19.3.0",
     "typescript": "~6.0.3"
   },
@@ -71,7 +73,8 @@
     "apk": "cd android && ./gradlew app:assembleRelease",
     "aab": "cd android && ./gradlew app:bundleRelease",
     "release:android": "scripts/release-android.sh",
-    "eas-build-post-install": "scripts/eas-build-post-install.sh"
+    "eas-build-post-install": "scripts/eas-build-post-install.sh",
+    "test:ui": "playwright test"
   },
   "private": true
 }
