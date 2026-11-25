@@ -37,10 +37,10 @@ function useModelOptions(open: boolean) {
 function ModelPicker({ options, value, onChange }: { options: ModelOptions; value: string; onChange: (value: string) => void }) {
   const grouped = options.providers.length > 1
   return (
-    <div className="flex items-center gap-1.5">
-      <Label htmlFor="model" className="text-xs font-normal">{t('Modell')}</Label>
+    // No visible label: the trigger shows the model, which is clear enough. Full width in the phone sheet, like the inputs.
+    <div className="w-full sm:w-auto">
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger id="model" size="sm" className="h-8 max-w-[240px] text-xs"><SelectValue /></SelectTrigger>
+        <SelectTrigger id="model" size="sm" aria-label={t('Modell')} className="h-8 w-full text-xs sm:w-auto sm:max-w-[240px]"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value={DEFAULT_MODEL}>
             {options.current ? t('Standard ({model})', { model: options.current.model }) : t('Standard')}
