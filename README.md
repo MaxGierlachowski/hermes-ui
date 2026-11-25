@@ -3,7 +3,7 @@
 A Kanban board for [Hermes Agent](https://hermes-agent.nousresearch.com) sessions: every chat (desktop,
 Slack, cron, CLI, or one started from the board) is a card that moves through **New Task → Doing →
 Waiting → Done** live. Start and continue chats with text, images and voice, answer approvals and
-questions from one inbox, follow the [Paseo](https://paseo.sh) coding agents a chat started, and get
+questions from one inbox (where cron runs, webhook runs and `hermes-ui notify` messages land too), follow the [Paseo](https://paseo.sh) coding agents a chat started, and get
 notified when something needs you, in the browser or in the native app for Android and iOS.
 
 Self-hosted: a headless backend runs next to Hermes on your machine (bound to `127.0.0.1`); browsers
@@ -50,7 +50,7 @@ directories excluded), never keys, `.env` files, credentials or app databases:
 
 | | |
 |---|---|
-| [Features](docs/features.md) | board, thread, inbox, search, Paseo, push in detail; [linking agents to chats](docs/features.md#linking-agents-to-chats) (label contract) |
+| [Features](docs/features.md) | board, thread, inbox, search, Paseo, push in detail; [linking agents to chats](docs/features.md#linking-agents-to-chats) (label contract); [automations in the inbox](docs/features.md#automations-in-the-inbox) (cron, webhooks, `hermes-ui notify`) |
 | [Self-hosting](docs/self-hosting.md) · [Configuration](docs/configuration.md) | install, remote modes, every setting, autostart |
 | [Architecture](docs/architecture.md) · [Decisions](docs/decisions/README.md) | how the pieces fit, and why |
 | [Security](docs/security.md) | pairing, allow-list, tokens, what relays see |
