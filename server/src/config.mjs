@@ -74,6 +74,8 @@ export function loadConfig(argv = []) {
   return {
     envFile,
     token,
+    // Optional second token that may only call POST /api/notify (scripts, other Hermes profiles). Empty = off.
+    notifyToken: get('HERMES_UI_NOTIFY_TOKEN', 'notify-token', ''),
     host: '127.0.0.1', // never configurable: remote access goes through a tunnel, not an open port
     port: Number(get('HERMES_UI_PORT', 'port', 8787)),
     dataDir,

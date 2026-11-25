@@ -25,6 +25,7 @@ import { attachmentHeader, createFileAccess, inlineType } from './src/file-acces
 import { fileRefKeys } from '../shared/file-refs.ts';
 import { Inbox } from './src/inbox.mjs';
 import { Push } from './src/push.mjs';
+import { parseNotify, readNotifyBody } from './src/notify.mjs';
 import { parseUserMessage, previewOf } from './src/user-markers.mjs';
 import { Outbox, queuedRow } from './src/outbox.mjs';
 import { callsOf, paseoItem, paseoTool } from './src/paseo-calls.mjs';
@@ -884,6 +885,9 @@ function notify(ev) {
   push.notify({ ...ev, badge: badgeCount() }).catch((err) => console.warn('push', err.message));
 }
 
+// Stub until the automation push lands (notifyAutomation in the backend branch replaces it).
+function notifyAutomation(item) { void item; }
+
 function recordRequest(sid, pr) {
   if (!pr?.prompt_id || inbox.has(`req:${pr.prompt_id}`)) return;
   const title = sessionTitle(sid) || t('newSession');
@@ -995,11 +999,13 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
 }
-const tokenOk = (given) => {
+const sameSecret = (given, secret) => {
   const a = Buffer.from(String(given || ''));
-  const b = Buffer.from(TOKEN);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const b = Buffer.from(secret);
+  return !!secret && a.length === b.length && crypto.timingSafeEqual(a, b);
 };
+const tokenOk = (given) => sameSecret(given, TOKEN);
+const bearer = (req) => { const h = req.headers.authorization || ''; return h.startsWith('Bearer ') ? h.slice(7) : ''; };
 // A request is local only when it reached us directly on loopback with a loopback Host header.
 // Tunnels (cloudflared, tailscaled) also connect from loopback, but carry their public Host / forwarding headers.
 function isLocal(req) {
@@ -1094,6 +1100,17 @@ const server = http.createServer(async (req, res) => {
       syncIrohAccess();
       broadcast('devices', devices.list());
       return send(res, 200, { ok: true }, { 'Set-Cookie': deviceCookie(req, dev.cookie, dev.maxAgeS) });
+    }
+
+    // ---- notify: a message from a script or another Hermes profile, into the inbox ----
+    // The board token works, and so does HERMES_UI_NOTIFY_TOKEN, which may call nothing else.
+    if (p === '/api/notify' && req.method === 'POST') {
+      const by = sameSecret(bearer(req), cfg.notifyToken) ? 'notify-token' : authorized(req, url) ? 'token' : null;
+      if (!by) return send(res, 401, { error: 'unauthorized' });
+      const item = inbox.add(parseNotify(await readNotifyBody(req)));
+      notifyAutomation(item);
+      console.log(`notify: "${item.group}" (${item.level}) via ${by}`);
+      return send(res, 201, { ok: true, id: item.id });
     }
 
     const auth = authorized(req, url);
