@@ -272,6 +272,36 @@ export class Store {
     return { title, content };
   }
 
+  // Automations (src/automations.mjs). Webhook runs that ended after `since`, oldest first, with their
+  // route (origin chat_name "webhook/<route>") and their final assistant reply.
+  webhookRunsSince(since, limit = 200) {
+    return this.db.prepare(`
+      SELECT s.id, s.title, s.ended_at, s.end_reason, json_extract(s.origin_json, '$.chat_name') AS route,
+        (SELECT substr(content, 1, 20000) FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '' ORDER BY m.id DESC LIMIT 1) AS last
+      FROM sessions s
+      WHERE s.source = 'webhook' AND s.parent_session_id IS NULL AND s.ended_at > ?
+      ORDER BY s.ended_at LIMIT ?`).all(since, limit);
+  }
+
+  // The session of one agent cron run. Hermes titles it "<job name> · <date>" (canonical runs, id local-…)
+  // or names it cron_<job id>_<time> (owner runs). Candidates started before the archive was written and
+  // ended close to it; the one whose final reply is the archived answer wins, else the closest within 5 min.
+  cronSessionFor({ names = [], jobId = null, at, answer = null }) {
+    const likes = names.map((n) => `${String(n).replace(/[\\%_]/g, (c) => `\\${c}`)} · %`);
+    if (jobId) likes.push(`cron\\_${String(jobId).replace(/[\\%_]/g, (c) => `\\${c}`)}\\_%`);
+    if (!likes.length) return null;
+    const rows = this.db.prepare(`
+      SELECT s.id, COALESCE(s.ended_at, s.last_activity_at, s.started_at) AS end_at,
+        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '' ORDER BY m.id DESC LIMIT 1) AS last
+      FROM sessions s
+      WHERE s.source = 'cron' AND s.started_at BETWEEN ? AND ?
+        AND (${names.map(() => `s.title LIKE ? ESCAPE '\\'`).concat(jobId ? [`s.id LIKE ? ESCAPE '\\'`] : []).join(' OR ')})
+      ORDER BY abs(COALESCE(s.ended_at, s.last_activity_at, s.started_at) - ?) LIMIT 8`).all(at - 6 * 3600, at + 5, ...likes, at);
+    const norm = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+    const hit = (answer && rows.find((r) => r.last && norm(r.last) === norm(answer))) || rows.find((r) => Math.abs(r.end_at - at) < 300);
+    return hit ? this.rootOf(hit.id) || hit.id : null;
+  }
+
   maxIds() {
     return this.db.prepare(`SELECT (SELECT COALESCE(max(id),0) FROM messages) AS msg,
       (SELECT COALESCE(max(COALESCE(last_activity_at, started_at)),0) FROM sessions) AS act`).get();

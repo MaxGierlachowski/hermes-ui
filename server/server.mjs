@@ -26,6 +26,7 @@ import { fileRefKeys } from '../shared/file-refs.ts';
 import { Inbox } from './src/inbox.mjs';
 import { Push } from './src/push.mjs';
 import { parseNotify, readNotifyBody } from './src/notify.mjs';
+import { Automations } from './src/automations.mjs';
 import { parseUserMessage, previewOf } from './src/user-markers.mjs';
 import { Outbox, queuedRow } from './src/outbox.mjs';
 import { callsOf, paseoItem, paseoTool } from './src/paseo-calls.mjs';
@@ -885,8 +886,33 @@ function notify(ev) {
   push.notify({ ...ev, badge: badgeCount() }).catch((err) => console.warn('push', err.message));
 }
 
-// Stub until the automation push lands (notifyAutomation in the backend branch replaces it).
-function notifyAutomation(item) { void item; }
+// Automations (cron runs, webhook runs, POST /api/notify): one push per entry, under the switch of its
+// kind (failures: automationErrors; notify: notify; reports: automations). Title = group, body = the
+// entry's one-line title. A tap opens the run's chat when there is one, else the entry in the inbox.
+function notifyAutomation(item, { repeat = false } = {}) {
+  if (!item) return;
+  const failed = item.status === 'error';
+  const title = truncate(item.title || item.text || '', 120);
+  const body = failed ? t('nAutomationFailed', { title }) : title;
+  notify({
+    category: failed ? 'automationErrors' : item.source === 'notify' ? 'notify' : 'automations',
+    source: item.source, title: item.group || item.source,
+    body: repeat && item.repeat > 1 ? t('nAutomationRepeat', { title: body, n: item.repeat }) : body,
+    tag: `auto:${item.source}:${item.group || ''}`,
+    url: item.sessionId ? `#/board/${encodeURIComponent(item.sessionId)}` : `#/inbox/item/${encodeURIComponent(item.id)}`,
+    ttl: 86400,
+  });
+}
+
+// Cron and webhook runs that reported something (read-only on Hermes' files, src/automations.mjs).
+const automations = cfg.automations.enabled
+  ? new Automations({ hermesHome: HERMES_HOME, dataDir: cfg.dataDir, store, inbox, backfillHours: cfg.automations.backfillHours, ignore: cfg.automations.ignore, onItem: notifyAutomation, log: (s) => console.warn(s) })
+  : null;
+if (automations) {
+  const scan = () => { const n = automations.scan(); if (n) pushInbox(); };
+  setTimeout(scan, 2000);
+  setInterval(scan, cfg.automations.intervalS * 1000);
+}
 
 function recordRequest(sid, pr) {
   if (!pr?.prompt_id || inbox.has(`req:${pr.prompt_id}`)) return;
