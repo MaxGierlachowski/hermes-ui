@@ -112,6 +112,19 @@ export const SCREENS: Screen[] = [
   },
   { name: 'inbox', setup: (page) => open(page, '#/inbox') },
   {
+    // Phones: automations only, one group open with its newest entry (report as Markdown).
+    name: 'inbox-automations', mobileOnly: true,
+    setup: async (page) => {
+      await open(page, '#/inbox')
+      await page.getByRole('combobox', { name: 'Quelle' }).click()
+      await page.getByRole('option', { name: 'Automationen' }).click()
+      await page.getByRole('button', { name: /disk-alert/ }).click()
+      await page.getByTestId('automation-entry').getByRole('button', { name: /Lauf fehlgeschlagen/ }).click()
+      await page.getByText('Filesystem').waitFor()
+      await settle(page)
+    },
+  },
+  {
     name: 'search',
     setup: async (page, mobile) => {
       await open(page)

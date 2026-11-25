@@ -46,7 +46,7 @@ jobs:
           path: web/test-results/
           retention-days: 7
 
-  mobile-app:
+  app:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,24 +54,52 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: mobile-app/package-lock.json
+          cache-dependency-path: app/package-lock.json
       - run: npm ci
-        working-directory: mobile-app
+        working-directory: app
       - run: npm run typecheck
-        working-directory: mobile-app
+        working-directory: app
+      - run: npm test
+        working-directory: app
       - name: Expo config resolves (identity from the environment, no secrets)
         run: npx expo config --type public --json > /dev/null
-        working-directory: mobile-app
+        working-directory: app
+
+  # The app's web build (web, desktop app) in WebKit and Chromium: what differs between engines
+  # (e.g. the PDF preview). Pixel checks, no baselines, so Linux is fine.
+  app-ui-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - run: npx playwright install --with-deps chromium webkit
+        working-directory: app
+      - run: npm run web:export
+        working-directory: app
+      - run: npm run test:ui
+        working-directory: app
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-playwright-results
+          path: app/test-results/
+          retention-days: 7
 
   rust:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mobile-app/modules/expo-iroh/rust
+        working-directory: app/modules/expo-iroh/rust
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: mobile-app/modules/expo-iroh/rust
+          workspaces: app/modules/expo-iroh/rust
       - run: rustup show active-toolchain   # installs the pinned toolchain from rust-toolchain.toml
       - run: cargo check --release --lib --locked

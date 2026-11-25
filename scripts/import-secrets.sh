@@ -34,6 +34,13 @@ fi
 tar -C "$stage" -xzf "$stage/b.tgz"
 src="$stage/hermes-ui"
 [[ -f "$src/BACKUP-INFO" ]] || { echo "not a hermes-ui secrets backup" >&2; exit 1; }
+# Archives made before the rename of mobile-app/ to app/ (2026-11) hold mobile-app/.secrets and
+# mobile-app/.env: restore them into app/.
+if [[ -d "$src/mobile-app" ]]; then
+  mkdir -p "$src/app"
+  for f in .secrets .env; do [[ -e "$src/mobile-app/$f" && ! -e "$src/app/$f" ]] && mv "$src/mobile-app/$f" "$src/app/$f"; done
+  echo "  (old archive: mobile-app/ restored as app/)"
+fi
 sed 's/^/  /' "$src/BACKUP-INFO"
 if [[ $list == 1 ]]; then (cd "$src" && find . -type f ! -name BACKUP-INFO | sed 's|^\./|  |' | sort); exit 0; fi
 
@@ -52,13 +59,13 @@ restore() { # restore <relative path>
   echo "  + $rel"
 }
 echo "restoring into $root:"
-for rel in .env mobile-app/.env mobile-app/.secrets; do [[ -e "$src/$rel" ]] && restore "$rel"; done
+for rel in .env app/.env app/.secrets; do [[ -e "$src/$rel" ]] && restore "$rel"; done
 if [[ -d "$src/data" ]]; then for f in "$src"/data/*; do restore "data/$(basename "$f")"; done; fi
 
-props="$root/mobile-app/.secrets/keystore.properties"
+props="$root/app/.secrets/keystore.properties"
 if [[ -f "$props" ]]; then
   store="$(sed -n 's/^storeFile=//p' "$props")"
-  new="$root/mobile-app/.secrets/$(basename "$store")"
+  new="$root/app/.secrets/$(basename "$store")"
   if [[ -n "$store" && "$store" != "$new" && -f "$new" ]]; then
     tmp="$(mktemp)"; sed "s|^storeFile=.*|storeFile=$new|" "$props" > "$tmp" && cat "$tmp" > "$props" && rm "$tmp"
     echo "  ~ keystore.properties: storeFile → $new"
@@ -79,6 +86,6 @@ if [[ -d "$src/external" ]]; then
     fi
   done
 fi
-chmod -R go-rwx "$root/mobile-app/.secrets" 2>/dev/null || true
+chmod -R go-rwx "$root/app/.secrets" 2>/dev/null || true
 [[ -f "$root/.env" ]] && chmod 600 "$root/.env"
 echo "done. Start the backend; paired devices keep working because data/iroh holds the same identity."

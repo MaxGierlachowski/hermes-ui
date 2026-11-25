@@ -81,9 +81,32 @@ export const OPEN: OpenItem[] = [
 
 export const INBOX_ITEMS: InboxItem[] = [
   { id: 'i-1', kind: 'done', source: 'hermes', sessionId: 's-waiting', title: 'Wochenbericht für das Team zusammenfassen', text: 'Bericht steht im Thread.', at: NOW - 1800, read: false },
-  { id: 'i-2', kind: 'paseo-done', source: 'paseo', sessionId: 's-approval', title: 'Landingpage-Build reparieren und deployen', agentTitle: 'Lighthouse-Check', agentId: 'a-done', text: 'Performance 98, Accessibility 100.', at: NOW - 2400, read: false },
+  { id: 'i-2', kind: 'paseo-done', source: 'paseo', sessionId: 's-approval', title: 'Landingpage-Build reparieren und deployen', agentTitle: 'Lighthouse-Check', agentId: 'a-done', text: 'Performance 98, Accessibility 100.', at: NOW - 2400, read: true },
   { id: 'i-3', kind: 'error', source: 'hermes', sessionId: 's-done', title: 'Rechnungen aus Gmail exportieren', text: 'Gmail-API: quota exceeded', at: NOW - 5000, read: true },
   { id: 'i-4', kind: 'approval', source: 'hermes', sessionId: 's-done', title: 'Rechnungen aus Gmail exportieren', text: 'mkdir -p ~/Rechnungen', at: NOW - 90000, read: true, resolution: { at: NOW - 89900, by: 'ui', choice: 'once', device: 'iPhone · Safari' } },
+  // Automations: the inbox folds them into one group per job (cron), route (webhook) or notify group.
+  {
+    id: 'cron:daily-report:2', kind: 'automation', source: 'cron', group: 'daily-report', jobId: 'job-daily', status: 'ok', sessionId: 's-done-2', at: NOW - 900, read: true,
+    title: 'Tagesbericht erstellt', text: '12 neue Chats, 3 offene Freigaben, 1 Fehler.',
+    body: '## Tagesbericht\n\n- **12** neue Chats\n- **3** offene Freigaben\n- **1** Fehler (Festplatte)\n\n| Spalte | Karten |\n| --- | --- |\n| Doing | 2 |\n| Waiting | 3 |',
+  },
+  {
+    id: 'cron:daily-report:1', kind: 'automation', source: 'cron', group: 'daily-report', jobId: 'job-daily', status: 'ok', sessionId: null, at: NOW - 87300, read: true,
+    title: 'Tagesbericht erstellt', text: '8 neue Chats, keine offenen Freigaben.', body: '## Tagesbericht\n\n- **8** neue Chats\n- keine offenen Freigaben',
+  },
+  {
+    id: 'cron:disk-alert:1', kind: 'automation', source: 'cron', group: 'disk-alert', jobId: 'job-disk', status: 'error', sessionId: null, at: NOW - 3000, read: false, repeat: 3,
+    title: 'Lauf fehlgeschlagen', text: 'df: /data zu 96 % voll',
+    body: '**/data** ist zu 96 % voll.\n\n```\nFilesystem  Size  Used  Avail\n/dev/sda1   200G  192G  8G\n```',
+  },
+  {
+    id: 'webhook:ci-pipeline:1', kind: 'automation', source: 'webhook', group: 'ci-pipeline', status: 'ok', sessionId: null, at: NOW - 4200, read: true,
+    title: 'Pipeline grün', text: 'main · 42 Tests bestanden', body: 'Branch `main`: **42** Tests bestanden, Build in 3 min 12 s.',
+  },
+  {
+    id: 'notify:deploy:1', kind: 'automation', source: 'notify', group: 'deploy', level: 'warn', status: 'ok', sessionId: null, at: NOW - 6000, read: true,
+    title: 'Deploy auf Staging', text: 'Version 1.4.0 läuft, 1 Warnung', body: 'Version **1.4.0** läuft auf Staging.\n\n> Warnung: Cache nicht vorgewärmt.', link: 'https://example.com/deploys/142',
+  },
 ]
 
 // Small stand-in for transcript images (served for every /api/file request).

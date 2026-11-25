@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Prints a macOS LaunchAgent plist for the backend with this machine's paths. Nothing is installed:
 //   node server/scripts/launchd-plist.mjs > ~/Library/LaunchAgents/io.github.hermes-ui.plist
-//   launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
+//   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.hermes-ui.plist
 // Extra args are passed to `hermes-ui serve`, e.g. `--remote iroh`.
 
 import os from 'node:os';

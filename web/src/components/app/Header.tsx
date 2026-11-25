@@ -58,7 +58,7 @@ export function Header({ onNew, onCommand, onRemote }: { onNew: () => void; onCo
           <Select value={String(days)} onValueChange={(v) => setFilter({ days: Number(v) })}>
             <SelectTrigger size="sm" className="h-8 w-[92px] text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {[1, 3, 7, 30].map((d) => <SelectItem key={d} value={String(d)}>{d === 1 ? '24 h' : t('{n} Tage', { n: d })}</SelectItem>)}
+              {[0, 1, 3, 7, 30].map((d) => <SelectItem key={d} value={String(d)}>{d === 0 ? t('Alle') : d === 1 ? '24 h' : t('{n} Tage', { n: d })}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="flex items-center gap-1.5 px-1.5">

@@ -4,12 +4,12 @@ Thanks for helping. Hermes UI is a personal open-source project; issues and pull
 
 - **Setup:** `scripts/bootstrap.sh` (add `--mobile` for the app), see [docs/development.md](docs/development.md).
 - **Before a PR:** `npm run verify` and `npm run test:ui` (UI tests; desktop pixel baselines are rendered
-  on macOS). For the app: `npm --prefix mobile-app run typecheck`, and try the change in the demo mode.
+  on macOS). For the app: `npm --prefix app run typecheck`, and try the change in the demo mode.
 - **Desktop stays pixel-identical** unless the change is meant for the desktop: touch styles go behind
   `pointer: coarse` (`touch:`) or `max-md:`. Update baselines only on purpose
   (`npx playwright test desktop --update-snapshots` in `web/`) and look at them.
 - **Style:** match the surrounding code; English in code, comments and docs; UI texts in German as keys
-  with the English translation in `shared/i18n-en.ts`. Conventional commits (`feat(web): …`, `fix(mobile-app): …`).
+  with the English translation in `shared/i18n-en.ts`. Conventional commits (`feat(web): …`, `fix(app): …`).
 - **No private data:** fixtures, tests, screenshots and logs use made-up names (`acme-site`, `/home/dev`,
   `example.com`). Never commit `.env`, `data/`, keystores or store keys ([docs/secrets-and-state.md](docs/secrets-and-state.md)).
 - **Boundaries of the backend:** it reads Hermes' state read-only, writes nothing under `$HERMES_HOME`,

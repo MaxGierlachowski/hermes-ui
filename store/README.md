@@ -1,7 +1,7 @@
 # store/ – App Store and Google Play material
 
 Everything needed to fill in App Store Connect and the Play Console for the mobile app
-(`mobile-app/`), except screenshots. Nothing here is uploaded automatically; copy the texts in by hand.
+(`app/`), except screenshots. Nothing here is uploaded automatically; copy the texts in by hand.
 
 The working name is **Hermes UI** (store title pattern `<Name> for Hermes Agent` / `<Name> für Hermes
 Agent`). Each file sets the store-visible name in one place (marked there); the other texts say "the
@@ -46,7 +46,7 @@ web UI on GitHub Pages.
 | Support URL, Marketing URL | Version page | URLs |
 | What's New in This Version | Version page (not for the very first version; keep it for 0.3.1+) | `whatsnew` |
 | App Review Information → Notes, Sign-in required: off | Version page | `review-notes.md` |
-| App icon | from the build (`mobile-app/assets/images/icon.png`); `graphics/icon-1024.png` is the same artwork, full bleed, without alpha, for anywhere a 1024 px icon is asked for | `graphics/` |
+| App icon | from the build (`app/assets/images/icon.png`); `graphics/icon-1024.png` is the same artwork, full bleed, without alpha, for anywhere a 1024 px icon is asked for | `graphics/` |
 
 ### Google Play Console
 
@@ -132,7 +132,7 @@ It exits with status 1 if any field is over its limit.
 ## Graphics
 
 - `icon-1024.png` and `icon-512.png` are rendered from the same vector as `web/public/favicon.svg` and
-  `mobile-app/assets/images/icon.png` (white "H" on `#6366f1`), **full bleed** without rounded corners:
+  `app/assets/images/icon.png` (white "H" on `#6366f1`), **full bleed** without rounded corners:
   both stores apply their own mask. Saved as 8-bit RGB PNG, no alpha channel
   (`sips -g hasAlpha store/graphics/*.png` → `no`).
 - `feature-graphic.png`: 1024×500, RGB, the icon, the name, the tagline "Your Hermes Agent, in your

@@ -13,7 +13,7 @@ links through an unverified intent filter (the user picks the app once).
 
 | File | Platform | Placeholders |
 |---|---|---|
-| [`assetlinks.json`](assetlinks.json) | Android App Links | `{{ANDROID_PACKAGE}}` = `HERMES_UI_ANDROID_PACKAGE`; `{{SHA256_CERT_FINGERPRINT}}` = SHA-256 of the **app signing key** (Play Console → *Test and release → App integrity → App signing*, not the upload key; for a self-signed APK: `keytool -list -v -keystore mobile-app/.secrets/release.keystore`). Format `AB:CD:…`, upper case. Add a second fingerprint to the array for debug or sideloaded builds if needed. |
+| [`assetlinks.json`](assetlinks.json) | Android App Links | `{{ANDROID_PACKAGE}}` = `HERMES_UI_ANDROID_PACKAGE`; `{{SHA256_CERT_FINGERPRINT}}` = SHA-256 of the **app signing key** (Play Console → *Test and release → App integrity → App signing*, not the upload key; for a self-signed APK: `keytool -list -v -keystore app/.secrets/release.keystore`). Format `AB:CD:…`, upper case. Add a second fingerprint to the array for debug or sideloaded builds if needed. |
 | [`apple-app-site-association`](apple-app-site-association) | iOS Universal Links | `{{APPLE_TEAM_ID}}` = the 10-character team ID; `{{IOS_BUNDLE_ID}}` = `HERMES_UI_IOS_BUNDLE_ID` |
 
 Both templates match **only** pairing links: path `/` (UI at the root) or `/hermes-ui/*` (UI below
@@ -61,7 +61,7 @@ npx expo prebuild
 ```
 
 This adds `applinks:<host>` to the iOS associated domains and an `autoVerify` intent filter on Android
-(`mobile-app/app.config.ts`). Check after installing:
+(`app/app.config.ts`). Check after installing:
 
 - Android: `adb shell pm get-app-links {{ANDROID_PACKAGE}}` → the host shows `verified`.
 - iOS: Settings → Developer → *Universal Links* → *Diagnostics* with a pairing URL, or

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Packs everything that must never be in git but is needed on another machine into ONE encrypted file:
 # .env (login token, settings), data/ (iroh identity = the backend's endpoint id, paired devices, VAPID
-# keys + push subscriptions, board and inbox state, uploaded media), mobile-app/.secrets/ (release
-# keystore + properties, store API keys), mobile-app/.env, and the Firebase service-account file named
+# keys + push subscriptions, board and inbox state, uploaded media), app/.secrets/ (release
+# keystore + properties, store API keys), app/.env, and the Firebase service-account file named
 # by HERMES_UI_FCM_SERVICE_ACCOUNT. Not included: data/bin (downloaded again), logs, build output.
 #
 #   scripts/export-secrets.sh [-o <file>] [--root <repo dir>] [--openssl]
@@ -34,11 +34,12 @@ esac
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/hermes-ui"
-copy() { # copy <path relative to root>
+copy() { # copy <path relative to root> [<path in the archive>]
   [[ -e "$root/$1" ]] || return 0
-  mkdir -p "$stage/hermes-ui/$(dirname "$1")"
-  cp -pR "$root/$1" "$stage/hermes-ui/$1"
-  echo "  + $1"
+  local to="${2:-$1}"
+  mkdir -p "$stage/hermes-ui/$(dirname "$to")"
+  cp -pR "$root/$1" "$stage/hermes-ui/$to"
+  echo "  + $1${2:+ (as $to)}"
 }
 echo "collecting from $root:"
 copy .env
@@ -50,8 +51,12 @@ if [[ -d "$root/data" ]]; then
   done
   find "$stage/hermes-ui/data" -name '*.log' -delete 2>/dev/null || true
 fi
-copy mobile-app/.secrets
-copy mobile-app/.env
+copy app/.secrets
+copy app/.env
+# Before the rename of mobile-app/ to app/ (2026-11): a checkout that still has the old folder is
+# exported under the new path, so the archive always restores into app/.
+[[ -e "$root/app/.secrets" ]] || copy mobile-app/.secrets app/.secrets
+[[ -e "$root/app/.env" ]] || copy mobile-app/.env app/.env
 # The Firebase service account usually lives outside the repo: stored under external/ with its name.
 fcm="${HERMES_UI_FCM_SERVICE_ACCOUNT:-}"
 [[ -z "$fcm" && -f "$root/.env" ]] && fcm="$(sed -n 's/^HERMES_UI_FCM_SERVICE_ACCOUNT=//p' "$root/.env" | tail -1 | tr -d '"'"'")"

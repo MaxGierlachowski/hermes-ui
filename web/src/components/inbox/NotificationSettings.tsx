@@ -83,7 +83,10 @@ export function NotificationSettings({ open, onOpenChange }: { open: boolean; on
           <Row id="p-approval" label={t('Freigaben und Rückfragen')} checked={s.approval} onChange={(v) => save({ approval: v })} />
           <Row id="p-done" label={t('Fertig')} hint={t('Hermes-Chat fertig (und seine Paseo-Agents), Paseo-Agent fertig')} checked={s.done} onChange={(v) => save({ done: v })} />
           <Row id="p-error" label={t('Fehler und Limits')} checked={s.error} onChange={(v) => save({ error: v })} />
-          <Row id="p-paseo" label={t('Paseo-Agents einbeziehen')} checked={s.paseo} onChange={(v) => save({ paseo: v })} />
+          <Row id="p-automations" label={t('Automationen: Meldungen')} hint={t('Cron- und Webhook-Läufe, die etwas melden')} checked={s.automations} onChange={(v) => save({ automations: v })} />
+          <Row id="p-automation-errors" label={t('Automationen: Fehler')} hint={t('Fehlgeschlagene oder blockierte Läufe, notify mit Level error')} checked={s.automationErrors} onChange={(v) => save({ automationErrors: v })} />
+          <Row id="p-notify" label={t('Nachrichten von Skripten (notify)')} hint={t('POST /api/notify und hermes-ui notify')} checked={s.notify} onChange={(v) => save({ notify: v })} />
+          <Row id="p-paseo"label={t('Paseo-Agents einbeziehen')} checked={s.paseo} onChange={(v) => save({ paseo: v })} />
           <Row id="p-visible" label={t('Nicht pushen, wenn die App offen und sichtbar ist')} hint={t('Dann erscheint nur der Hinweis in der App.')} checked={s.skipWhenVisible} onChange={(v) => save({ skipWhenVisible: v })} />
           <Row id="p-quiet" label={t('Ruhezeiten')} checked={s.quiet.enabled} onChange={(v) => save({ quiet: { ...s.quiet, enabled: v } })} />
           {s.quiet.enabled && (

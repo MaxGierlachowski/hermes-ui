@@ -1,6 +1,6 @@
 # 0004: Tauri 2 as an option (desktop and universal app)
 
-- **Status:** Open, under evaluation
+- **Status:** Open; spike done, results and recommendation in [ADR 0012](0012-universal-app.md)
 - **Date:** 2026-11
 
 ## Context
@@ -34,7 +34,7 @@ browser client until a replacement is at least equal.
 - Nothing changes for users now.
 - If the spike succeeds, the web UI could later be retired in favour of one shared UI. That would be
   recorded in a new ADR that supersedes this one.
-- If it fails, `web/` stays, and `mobile-app/` stays mobile only.
+- If it fails, `web/` stays, and `app/` stays mobile only.
 
 ## Alternatives considered
 

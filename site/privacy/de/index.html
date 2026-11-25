@@ -55,7 +55,7 @@
 </header>
 
 <h1>Datenschutzerklärung</h1>
-<p class="muted">Stand: 19. November 2026</p>
+<p class="muted">Stand: 25. November 2026</p>
 
 <div class="box">
   <strong>Kurz gesagt</strong>
@@ -105,7 +105,7 @@
 <ul>
   <li><strong>Lokale Benachrichtigungen</strong>: Solange die App läuft, erzeugt sie Benachrichtigungen direkt auf dem Gerät. Dafür wird nichts an einen Push-Dienst gesendet.</li>
   <li><strong>Android, „Im Hintergrund verbunden bleiben“</strong>: Auf Wunsch hält ein Hintergrunddienst die Verbindung zu deinem Backend offen und zeigt dabei eine dezente Daueranzeige. Weitere Dienste nutzt er nicht.</li>
-  <li><strong>Optional Push über dein eigenes Firebase-Projekt</strong>: Wenn du die App selbst mit deinem eigenen Firebase-Projekt baust und dein Backend dafür einrichtest, schickt dein Backend Benachrichtigungen über Firebase Cloud Messaging (FCM) von Google. Die App erhält dann ein Geräte-Token von Google und gibt es an dein Backend weiter. Die Benachrichtigung enthält nur den Titel des Chats und einen kurzen Hinweis wie „Freigabe nötig“ oder „Fertig“ und läuft über Server von Google; dafür gelten die Bedingungen von Google. Die Store-Version ist ohne Firebase gebaut.</li>
+  <li><strong>Optional Push über dein eigenes Firebase-Projekt</strong>: Wenn du die App selbst mit deinem eigenen Firebase-Projekt baust und dein Backend dafür einrichtest, schickt dein Backend Benachrichtigungen über Firebase Cloud Messaging (FCM) von Google. Die App erhält dann ein Geräte-Token von Google und gibt es an dein Backend weiter. Die Benachrichtigung enthält nur den Titel des Chats und einen kurzen Hinweis wie „Freigabe nötig“ oder „Fertig“ (bei Ergebnissen deiner eigenen Automationen wie geplanten Jobs, Webhooks oder Skripten: den Namen des Jobs und die einzeilige Überschrift des Ergebnisses, nie den ganzen Bericht; das lässt sich pro Gerät abschalten) und läuft über Server von Google; dafür gelten die Bedingungen von Google. Die Store-Version ist ohne Firebase gebaut.</li>
   <li><strong>Web-Version, Web Push</strong>: Wenn du in der Web-Version Push einschaltest, sendet dein Backend Benachrichtigungen über den Push-Dienst deines Browsers (etwa von Apple, Google oder Mozilla). Der Inhalt ist für deinen Browser verschlüsselt.</li>
 </ul>
 

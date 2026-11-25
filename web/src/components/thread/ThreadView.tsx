@@ -9,14 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { clock } from '@/lib/format'
-import { COLUMNS, type Attachment, type Column, type OutboxState, type PaseoChip, type ThreadMessage } from '@/lib/types'
-import { AGENT_STATE, AgentStateDot } from '@/components/paseo/AgentChip'
+import { COLUMNS, type Attachment, type Column, type OutboxState, type OutgoingMessage, type PaseoChip, type ThreadMessage } from '@/lib/types'
+import { AGENT_STATE, AgentStateDot, AgentIcon, agentKindLabel } from '@/components/paseo/AgentChip'
 import { stripMediaTags } from '@/lib/media-tags'
 import { clearHighlight, dismissOutbox, getState, interrupt, openThread, retryOutbox, sendMessage, setColumn, useBoard } from '@/lib/store'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { SourceIcon, StatusDot } from '@/components/board/status'
 import { Composer } from './Composer'
 import { PendingPrompt } from './PendingPrompt'
+import { SummaryPill } from './SummaryPill'
+import { useSummaryPill } from '@/hooks/use-summary-pill'
 import { MediaAudio, MediaImage } from '@/components/common/Media'
 import { PaseoPanel } from '@/components/paseo/PaseoPanel'
 import { OverlayScroll } from '@/components/common/OverlayScroll'
@@ -27,7 +29,9 @@ import { ColumnSheet } from '@/components/board/ColumnSheet'
 import { COLUMN_COLOR } from '@/components/board/status'
 import { ChevronDown } from 'lucide-react'
 
-const MESSAGING = new Set(['kanban', 'desktop', 'cli', 'oneshot'])
+// Sources whose chats are answered here without asking first. Cron and webhook runs have no chat
+// elsewhere: the first message reopens the run's session ("Zum Chat" from an automation entry).
+const MESSAGING = new Set(['kanban', 'desktop', 'cli', 'oneshot', 'cron', 'webhook'])
 
 function ToolChip({ m }: { m: ThreadMessage }) {
   const [open, setOpen] = useState(false)
@@ -183,6 +187,7 @@ function PaseoInline({ m }: { m: ThreadMessage }) {
   const state = chip?.state || 'unknown'
   const st = AGENT_STATE[state] || AGENT_STATE.unknown
   const title = chip?.title || p.title || p.ref.slice(0, 8)
+  const who = chip ?? { provider: p.provider, kind: p.kind ?? null, account: p.account ?? null }
   const running = state === 'running'
   const [, tick] = useState(0)
   useEffect(() => {
@@ -215,13 +220,14 @@ function PaseoInline({ m }: { m: ThreadMessage }) {
       className={cn('group flex w-full max-w-md items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-left shadow-xs transition-colors', clickable ? 'hover:border-foreground/20' : 'opacity-70', chip?.archived && 'opacity-60')}
     >
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted ring-1 ring-border/60">
-        {running ? <Loader variant="circular" size="sm" className="size-4" /> : <Bot className="size-4 text-muted-foreground" />}
+        {running ? <Loader variant="circular" size="sm" className="size-4" /> : <AgentIcon a={who} className="size-4 text-muted-foreground" />}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-medium leading-snug">{title}</span>
         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-muted-foreground">
+          {who.provider === 'hermes' && <span>{agentKindLabel(who)}</span>}
           <span className={cn('inline-flex items-center gap-1.5', st.text)}><AgentStateDot state={state} />{chip ? st.label : t('unbekannt / gelöscht')}</span>
-          {(chip?.account || p.account) && <span>Account {chip?.account || p.account}</span>}
+          {who.provider !== 'hermes' && (chip?.account || p.account) && <span>Account {chip?.account || p.account}</span>}
           {chip && <span className="tabular-nums">{duration(chip.createdAt, end, m.ts ? m.ts * 1000 : undefined)}</span>}
           {!!chip?.pendingCount && <span className="text-amber-700 dark:text-amber-300">{t('{n} Freigabe(n) offen', { n: chip.pendingCount })}</span>}
         </span>
@@ -316,6 +322,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
   const isMobile = useIsMobile()
   useEffect(() => { setTab('chat'); setAgentOpen(null); setFromMsg(null); setReturnTo(null) }, [id])
   const clearReturn = useCallback(() => setReturnTo(null), [])
+  const summary = useSummaryPill(id || '', messages.length, !!session?.running || !!session?.pending?.length)
   if (!id || !session) return null
   const agentCount = session.paseo?.length || 0
   const openAgent = (agentId: string, msgId?: number) => { setFromMsg(msgId ?? null); setAgentOpen(agentId); setTab('paseo') }
@@ -323,10 +330,15 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
     setAgentOpen(null)
     if (fromMsg != null) { setReturnTo(fromMsg); setFromMsg(null); setTab('chat') }
   }
-  const runningAgents = session.paseo?.filter((a) => a.state === 'running').length || 0
+  const runningAgents = session.paseo?.filter((a) => a.state === 'running' && a.rel !== 'watches').length || 0
 
   const confirmForeign = () => MESSAGING.has(session.source)
     || confirm(t('Diese Session gehört zu „{src}“. Hermes kann die Antwort auch dort posten. Trotzdem senden?', { src: session.source }))
+  // The composer's send path, also used by the Summary pill.
+  const submit = async (msg: OutgoingMessage) => {
+    if (!confirmForeign()) throw new Error('abgebrochen')
+    return sendMessage(getState().openId!, msg)
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -374,7 +386,7 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
         <div className="flex items-center gap-1 border-b px-3 py-1.5 max-md:py-1">
           <TabButton active={tab === 'chat'} onClick={() => { setTab('chat'); setAgentOpen(null); setFromMsg(null) }}><MessagesSquare className="size-3.5" />{t('Chat')}</TabButton>
           <TabButton active={tab === 'paseo'} onClick={() => { setTab('paseo'); setAgentOpen(null); setFromMsg(null) }}>
-            <Bot className="size-3.5" />{t('Paseo-Agents')} <span className="tabular-nums opacity-70">{agentCount}</span>
+            <Bot className="size-3.5" />{session.paseo?.some((a) => a.provider === 'hermes') ? t('Agents') : t('Paseo-Agents')} <span className="tabular-nums opacity-70">{agentCount}</span>
             {runningAgents > 0 && <span className="size-1.5 animate-pulse rounded-full bg-indigo-500" />}
           </TabButton>
           {session.paseoNote && <span className="ml-auto truncate pl-2 text-[11px] text-muted-foreground">{session.paseoNote}</span>}
@@ -400,11 +412,11 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
       )}
 
       <ChatContainerRoot className="relative min-h-0 flex-1">
-        <ChatContainerContent className="flex flex-col gap-4 px-4 py-4">
+        <ChatContainerContent className={cn('flex flex-col gap-4 px-4 py-4', summary.state !== 'hidden' && 'pb-14')}>
           {loading && !messages.length && <div className="flex justify-center py-8"><Loader variant="dots" /></div>}
           {!loading && !messages.length && !streaming && <div className="py-8 text-center text-sm text-muted-foreground">{t('Noch keine Nachrichten.')}</div>}
           <PaseoCtx.Provider value={{ chips: session.paseo || [], open: openAgent }}>
-            {messages.map((m, i) => <MessageRow key={m.id ?? `l${i}`} m={m} />)}
+            {messages.map((m, i) => <MessageRow key={m.key ?? m.id ?? `l${i}`} m={m} />)}
           </PaseoCtx.Provider>
           <ReturnTo msgId={returnTo} done={clearReturn} />
           {streaming && (
@@ -422,16 +434,14 @@ export function ThreadView({ onClose }: { onClose?: () => void }) {
 
       </>)}
 
-      {tab === 'chat' && <div className="border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-md:px-2 max-md:pt-2 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))] [.keyboard-open_&]:pb-2">
+      {tab === 'chat' && <div className="relative border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-md:px-2 max-md:pt-2 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))] [.keyboard-open_&]:pb-2">
+        {!session.draft && <SummaryPill state={summary.state} onClick={() => summary.run((text) => submit({ text, images: [], audio: null }))} />}
         <Composer
           key={session.id}
           draftKey={session.id}
           onStop={session.running ? () => interrupt(session.id) : undefined}
           placeholder={session.draft ? 'Entwurf ergänzen und starten …' : t('Antworten …')}
-          onSubmit={async (msg) => {
-            if (!confirmForeign()) throw new Error('abgebrochen')
-            await sendMessage(getState().openId!, msg)
-          }}
+          onSubmit={submit}
         />
       </div>}
     </div>

@@ -1,0 +1,21 @@
+{
+  "name": "hermes-ui-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hermes UI desktop app: the universal app's web build in a Tauri 2 shell, optionally with the backend as a sidecar.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "web": "npm --prefix ../app run web:export && rm -rf dist-web && cp -R ../app/dist-web dist-web",
+    "sidecar": "node scripts/prepare-sidecar.mjs",
+    "icons": "tauri icon ../app/assets/images/icon.png -o src-tauri/icons",
+    "dev": "npm run sidecar && tauri dev",
+    "build": "npm run web && npm run sidecar && tauri build --bundles app && scripts/sign-adhoc.sh",
+    "tauri": "tauri",
+    "sign": "scripts/sign-adhoc.sh"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.6",
+    "esbuild": "0.28.2"
+  }
+}

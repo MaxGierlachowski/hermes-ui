@@ -7,6 +7,22 @@ const SESSION_COLS = `s.id, s.source, s.created_source, s.title, s.started_at, s
   s.last_activity_at, s.last_activity_description, s.message_count, s.tool_call_count,
   s.archived, s.hidden, s.parent_session_id, s.profile_name, s.model`;
 
+const EFFECTIVE = 'COALESCE(s.last_activity_at, s.started_at)';
+const FIRST_PROMPT = `SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id LIMIT 1`;
+
+// What a card needs besides the session row: first user prompt, last message, running turn.
+const CARD_FACTS = `
+  (${FIRST_PROMPT}) AS first_prompt,
+  (SELECT role FROM messages m WHERE m.session_id = s.id AND m.active = 1 AND m.role IN ('user','assistant','tool') ORDER BY m.id DESC LIMIT 1) AS last_role,
+  (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '' ORDER BY m.id DESC LIMIT 1) AS last_assistant,
+  (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id) AS last_msg_id,
+  (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') AS last_user_id,
+  (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user,
+  (SELECT display_kind FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user_kind,
+  (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '') AS last_assistant_id,
+  EXISTS (SELECT 1 FROM session_admissions a WHERE a.target_session_id = s.id AND a.status IN ('queued','started')) AS admitted,
+  EXISTS (SELECT 1 FROM session_turn_leases l WHERE l.conversation_id = s.id AND l.expires_at > unixepoch('subsec')) AS leased`;
+
 export class Store {
   constructor(path) {
     this.path = path;
@@ -14,50 +30,48 @@ export class Store {
     this.db.exec('PRAGMA query_only = 1; PRAGMA busy_timeout = 3000;');
   }
 
-  // One row per session plus the facts the board needs: first user prompt, last message, running turn.
-  listSessions({ sinceTs, sources, ids = [] }) {
+  // One page of the board, newest activity first. Filters run in SQL before the LIMIT, so a busy cron
+  // schedule can no longer push real chats out of the page. Keyset pagination on
+  // (COALESCE(last_activity_at, started_at), id): `before` is the last row of the previous page.
+  //  - systemSources: left out unless `system` is set (as are cron deliveries mirrored into a chat)
+  //  - empty cron shells (no message, not ended, older than 90 s) are left out with `system` too
+  //  - excludeIds: rows the caller serves separately (pinned cards), never paged
+  listSessions({ limit = 50, before = null, sinceTs = null, system = false, systemSources = [], excludeIds = [], now = Date.now() / 1000 } = {}) {
     const where = ['s.hidden = 0', 's.archived = 0', 's.parent_session_id IS NULL'];
     const params = [];
-    const idFilter = ids.length ? ` OR s.id IN (${ids.map(() => '?').join(',')})` : '';
-    where.push(`(COALESCE(s.last_activity_at, s.started_at) >= ?${idFilter})`);
-    params.push(sinceTs, ...ids);
-    if (sources?.length) {
-      where.push(`(s.source IN (${sources.map(() => '?').join(',')})${idFilter})`);
-      params.push(...sources, ...ids);
+    if (excludeIds.length) { where.push('s.id NOT IN (SELECT value FROM json_each(?))'); params.push(JSON.stringify(excludeIds)); }
+    if (sinceTs != null) { where.push(`${EFFECTIVE} >= ?`); params.push(sinceTs); }
+    if (before) { where.push(`(${EFFECTIVE} < ? OR (${EFFECTIVE} = ? AND s.id < ?))`); params.push(before.ts, before.ts, before.id); }
+    const sys = `COALESCE(s.source, '') IN (SELECT value FROM json_each(?))`;
+    if (!system) {
+      where.push(`NOT ${sys}`, `COALESCE(substr((${FIRST_PROMPT}), 1, 14), '') <> '[Cron delivery'`);
+      params.push(JSON.stringify(systemSources));
+    } else {
+      where.push(`NOT (${sys} AND COALESCE(s.message_count, 0) = 0 AND s.ended_at IS NULL AND s.started_at <= ?)`);
+      params.push(JSON.stringify(systemSources), now - 90);
     }
-    const rows = this.db.prepare(`
-      SELECT ${SESSION_COLS},
-        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id LIMIT 1) AS first_prompt,
-        (SELECT role FROM messages m WHERE m.session_id = s.id AND m.active = 1 AND m.role IN ('user','assistant','tool') ORDER BY m.id DESC LIMIT 1) AS last_role,
-        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '' ORDER BY m.id DESC LIMIT 1) AS last_assistant,
-        (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id) AS last_msg_id,
-        (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') AS last_user_id,
-        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user,
-        (SELECT display_kind FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user_kind,
-        (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '') AS last_assistant_id,
-        EXISTS (SELECT 1 FROM session_admissions a WHERE a.target_session_id = s.id AND a.status IN ('queued','started')) AS admitted,
-        EXISTS (SELECT 1 FROM session_turn_leases l WHERE l.conversation_id = s.id AND l.expires_at > unixepoch('subsec')) AS leased
-      FROM sessions s
+    // Two steps: the page's ids first (cheap, index order), then the card facts for just those rows.
+    // In one statement SQLite computes the per-row subqueries before the final sort, for far more rows.
+    const ids = this.db.prepare(`
+      SELECT s.id FROM sessions s
       WHERE ${where.join(' AND ')}
-      ORDER BY COALESCE(s.last_activity_at, s.started_at) DESC
-      LIMIT 400`).all(...params);
-    return rows;
+      ORDER BY ${EFFECTIVE} DESC, s.id DESC
+      LIMIT ?`).all(...params, limit).map((r) => r.id);
+    return this.sessionsByIds(ids);
+  }
+
+  // Specific sessions (pinned cards), whatever their age; hidden, archived and child rows stay out.
+  sessionsByIds(ids) {
+    if (!ids.length) return [];
+    return this.db.prepare(`
+      SELECT ${SESSION_COLS}, ${EFFECTIVE} AS effective_at, ${CARD_FACTS}
+      FROM sessions s
+      WHERE s.id IN (SELECT value FROM json_each(?)) AND s.hidden = 0 AND s.archived = 0 AND s.parent_session_id IS NULL
+      ORDER BY ${EFFECTIVE} DESC, s.id DESC`).all(JSON.stringify(ids));
   }
 
   getSession(id) {
-    return this.db.prepare(`
-      SELECT ${SESSION_COLS},
-        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id LIMIT 1) AS first_prompt,
-        (SELECT role FROM messages m WHERE m.session_id = s.id AND m.active = 1 AND m.role IN ('user','assistant','tool') ORDER BY m.id DESC LIMIT 1) AS last_role,
-        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '' ORDER BY m.id DESC LIMIT 1) AS last_assistant,
-        (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id) AS last_msg_id,
-        (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') AS last_user_id,
-        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user,
-        (SELECT display_kind FROM messages m WHERE m.session_id = s.id AND m.role = 'user' AND m.active = 1 ORDER BY m.id DESC LIMIT 1) AS last_user_kind,
-        (SELECT max(m.id) FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '') AS last_assistant_id,
-        EXISTS (SELECT 1 FROM session_admissions a WHERE a.target_session_id = s.id AND a.status IN ('queued','started')) AS admitted,
-        EXISTS (SELECT 1 FROM session_turn_leases l WHERE l.conversation_id = s.id AND l.expires_at > unixepoch('subsec')) AS leased
-      FROM sessions s WHERE s.id = ?`).get(id);
+    return this.db.prepare(`SELECT ${SESSION_COLS}, ${CARD_FACTS} FROM sessions s WHERE s.id = ?`).get(id);
   }
 
   // Only the live transcript: active = 0 rows were taken back (/undo, refused turns) or replaced
@@ -106,14 +120,113 @@ export class Store {
          OR s.id IN (SELECT conversation_id FROM session_turn_leases)`).all(actTs, msgId).map((r) => r.id);
   }
 
-  // Messages that tie a session to Paseo agents: create_agent results (carry the new id) and
-  // assistant tool calls to paseo_* tools (carry agent_id in their arguments).
+  // Messages that tie a session to Paseo agents: create_agent results (carry the new id), assistant
+  // tool calls to paseo_* tools (carry agent_id in their arguments), and terminal calls that use the
+  // paseo CLI or create an agent by script (src/paseo-cli.mjs).
   paseoRefs(sinceId) {
     return this.db.prepare(`
       SELECT id, session_id, role, tool_name, content, tool_calls, timestamp FROM messages
       WHERE id > ? AND ((role = 'tool' AND tool_name = 'mcp__paseo__paseo_create_agent')
-        OR (role = 'assistant' AND tool_calls LIKE '%mcp__paseo__paseo_%'))
+        OR (role = 'assistant' AND tool_calls LIKE '%mcp__paseo__paseo_%')
+        OR (role = 'assistant' AND tool_calls LIKE '%terminal%'
+          AND (tool_calls LIKE '%paseo%' OR tool_calls LIKE '%agents.create%' OR tool_calls LIKE '%create_agent%')))
       ORDER BY id`).all(sinceId);
+  }
+
+  // The result row of one tool call (terminal calls that may have created a Paseo agent).
+  toolResult(sessionId, callId) {
+    return this.db.prepare(`
+      SELECT id, tool_call_id, substr(content, 1, 20000) AS content, timestamp FROM messages
+      WHERE session_id = ? AND role = 'tool' AND tool_call_id = ? ORDER BY id LIMIT 1`).get(sessionId, callId) || null;
+  }
+
+  // Sessions that started child agents of their own (src/hermes-children.mjs): delegate_task results,
+  // terminal calls that run `hermes … chat`, and terminal commands in the background (background: true,
+  // or a result with a proc_… id when Hermes promoted a foreground call). The LIKE filter is coarse;
+  // the parser decides.
+  childRefs(sinceId) {
+    return this.db.prepare(`
+      SELECT DISTINCT session_id FROM messages
+      WHERE id > ? AND ((role = 'tool' AND tool_name = 'delegate_task')
+        OR (role = 'assistant' AND tool_calls LIKE '%delegate_task%')
+        OR (role = 'assistant' AND tool_calls LIKE '%terminal%' AND tool_calls LIKE '%hermes%' AND tool_calls LIKE '%chat%')
+        OR (role = 'assistant' AND tool_calls LIKE '%terminal%' AND tool_calls LIKE '%background%')
+        OR (role = 'tool' AND tool_name = 'terminal' AND content LIKE '%"session_id": "proc_%'))`).all(sinceId).map((r) => r.session_id);
+  }
+
+  // The rows of one chat that childCalls() reads: the calls, their results, the completion notices.
+  childRows(sessionId) {
+    const calls = this.db.prepare(`
+      SELECT id, role, tool_calls, timestamp FROM messages
+      WHERE session_id = ? AND role = 'assistant' AND active = 1
+        AND (tool_calls LIKE '%delegate_task%' OR tool_calls LIKE '%terminal%')
+      ORDER BY id`).all(sessionId);
+    if (!calls.length) return [];
+    // Terminal results only with the fields childCalls() reads (their output can be large).
+    const results = this.db.prepare(`
+      SELECT id, role, tool_name, tool_call_id, timestamp,
+        CASE WHEN tool_name = 'terminal' AND json_valid(content) THEN json_object(
+          'session_id', json_extract(content, '$.session_id'), 'pid', json_extract(content, '$.pid'),
+          'exit_code', json_extract(content, '$.exit_code'), 'error', json_extract(content, '$.error'),
+          'promoted_from_foreground', json_extract(content, '$.promoted_from_foreground') IS NOT NULL)
+        WHEN tool_name = 'terminal' THEN substr(content, 1, 600) ELSE content END AS content
+      FROM messages
+      WHERE session_id = ? AND role = 'tool' AND tool_name IN ('delegate_task', 'terminal') AND id >= ?
+      ORDER BY id`).all(sessionId, calls[0].id);
+    const notices = this.db.prepare(`
+      SELECT id, role, substr(content, 1, 1500) AS content, timestamp, display_kind FROM messages
+      WHERE session_id = ? AND role = 'user' AND display_kind IN ('process_complete', 'async_delegation_complete') AND id >= ?
+      ORDER BY id`).all(sessionId, calls[0].id);
+    return [...calls, ...results, ...notices].sort((a, b) => a.id - b.id);
+  }
+
+  // delegate_task children of a chat (all segments: compression continues a child in a new row).
+  subagentSessions(parentId) {
+    return this.db.prepare(`
+      SELECT s.id, s.title, s.started_at, s.ended_at, s.end_reason, s.last_activity_at, s.message_count, s.model,
+        json_extract(s.model_config, '$._subagent_id') AS subagent_id,
+        (SELECT substr(content, 1, 4000) FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id LIMIT 1) AS first_prompt
+      FROM sessions s
+      WHERE s.source = 'subagent' AND (s.parent_session_id = ? OR json_extract(s.model_config, '$._delegate_from') = ?)
+      ORDER BY s.started_at`).all(parentId, parentId);
+  }
+
+  // Background delegations: the authoritative completed / error record (async_delegations).
+  delegations(ids) {
+    if (!ids.length) return [];
+    try {
+      return this.db.prepare(`SELECT delegation_id, state, completed_at, owner_pid FROM async_delegations
+        WHERE delegation_id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+    } catch { return []; } // older Hermes without the table
+  }
+
+  // Top-level sessions that started in a time window, with their first prompt: candidates for a
+  // terminal `hermes chat` run (src/hermes-children.mjs matchTerminal).
+  sessionsStartedBetween(from, to) {
+    return this.db.prepare(`
+      SELECT s.id, s.source, s.created_source, s.title, s.started_at, s.ended_at, s.end_reason,
+        s.last_activity_at, s.message_count, s.model,
+        (SELECT substr(content, 1, 20000) FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id LIMIT 1) AS first_prompt
+      FROM sessions s
+      WHERE s.parent_session_id IS NULL AND s.started_at BETWEEN ? AND ?
+      ORDER BY s.started_at LIMIT 50`).all(from, to);
+  }
+
+  // Root of a session's lineage (parent_session_id: subagent rows, and continuations that Hermes writes
+  // as child sessions). The board only shows roots, so agent links found in a child count for its root.
+  // Null when the session is unknown.
+  rootOf(id) {
+    const r = this.db.prepare(`
+      WITH RECURSIVE up(id, parent, depth) AS (
+        SELECT id, parent_session_id, 0 FROM sessions WHERE id = ?
+        UNION ALL SELECT s.id, s.parent_session_id, up.depth + 1 FROM sessions s JOIN up ON s.id = up.parent WHERE up.depth < 32)
+      SELECT id, parent FROM up ORDER BY depth DESC LIMIT 1`).get(id);
+    return r ? r.id : null;
+  }
+
+  sessionBrief(id) {
+    return this.db.prepare(`SELECT id, source, title, started_at, ended_at, end_reason, last_activity_at, message_count, model, parent_session_id
+      FROM sessions WHERE id = ?`).get(id);
   }
 
   // Full-text search over chat content with Hermes' own FTS5 index (messages_fts, kept current by
@@ -157,6 +270,36 @@ export class Store {
       }
     } catch { /* FTS unavailable or rebuilding: title hits only */ }
     return { title, content };
+  }
+
+  // Automations (src/automations.mjs). Webhook runs that ended after `since`, oldest first, with their
+  // route (origin chat_name "webhook/<route>") and their final assistant reply.
+  webhookRunsSince(since, limit = 200) {
+    return this.db.prepare(`
+      SELECT s.id, s.title, s.ended_at, s.end_reason, json_extract(s.origin_json, '$.chat_name') AS route,
+        (SELECT substr(content, 1, 20000) FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '' ORDER BY m.id DESC LIMIT 1) AS last
+      FROM sessions s
+      WHERE s.source = 'webhook' AND s.parent_session_id IS NULL AND s.ended_at > ?
+      ORDER BY s.ended_at LIMIT ?`).all(since, limit);
+  }
+
+  // The session of one agent cron run. Hermes titles it "<job name> · <date>" (canonical runs, id local-…)
+  // or names it cron_<job id>_<time> (owner runs). Candidates started before the archive was written and
+  // ended close to it; the one whose final reply is the archived answer wins, else the closest within 5 min.
+  cronSessionFor({ names = [], jobId = null, at, answer = null }) {
+    const likes = names.map((n) => `${String(n).replace(/[\\%_]/g, (c) => `\\${c}`)} · %`);
+    if (jobId) likes.push(`cron\\_${String(jobId).replace(/[\\%_]/g, (c) => `\\${c}`)}\\_%`);
+    if (!likes.length) return null;
+    const rows = this.db.prepare(`
+      SELECT s.id, COALESCE(s.ended_at, s.last_activity_at, s.started_at) AS end_at,
+        (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'assistant' AND m.content <> '' ORDER BY m.id DESC LIMIT 1) AS last
+      FROM sessions s
+      WHERE s.source = 'cron' AND s.started_at BETWEEN ? AND ?
+        AND (${names.map(() => `s.title LIKE ? ESCAPE '\\'`).concat(jobId ? [`s.id LIKE ? ESCAPE '\\'`] : []).join(' OR ')})
+      ORDER BY abs(COALESCE(s.ended_at, s.last_activity_at, s.started_at) - ?) LIMIT 8`).all(at - 6 * 3600, at + 5, ...likes, at);
+    const norm = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+    const hit = (answer && rows.find((r) => r.last && norm(r.last) === norm(answer))) || rows.find((r) => Math.abs(r.end_at - at) < 300);
+    return hit ? this.rootOf(hit.id) || hit.id : null;
   }
 
   maxIds() {

@@ -13,10 +13,14 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_SERVE_UI` | `--ui` | `on` | `off` = headless, API only. |
 | `HERMES_UI_DIR` | `--ui-dir` | `web/dist` | Built UI to serve. |
 | `HERMES_UI_URL` | `--ui-url` | – | Public URL of the static UI, used in iroh pairing links. |
+| `HERMES_UI_CORS_ORIGINS` | `--cors-origins` | – | Extra origins (comma separated) whose pages may call the API with the token (Bearer, no cookies). The desktop app's `tauri://localhost` is always allowed. |
 | `HERMES_UI_REMOTE` | `--remote` | `off` | `off` \| `iroh` \| `tailscale-funnel` \| `tailscale-serve` \| `cloudflare`. |
 | `HERMES_UI_LANG` | `--lang` | `en` | Language of server-generated texts (`en`, `de`). The UI follows the browser; change it in ⌘K. |
 | `HERMES_UI_DATA_DIR` | `--data-dir` | `./data` | Board state, paired devices, tunnel state, inbox history, VAPID keys and push subscriptions. |
 | `HERMES_UI_IMAGE_ROOTS` | `--image-roots` | – | Extra directories (separated by `:`) whose images transcripts may show. Always allowed: Hermes' image cache, `PASEO_HOME` and Paseo's `paseo-attachments-*` temp dirs. |
+| `HERMES_UI_FILE_ROOTS` | `--file-roots` | home directory | Directories (separated by `:`) whose files chats may open in the preview and download, hidden directories excluded. MEDIA attachments are allowed outside them. Rules and denylist: [security.md](security.md#files-in-chats). |
+| `HERMES_UI_FILE_PREVIEW_MB` | `--file-preview-mb` | `25` | Largest image, audio or PDF shown inline in the file preview. |
+| `HERMES_UI_FILE_DOWNLOAD_MB` | `--file-download-mb` | `200` | Largest file (and video) served for download. |
 | `PASEO_HOME` | `--paseo-home` | `~/.paseo` | Paseo home, allowed as an image root. |
 | `HERMES_HOME` | `--hermes-home` | `~/.hermes` | Hermes data dir: `state.db`, `gateway.sock`. |
 | `HERMES_UI_PASEO` | `--paseo` | `auto` | `off` disables the Paseo integration. |
@@ -27,8 +31,13 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_PASEO_RESPOND` | `--paseo-respond` | `on` | `off` = the inbox shows Paseo permissions but cannot answer them. |
 | `HERMES_UI_PUSH` | `--push` | `on` | `off` disables Web Push. |
 | `HERMES_UI_PUSH_SUBJECT` | `--push-subject` | `HERMES_UI_URL` if https | VAPID subject (`mailto:` or `https:`); Apple rejects anything else. |
-| `HERMES_UI_FCM_SERVICE_ACCOUNT` | `--fcm-service-account` | – | Firebase service-account JSON: push to the native Android app through FCM, next to Web Push. See [mobile-app.md](mobile-app.md). |
+| `HERMES_UI_FCM_SERVICE_ACCOUNT` | `--fcm-service-account` | – | Firebase service-account JSON: push to the native Android app through FCM, next to Web Push. See [app.md](app.md). |
 | `HERMES_UI_INBOX_DAYS`, `HERMES_UI_INBOX_MAX` | `--inbox-days`, `--inbox-max` | `30`, `1000` | How long / how many inbox entries are kept. |
+| `HERMES_UI_AUTOMATIONS` | `--automations` | `on` | `off` = no cron / webhook runs in the inbox ([ADR 0014](decisions/0014-automations-in-the-inbox.md)). |
+| `HERMES_UI_AUTOMATIONS_BACKFILL_HOURS` | `--automations-backfill-hours` | `0` | First start only: also add the runs of the last N hours. Later starts continue where the last one stopped. |
+| `HERMES_UI_AUTOMATIONS_IGNORE` | `--automations-ignore` | – | Job names, job ids or webhook routes (comma separated, case-insensitive) that never go into the inbox. |
+| `HERMES_UI_AUTOMATIONS_INTERVAL` | `--automations-interval` | `15` | Seconds between scans of `$HERMES_HOME/cron/output` and the webhook sessions (minimum 5). |
+| `HERMES_UI_NOTIFY_TOKEN` | `--notify-token` | – | Optional second token that may only call `POST /api/notify` (scripts, other Hermes profiles). `hermes-ui notify` prefers it. |
 | `PASEO_DAEMON_URL` | `--paseo-url` | from `PASEO_MCP_CONFIG`, else `ws://127.0.0.1:6767/ws` | Paseo daemon. |
 | `PASEO_MCP_CONFIG` | `--paseo-mcp-config` | `~/.config/paseo-mcp/config.json` | Where the daemon URL is read from. |
 | `PASEO_OPS_FILE` | `--paseo-ops-file` | `$HERMES_HOME/ops-loop/paseo.json` | Optional agent goal / phase file. |
@@ -56,8 +65,9 @@ In every mode the backend stays on `127.0.0.1`:
 
 ```bash
 node server/scripts/launchd-plist.mjs --remote iroh > ~/Library/LaunchAgents/io.github.hermes-ui.plist
-launchctl load ~/Library/LaunchAgents/io.github.hermes-ui.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.hermes-ui.plist
 ```
 
-`server/examples/io.github.hermes-ui.plist` shows the shape of the plist.
+`server/examples/io.github.hermes-ui.plist` shows the shape of the plist. Checks, restart and removal:
+[self-hosting.md](self-hosting.md#macos-launchagent).
 

@@ -55,7 +55,7 @@
 </header>
 
 <h1>Privacy policy</h1>
-<p class="muted">Last updated: 19 November 2026</p>
+<p class="muted">Last updated: 25 November 2026</p>
 
 <div class="box">
   <strong>In short</strong>
@@ -105,7 +105,7 @@
 <ul>
   <li><strong>Local notifications</strong>: while the app runs, it creates notifications on the device itself. Nothing is sent to a push service for this.</li>
   <li><strong>Android, “Stay connected in the background”</strong>: optionally a background service keeps the connection to your backend open and shows a quiet ongoing notification. It uses no additional services.</li>
-  <li><strong>Optional push via your own Firebase project</strong>: if you build the app yourself with your own Firebase project and configure your backend for it, your backend sends notifications through Google's Firebase Cloud Messaging (FCM). The app then receives a device token from Google and passes it to your backend. The notification contains only the chat title and a short label such as “Approval needed” or “Done”, and passes through Google's servers; Google's terms apply. The store version is built without Firebase.</li>
+  <li><strong>Optional push via your own Firebase project</strong>: if you build the app yourself with your own Firebase project and configure your backend for it, your backend sends notifications through Google's Firebase Cloud Messaging (FCM). The app then receives a device token from Google and passes it to your backend. The notification contains only the chat title and a short label such as “Approval needed” or “Done” (for results of your own automations, such as scheduled jobs, webhooks or scripts: the job name and the result's one-line title, never the full report; each device can switch these off), and passes through Google's servers; Google's terms apply. The store version is built without Firebase.</li>
   <li><strong>Web version, Web Push</strong>: if you enable push in the web version, your backend sends notifications through your browser's push service (for example Apple, Google or Mozilla). Their content is encrypted for your browser.</li>
 </ul>
 

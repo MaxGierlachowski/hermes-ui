@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 // The backend package (server/). In a checkout of the repository, ROOT is the repository root: `.env`,
-// `data/` and the built UI (`web/dist`) live there, next to server/, web/ and mobile-app/.
+// `data/` and the built UI (`web/dist`) live there, next to server/, web/ and app/.
 export const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repo = path.dirname(PKG);
 export const ROOT = fs.existsSync(path.join(repo, 'web', 'package.json')) && fs.existsSync(path.join(repo, 'server', 'package.json')) ? repo : PKG;
@@ -74,6 +74,8 @@ export function loadConfig(argv = []) {
   return {
     envFile,
     token,
+    // Optional second token that may only call POST /api/notify (scripts, other Hermes profiles). Empty = off.
+    notifyToken: get('HERMES_UI_NOTIFY_TOKEN', 'notify-token', ''),
     host: '127.0.0.1', // never configurable: remote access goes through a tunnel, not an open port
     port: Number(get('HERMES_UI_PORT', 'port', 8787)),
     dataDir,
@@ -82,12 +84,23 @@ export function loadConfig(argv = []) {
     // Extra directories whose images transcripts may show (path-delimiter separated, e.g. "~/Pictures:~/notes").
     // Always allowed: Hermes' image cache, the Paseo home and Paseo's attachment temp dirs.
     imageRoots: (get('HERMES_UI_IMAGE_ROOTS', 'image-roots', '') || '').split(path.delimiter).map((x) => expand(x.trim())).filter(Boolean),
+    // Files a chat mentions (file chips, preview, download): directories they may come from
+    // (path-delimiter separated; default: the home directory, hidden directories excluded) and size limits.
+    // See docs/security.md "Files in chats".
+    files: {
+      roots: (get('HERMES_UI_FILE_ROOTS', 'file-roots', '') || '').split(path.delimiter).map((x) => expand(x.trim())).filter(Boolean),
+      maxPreviewMb: Number(get('HERMES_UI_FILE_PREVIEW_MB', 'file-preview-mb', 25)) || 25,
+      maxDownloadMb: Number(get('HERMES_UI_FILE_DOWNLOAD_MB', 'file-download-mb', 200)) || 200,
+    },
     paseoHome: expand(get('PASEO_HOME', 'paseo-home', path.join(os.homedir(), '.paseo'))),
     // UI: serve the built UI from this backend ("on") or run headless ("off").
     ui: get('HERMES_UI_SERVE_UI', 'ui', 'on') !== 'off',
     uiDir: expand(get('HERMES_UI_DIR', 'ui-dir', path.join(ROOT, 'web', 'dist'))),
     // Public URL of the static UI (e.g. GitHub Pages) used in iroh pairing links. Empty = local UI only.
     uiUrl: (get('HERMES_UI_URL', 'ui-url', '') || '').replace(/\/$/, ''),
+    // Extra origins (comma separated) whose pages may call the API with the token, e.g. a dev server
+    // of the universal app. The desktop app (tauri://localhost) is always allowed. Bearer only: no cookies.
+    corsOrigins: (get('HERMES_UI_CORS_ORIGINS', 'cors-origins', '') || '').split(',').map((x) => x.trim().replace(/\/$/, '')).filter(Boolean),
     remote: get('HERMES_UI_REMOTE', 'remote', 'off'), // off | iroh | tailscale-funnel | tailscale-serve | cloudflare
     iroh: {
       bin: expand(get('IROH_GATEWAY_BIN', 'iroh-gateway-bin', '')),
@@ -106,6 +119,15 @@ export function loadConfig(argv = []) {
     inbox: {
       maxDays: Number(get('HERMES_UI_INBOX_DAYS', 'inbox-days', 30)),
       maxItems: Number(get('HERMES_UI_INBOX_MAX', 'inbox-max', 1000)),
+    },
+    // Cron and webhook runs that reported something, into the inbox (src/automations.mjs, ADR 0014).
+    automations: {
+      enabled: get('HERMES_UI_AUTOMATIONS', 'automations', 'on') !== 'off',
+      // First start only: also pick up the runs of the last N hours (default 0 = from now on).
+      backfillHours: Math.max(0, Number(get('HERMES_UI_AUTOMATIONS_BACKFILL_HOURS', 'automations-backfill-hours', 0)) || 0),
+      // Job names, job ids or webhook routes to leave out (comma separated, case-insensitive).
+      ignore: (get('HERMES_UI_AUTOMATIONS_IGNORE', 'automations-ignore', '') || '').split(',').map((x) => x.trim()).filter(Boolean),
+      intervalS: Math.max(5, Number(get('HERMES_UI_AUTOMATIONS_INTERVAL', 'automations-interval', 15)) || 15),
     },
     tailscale: { authKey: get('TS_AUTHKEY', 'ts-authkey', ''), hostname: get('TS_HOSTNAME', 'ts-hostname', 'hermes-ui') },
     paseo: {

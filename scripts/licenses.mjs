@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Writes THIRD-PARTY-NOTICES.md: every production dependency of the backend, the web UI and the mobile
 // app (npm) and of the iroh library (Cargo), with version and license, grouped by license.
-//   node scripts/licenses.mjs            (after npm ci in the root and in mobile-app/)
+//   node scripts/licenses.mjs            (after npm ci in the root and in app/)
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -40,13 +40,18 @@ const ls = (dir, where, ws) => npm(dir, where, ws)
 process.env.npm_config_long = 'true'
 ls(root, 'server', 'server')
 ls(root, 'web', 'web')
-ls(path.join(root, 'mobile-app'), 'mobile-app')
+ls(path.join(root, 'app'), 'app')
 
-// Cargo: the iroh library (mobile-app/modules/expo-iroh/rust), without dev/build-only crates of the host tools.
+// Cargo: the iroh library (app/modules/expo-iroh/rust), without dev/build-only crates of the host tools.
 try {
-  const meta = JSON.parse(execFileSync('cargo', ['metadata', '--format-version', '1', '--locked'], { cwd: path.join(root, 'mobile-app/modules/expo-iroh/rust'), encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] }))
-  for (const p of meta.packages) if (p.source) add(p.name, p.version, p.license, 'mobile-app (Rust)')
+  const meta = JSON.parse(execFileSync('cargo', ['metadata', '--format-version', '1', '--locked'], { cwd: path.join(root, 'app/modules/expo-iroh/rust'), encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] }))
+  for (const p of meta.packages) if (p.source) add(p.name, p.version, p.license, 'app (Rust)')
 } catch { console.error('cargo metadata failed: Rust crates not listed') }
+// Cargo: the desktop shell (desktop-app/src-tauri; Tauri and its plugins, all platforms).
+try {
+  const meta = JSON.parse(execFileSync('cargo', ['metadata', '--format-version', '1', '--locked'], { cwd: path.join(root, 'desktop-app/src-tauri'), encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] }))
+  for (const p of meta.packages) if (p.source) add(p.name, p.version, p.license, 'desktop-app (Rust)')
+} catch { console.error('cargo metadata failed: desktop crates not listed') }
 
 const byLicense = new Map()
 for (const r of rows.values()) {

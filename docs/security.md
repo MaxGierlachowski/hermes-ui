@@ -38,6 +38,9 @@ none of `X-Forwarded-For`, `X-Forwarded-Host`, `Cf-Connecting-Ip`, `Tailscale-Us
   stored (`data/devices.json`). Comparisons are constant-time.
 - Scripts may send the token as `Authorization: Bearer …`. The backend also accepts `?token=` in the
   URL for older clients; avoid it, because URLs end up in logs and history.
+- `HERMES_UI_NOTIFY_TOKEN` (optional) is a second bearer token that may call `POST /api/notify` and
+  nothing else: give it to scripts and other Hermes profiles that only report into the inbox. Notify
+  bodies are limited to 64 KB; links must be `http`/`https`.
 
 ### Pairing
 
@@ -121,6 +124,10 @@ messages, commands or answers. Where notification actions are reliable (not Appl
 Hermes approvals get *Allow* / *Deny* actions. They only open the app with a confirmation dialog; they
 never answer by themselves.
 
+Automations (cron runs, webhook runs, `POST /api/notify`) are the exception to "no content": their push
+carries the job, route or notify group and the entry's one-line title (a report replaces a chat-channel
+message), never the full report. Each device can switch these pushes off.
+
 ## Files and media
 
 The UI shows images from transcripts. The backend serves local files only under these rules
@@ -139,6 +146,54 @@ The UI shows images from transcripts. The backend serves local files only under 
 Keep `HERMES_UI_IMAGE_ROOTS` narrow: every image below those directories becomes readable by paired
 devices.
 
+## Files in chats
+
+Paths a chat mentions (`/Users/…`, `~/…`, `file://…` in prose, inline code or Markdown links, in
+assistant replies and tool output) and `MEDIA:<path>` attachments of any type become file chips and
+cards that open an in-app preview with a download. Detection: `shared/file-refs.ts`; access:
+`server/src/file-access.mjs`; endpoint: `GET /api/sessions/:id/file?path=…` (`&download=1`,
+`/file/text` for text previews). A file is served only if **all** of these hold:
+
+1. **The chat mentions it.** The `path` must be a reference found in that session's own transcript
+   (MEDIA tag, path, `file://` link, or a file the user attached). Another chat's files, or any path
+   typed into the URL, return 404. Detection skips fenced code blocks, routes like `/api/…`, URLs,
+   relative paths and inline code that looks like a command.
+2. **Allowed location.** The real path (`realpath`: symlinks and `..` resolved) is a regular file
+   below a root in `HERMES_UI_FILE_ROOTS` (default: the home directory), and **no directory or file
+   on the way below the root is hidden** (`~/.config/…`, `~/project/.git/…` are refused). Files
+   attached with `MEDIA:<path>` (or attached by the user) may live outside the roots.
+3. **Not on the denylist** (applies inside roots and to MEDIA files, checked on the real path and the
+   path as written): `.ssh/`, `.gnupg/`, `.aws/`, `.azure/`, `.kube/`, `.docker/`, `.password-store/`,
+   `Library/Keychains/`; `.env`, `.env.*`, `*.env`, `.envrc`; `*.pem`, `*.key`, `*.p12`, `*.pfx`,
+   `*.crt`, `*.kdbx`, `*.gpg` and similar; `id_*` (SSH keys); `.netrc`, `.npmrc`, `.pgpass`,
+   `.git-credentials`; any name containing `secret`, `token`, `credential`, `password` or
+   `private-key`; SQLite and other app databases (`*.db`, `*.sqlite*`, …) below `Library/`,
+   `AppData/` or a hidden directory. The list is deliberately conservative (a `tokenizer.py` is
+   refused too).
+4. **Size limits.** Inline previews (images, audio, PDF) up to `HERMES_UI_FILE_PREVIEW_MB` (25),
+   video and downloads up to `HERMES_UI_FILE_DOWNLOAD_MB` (200). Text previews read at most the
+   first 1 MB and say so.
+
+Responses never render active content: inline only for images (not SVG), audio, video and PDF;
+HTML, SVG and everything else are shown as source text (JSON) or downloaded as
+`application/octet-stream` with `Content-Disposition: attachment`. All carry
+`X-Content-Type-Options: nosniff` and a CSP (`default-src 'none'`, `sandbox` for images and
+downloads). Authentication is unchanged (device cookie, bearer token or the iroh allow-list); over
+iroh the preview goes through the same media path as images.
+
+PDFs are drawn by pdf.js (bundled, no CDN) onto canvases in the app's own page, on the web and in
+the desktop app: no browser PDF plugin and no frame. The desktop app's navigation guard therefore
+stays strict (only the bundled UI navigates; `blob:` and `data:` frames are refused), and its CSP
+has no `frame-src` exception.
+
+The desktop app adds two commands (`desktop-app/src-tauri/src/files.rs`): saving a download into
+the Downloads folder (never overwriting) and **Open in default app**, offered only when the backend
+runs on the same machine. It refuses directories, executables (any `x` bit) and programs, scripts,
+installers and link files by extension.
+
+Keep `HERMES_UI_FILE_ROOTS` as narrow as your use allows: any non-hidden, non-denylisted file below
+it that a chat mentions becomes readable by paired devices.
+
 ## What is stored where
 
 | Location | Contents | Protection |
@@ -147,7 +202,8 @@ devices.
 | `data/devices.json` | Paired devices: name, iroh endpoint id, hash of the cookie secret, timestamps | `0600` |
 | `data/iroh/` | Gateway key, gateway access config, gateway log, downloaded binary | Directory `0700`, config `0600` |
 | `data/vapid.json`, `data/push.json` | Web Push key pair; push subscriptions and FCM tokens per device | `0600` |
-| `data/inbox.json` | Inbox history: chat titles, short excerpts of requests and replies, answers | `0600` |
+| `data/inbox.json` | Inbox history: chat titles, short excerpts of requests and replies, answers; automation reports (up to 8,000 characters each) | `0600` |
+| `data/automations.json` | How far the cron / webhook scan got (timestamps and recent run ids) | `0600` |
 | `data/board.json`, `data/media/` | Manual columns, drafts, outbox, copies of sent media | – |
 | `data/tailscale/` | State of the userspace Tailscale daemon (Tailscale modes) | Directory `0700` |
 | Browser | iroh key and remembered endpoint, preferences, the device cookie | Browser storage |

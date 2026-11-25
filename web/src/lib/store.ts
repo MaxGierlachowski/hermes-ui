@@ -14,8 +14,10 @@ type State = {
   remote: RemoteState | null
   devices: Device[]
   isLocal: boolean
-  days: number
+  days: number // optional time window, 0 = none (the newest chats, older ones page in while scrolling)
   system: boolean
+  nextCursor: string | null // where the next page starts; null = everything is loaded
+  loadingMore: boolean
   search: string
   source: string
   openId: string | null
@@ -29,6 +31,7 @@ type State = {
   tab: Tab
   inbox: { open: OpenItem[]; items: InboxItem[]; unread: number; loaded: boolean; paseo: { connected: boolean; canRespond: boolean } }
   confirm: { sessionId: string; promptId: string; choice: string } | null // approval from a notification action
+  inboxFocus: string | null // inbox entry to expand and scroll to (#/inbox/item/<id>, a toast)
 }
 
 let state: State = {
@@ -39,8 +42,10 @@ let state: State = {
   remote: null,
   devices: [],
   isLocal: true,
-  days: Number(localStorage.getItem('hk_days') || 3),
+  days: Number(localStorage.getItem('hk_window') || 0),
   system: localStorage.getItem('hk_system') === '1',
+  nextCursor: null,
+  loadingMore: false,
   search: '',
   source: '',
   openId: null,
@@ -54,6 +59,7 @@ let state: State = {
   tab: localStorage.getItem('hk_tab') === 'inbox' ? 'inbox' : 'board',
   inbox: { open: [], items: [], unread: 0, loaded: false, paseo: { connected: false, canRespond: false } },
   confirm: null,
+  inboxFocus: null,
 }
 const listeners = new Set<() => void>()
 const set = (patch: Partial<State> | ((s: State) => Partial<State>)) => {
@@ -96,12 +102,44 @@ const handle = (err: unknown) => {
 }
 
 // ---------- loading ----------
-export async function loadSessions() {
+// The board loads in pages (newest activity first). A reload fetches the first page again; once older
+// pages were scrolled in, it merges by id and keeps everything loaded (and the cursor), so live
+// refreshes never drop them and no row between the pages goes missing. A filter change starts over.
+type Page = { sessions: Session[]; nextCursor: string | null; gateway: boolean }
+const PAGE = 50
+const sessionsUrl = (before?: string) => `/api/sessions?limit=${PAGE}&system=${state.system ? 1 : 0}${state.days ? `&days=${state.days}` : ''}${before ? `&before=${encodeURIComponent(before)}` : ''}`
+let paged = false // a later page was loaded since the last reset
+let generation = 0 // bumped by a filter change: answers to older requests are dropped
+
+export async function loadSessions(reset = false) {
+  const gen = reset ? ++generation : generation
+  if (reset) paged = false
   try {
-    const { sessions, gateway } = await api<{ sessions: Session[]; gateway: boolean }>(`/api/sessions?days=${state.days}&system=${state.system ? 1 : 0}`)
-    set({ auth: 'ok', gateway, sessions: Object.fromEntries(sessions.map((s) => [s.id, withMove(s)])) })
+    const page = await api<Page>(sessionsUrl())
+    if (gen !== generation) return true
+    const first = Object.fromEntries(page.sessions.map((s) => [s.id, withMove(s)]))
+    set((st) => paged
+      ? { auth: 'ok', gateway: page.gateway, sessions: { ...st.sessions, ...first } }
+      : { auth: 'ok', gateway: page.gateway, sessions: first, nextCursor: page.nextCursor ?? null })
     return true
   } catch (err) { handle(err); return false }
+}
+
+/** Next older page (infinite scroll at the end of a column / list). */
+export async function loadMore() {
+  const cursor = state.nextCursor
+  if (!cursor || state.loadingMore) return
+  const gen = generation
+  set({ loadingMore: true })
+  try {
+    const page = await api<Page>(sessionsUrl(cursor))
+    if (gen !== generation) return
+    paged = true
+    set((st) => ({
+      sessions: { ...Object.fromEntries(page.sessions.map((s) => [s.id, withMove(s)])), ...st.sessions },
+      nextCursor: page.nextCursor ?? null,
+    }))
+  } catch (err) { handle(err) } finally { if (gen === generation) set({ loadingMore: false }) }
 }
 
 export async function loadRemote() {
@@ -113,9 +151,9 @@ export async function loadRemote() {
 
 export function setFilter(patch: Partial<Pick<State, 'days' | 'system' | 'search' | 'source'>>) {
   set(patch)
-  if ('days' in patch) localStorage.setItem('hk_days', String(patch.days))
+  if ('days' in patch) localStorage.setItem('hk_window', String(patch.days))
   if ('system' in patch) localStorage.setItem('hk_system', patch.system ? '1' : '0')
-  if ('days' in patch || 'system' in patch) loadSessions()
+  if ('days' in patch || 'system' in patch) { set({ sessions: {}, nextCursor: null, loadingMore: false }); loadSessions(true) }
 }
 
 // ---------- thread ----------
@@ -150,8 +188,9 @@ export async function refreshThread(id: string) {
   } catch (err) { set({ loadingThread: false }); handle(err) }
 }
 
-// ---------- routing: #/board, #/board/<session>, #/inbox, #/inbox/<session>[?confirm=<prompt>&choice=<c>] ----------
+// ---------- routing: #/board, #/board/<session>, #/inbox, #/inbox/<session>[?confirm=<prompt>&choice=<c>], #/inbox/item/<entry> ----------
 // Legacy links (#<session>) open the board. Pairing fragments (#iroh=…) are handled by bootstrap().
+// #/inbox/item/<entry> (push of an automation entry) opens the inbox with that entry expanded.
 function writeHash() {
   const h = `#/${state.tab}${state.openId ? `/${encodeURIComponent(state.openId)}` : ''}`
   if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h)
@@ -168,6 +207,7 @@ export function applyHash(hash = location.hash) {
   const [path, query] = raw.split('?')
   const m = path.match(/^\/(board|inbox)(?:\/(.+))?$/)
   const tab: Tab = m ? (m[1] as Tab) : 'board'
+  if (tab === 'inbox' && m?.[2]?.startsWith('item/')) { focusInbox(decodeURIComponent(m[2].slice(5))); return }
   const id = m ? (m[2] ? decodeURIComponent(m[2]) : null) : decodeURIComponent(path)
   if (tab !== state.tab) setTab(tab)
   const q = new URLSearchParams(query || '')
@@ -178,12 +218,30 @@ export function applyHash(hash = location.hash) {
 }
 export const clearConfirm = () => set({ confirm: null })
 
+/** Opens the inbox with one entry expanded, scrolled to and marked read (the Inbox does that). */
+export async function focusInbox(entryId: string) {
+  if (state.tab !== 'inbox') setTab('inbox')
+  // On phones an open thread sheet would cover the entry.
+  if (state.openId) openThread(null)
+  else writeHash()
+  // An entry the list does not know yet (the event stream was away): load the inbox first.
+  if (!state.inbox.items.some((x) => x.id === entryId)) await loadInbox()
+  set({ inboxFocus: entryId })
+}
+export const clearInboxFocus = () => set({ inboxFocus: null })
+
 // ---------- inbox ----------
-export async function loadInbox() {
-  try {
-    const r = await api<{ open: OpenItem[]; items: InboxItem[]; unread: number; paseo: { connected: boolean; canRespond: boolean } }>('/api/inbox')
-    set({ inbox: { ...r, loaded: true } })
-  } catch (err) { handle(err) }
+// One request at a time: callers at startup (tab, route, Inbox) share it, so no older answer lands
+// after an entry was marked read.
+let inboxLoading: Promise<void> | null = null
+export function loadInbox() {
+  inboxLoading ??= (async () => {
+    try {
+      const r = await api<{ open: OpenItem[]; items: InboxItem[]; unread: number; paseo: { connected: boolean; canRespond: boolean } }>('/api/inbox')
+      set({ inbox: { ...r, loaded: true } })
+    } catch (err) { handle(err) } finally { inboxLoading = null }
+  })()
+  return inboxLoading
 }
 export async function markRead(ids: string[] | 'all') {
   if (ids !== 'all' && !ids.length) return
@@ -215,9 +273,11 @@ listeners.add(syncBadge)
 
 const KIND_LABEL: Record<string, string> = {
   approval: 'Freigabe nötig', clarify: 'Rückfrage von Hermes', permission: 'Paseo-Agent braucht eine Freigabe',
-  done: 'Fertig', error: 'Fehler', 'paseo-done': 'Paseo-Agent fertig', 'paseo-error': 'Paseo-Agent mit Fehler', 'paseo-limit': 'Paseo-Agent hat ein Limit erreicht',
+  done: 'Fertig', error: 'Fehler', automation: 'Automation', 'paseo-done': 'Paseo-Agent fertig', 'paseo-error': 'Paseo-Agent mit Fehler', 'paseo-limit': 'Paseo-Agent hat ein Limit erreicht',
 }
 export const kindLabel = (k: string) => t(KIND_LABEL[k] || k)
+const SOURCE_LABEL: Record<string, string> = { hermes: 'Hermes', paseo: 'Paseo', cron: 'Cron', webhook: 'Webhook', notify: 'Notify' }
+export const sourceLabel = (s: string) => t(SOURCE_LABEL[s] || s)
 
 /** In-app notification while the app is visible; a click opens the thread (or the inbox). */
 function toastFor(item: InboxItem) {
@@ -225,14 +285,19 @@ function toastFor(item: InboxItem) {
   // A finished turn of the chat that is open right now needs no toast.
   if ((item.kind === 'done' || item.kind === 'error') && item.sessionId && item.sessionId === state.openId) return
   const request = item.kind === 'approval' || item.kind === 'clarify' || item.kind === 'permission'
+  // Automations (cron, webhook, notify): the click opens the entry in the inbox, with its report.
+  const automation = item.kind === 'automation'
   const open = () => {
+    if (automation) { focusInbox(item.id); return }
     markRead([item.id])
     if (request || !item.sessionId) setTab('inbox')
     if (item.sessionId) openThread(item.sessionId)
   }
-  const title = item.source === 'paseo' && item.agentTitle ? item.agentTitle : item.title || 'Hermes'
-  const fn = item.kind.endsWith('error') || item.kind === 'paseo-limit' ? toast.error : request ? toast.warning : toast.success
-  fn(`${kindLabel(item.kind)} · ${title}`, {
+  const title = automation ? [item.group, item.title].filter(Boolean).join(' · ') || 'Hermes'
+    : item.source === 'paseo' && item.agentTitle ? item.agentTitle : item.title || 'Hermes'
+  const failed = automation ? item.status === 'error' : item.kind.endsWith('error') || item.kind === 'paseo-limit'
+  const fn = failed ? toast.error : request || item.level === 'warn' ? toast.warning : toast.success
+  fn(`${automation ? sourceLabel(item.source) : kindLabel(item.kind)} · ${title}`, {
     id: item.id,
     description: item.text ? (item.text.length > 90 ? `${item.text.slice(0, 89)}…` : item.text) : undefined,
     duration: request ? 12000 : 6000,
@@ -279,8 +344,9 @@ export async function createChat(msg: OutgoingMessage) {
   return session
 }
 
+/** false when the message was not delivered (already reported); the composer then keeps it. */
 export async function sendMessage(id: string, msg: OutgoingMessage) {
-  let res: { session: Session; messages?: ThreadMessage[] }
+  let res: { session: Session; messages?: ThreadMessage[]; voice?: { transcribed: boolean; error?: string } }
   try {
     res = await api(`/api/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', json: msg })
   } catch (err) {
@@ -288,11 +354,13 @@ export async function sendMessage(id: string, msg: OutgoingMessage) {
     if (err instanceof Unauthorized) throw err
     toast.error(t('Nachricht nicht zugestellt'), { description: err instanceof Error ? err.message : String(err) })
     refreshThread(id)
-    return
+    return false
   }
-  if (res.session && res.session.id !== id) { remove(id); upsert(res.session, true); openThread(res.session.id); return }
+  if (res.voice && !res.voice.transcribed) toast.error(t('Sprachnachricht nicht transkribiert – als Audiodatei gesendet'), { description: res.voice.error })
+  if (res.session && res.session.id !== id) { remove(id); upsert(res.session, true); openThread(res.session.id); return true }
   if (res.session) upsert(res.session)
   if (res.messages && state.openId === id) set({ messages: res.messages })
+  return true
 }
 
 async function outboxAction(sessionId: string, outboxId: string, retry: boolean) {
