@@ -4,7 +4,8 @@ import { useEffect, type ReactNode } from 'react'
 import { router } from 'expo-router'
 import * as Notifications from 'expo-notifications'
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent'
-import { openThread, setTab, useStore } from '@/lib/store'
+import { setTab, useStore } from '@/lib/store'
+import { openTarget, showThread } from '@/lib/nav'
 import { setSharedDraft } from '@/lib/share'
 
 /** "Share → Hermes UI": text or an image becomes the draft of a new chat. */
@@ -22,14 +23,19 @@ function ShareIntentRouter() {
   return null
 }
 
-/** A tap on a notification opens its thread (or the inbox for approvals). */
+/**
+ * A tap on a notification opens what it is about. Remote pushes (FCM) carry the backend's route in
+ * `url` (`#/board/<chat>`, `#/inbox/<chat>`, `#/inbox/item/<entry>`, see lib/notify-target.ts); the
+ * app's local notifications carry the same route, older ones only `sessionId` / `inbox`.
+ */
 function NotificationRouter() {
   const last = Notifications.useLastNotificationResponse()
   useEffect(() => {
-    const data = last?.notification.request.content.data as { sessionId?: string | null; inbox?: boolean } | undefined
+    const data = last?.notification.request.content.data as { url?: string; sessionId?: string | null; inbox?: boolean } | undefined
     if (!data) return
+    if (typeof data.url === 'string' && openTarget(data.url)) return
     if (data.inbox) setTab('inbox')
-    if (data.sessionId) { openThread(data.sessionId); router.push(`/thread/${encodeURIComponent(data.sessionId)}`) }
+    if (data.sessionId) showThread(data.sessionId)
   }, [last])
   return null
 }

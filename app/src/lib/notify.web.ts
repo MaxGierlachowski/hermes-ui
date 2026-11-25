@@ -5,6 +5,8 @@
 //     up here yet, see docs/decisions/0012-universal-app.md).
 import type { InboxItem } from '@shared/types'
 import { invoke, isDesktop } from './desktop.web'
+import { targetUrl } from './notify-target'
+import { openTarget } from './nav'
 
 export const CHANNEL = 'hermes'
 
@@ -36,11 +38,15 @@ export async function notifyInboxItem(item: InboxItem, label: string, title: str
   const body = item.text ? (item.text.length > 140 ? `${item.text.slice(0, 139)}…` : item.text) : ''
   try {
     if (isDesktop) {
-      if (await invoke<boolean>('notify', { title: `${label} · ${title}`, body, sessionId: item.sessionId ?? null })) return
+      // The shell hands `sessionId` back on a click ("notification-click"): the route to open, not only a chat.
+      if (await invoke<boolean>('notify', { title: `${label} · ${title}`, body, sessionId: targetUrl(item) })) return
       ;(await plugin()).sendNotification({ title: `${label} · ${title}`, body })
       return
     }
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(`${label} · ${title}`, { body, tag: item.id })
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      const n = new Notification(`${label} · ${title}`, { body, tag: item.id })
+      n.onclick = () => { window.focus(); n.close(); openTarget(targetUrl(item)) }
+    }
   } catch { /* no permission */ }
 }
 

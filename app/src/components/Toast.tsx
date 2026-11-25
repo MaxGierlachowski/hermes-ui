@@ -9,7 +9,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useColorScheme } from 'nativewind'
 import { CircleCheck, Info, OctagonAlert, X, type LucideIcon } from 'lucide-react-native'
-import { showThread } from '@/lib/nav'
+import { showInboxItem, showThread } from '@/lib/nav'
 import { dismissToast, useStore, type ToastItem } from '@/lib/store'
 import { Text } from '@/components/ui/text'
 import { Icon } from '@/components/ui/icon'
@@ -82,7 +82,7 @@ function ToastCard({ item, depth, offset, paused, wide, onHeight, onHover }: { i
       pointerEvents={depth >= TOAST.visible ? 'none' : 'auto'}
     >
       <Pressable
-        onPress={() => { leave(); if (item.sessionId) showThread(item.sessionId) }}
+        onPress={() => { leave(); if (item.sessionId) showThread(item.sessionId); else if (item.itemId) showInboxItem(item.itemId) }}
         onHoverIn={() => onHover(true)}
         onHoverOut={() => onHover(false)}
         accessibilityRole="alert"

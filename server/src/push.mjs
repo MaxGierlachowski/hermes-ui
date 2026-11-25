@@ -14,6 +14,9 @@ export const DEFAULT_SETTINGS = {
   done: true, // a Hermes chat finished (and its Paseo agents are done), a Paseo agent finished
   error: true, // errors, usage limits
   paseo: true, // include Paseo agent events at all
+  automations: true, // a cron or webhook run reported something
+  automationErrors: true, // a cron or webhook run failed or was blocked; notify with level error
+  notify: true, // messages sent with POST /api/notify (hermes-ui notify)
   skipWhenVisible: true, // no push while this device has the app open and visible
   quiet: { enabled: false, from: '22:00', to: '07:00' }, // in the device's time zone
   tz: null,
@@ -36,7 +39,7 @@ function inQuietHours(settings, now = new Date()) {
 
 function cleanSettings(s = {}, prev = DEFAULT_SETTINGS) {
   const out = { ...DEFAULT_SETTINGS, ...prev };
-  for (const k of ['approval', 'done', 'error', 'paseo', 'skipWhenVisible']) if (typeof s[k] === 'boolean') out[k] = s[k];
+  for (const k of ['approval', 'done', 'error', 'paseo', 'automations', 'automationErrors', 'notify', 'skipWhenVisible']) if (typeof s[k] === 'boolean') out[k] = s[k];
   if (s.quiet && typeof s.quiet === 'object') {
     const hm = (v, d) => (/^\d{1,2}:\d{2}$/.test(String(v)) ? String(v) : d);
     out.quiet = { enabled: !!s.quiet.enabled, from: hm(s.quiet.from, out.quiet.from), to: hm(s.quiet.to, out.quiet.to) };
@@ -144,7 +147,7 @@ export class Push {
   }
 
   /**
-   * ev: { category: 'approval'|'done'|'error', source: 'hermes'|'paseo', title, body, url, tag, badge,
+   * ev: { category: 'approval'|'done'|'error'|'automations'|'automationErrors'|'notify', source: 'hermes'|'paseo'|'cron'|'webhook'|'notify', title, body, url, tag, badge,
    *       actions?: [{ action, title }] (only offered where notification actions work, i.e. not on Apple) }
    */
   async notify(ev, { only = null } = {}) {

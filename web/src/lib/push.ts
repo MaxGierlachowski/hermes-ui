@@ -7,7 +7,7 @@ import { getConnection } from './backend'
 import type { PushSettings } from './types'
 
 export const DEFAULT_PUSH: PushSettings = {
-  approval: true, done: true, error: true, paseo: true, skipWhenVisible: true,
+  approval: true, done: true, error: true, paseo: true, automations: true, automationErrors: true, notify: true, skipWhenVisible: true,
   quiet: { enabled: false, from: '22:00', to: '07:00' }, tz: null,
 }
 

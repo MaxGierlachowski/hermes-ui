@@ -9,6 +9,7 @@ import { activeTarget, api, ApiError, clearMedia, connect, deviceName, forgetGat
 import { DemoBackend } from './demo'
 import { clearCache, initCache, readCache, trimMessages, writeCache } from './cache'
 import { appInBackground, notifyInboxItem } from './notify'
+import { wantsNotification } from './push-settings'
 import { t } from './i18n'
 import { agentTimelinePath } from './agents'
 import { deadline, makeTrack } from './sync'
@@ -36,6 +37,8 @@ type State = {
   streaming: { id: string; text: string } | null
   pendingFirst: { id: string; text: string; ts: number } | null
   inbox: { open: OpenItem[]; items: InboxItem[]; unread: number; loaded: boolean; paseo: { connected: boolean; canRespond: boolean } }
+  /** An inbox entry to scroll to and expand (a notification for an automation without a chat). */
+  inboxFocus: string | null
   /** In-app notices, newest last (components/Toast.tsx shows up to three as a stack). */
   toasts: ToastItem[]
   // Stale-while-revalidate: background loads in flight (header progress bar), when the board data
@@ -65,6 +68,7 @@ let state: State = {
   streaming: null,
   pendingFirst: null,
   inbox: { open: [], items: [], unread: 0, loaded: false, paseo: { connected: false, canRespond: false } },
+  inboxFocus: null,
   toasts: [],
   syncing: 0,
   boardAt: null,
@@ -83,11 +87,12 @@ export function useStore<T>(select: (s: State) => T): T {
   return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l) }, () => select(state))
 }
 
-export type ToastItem = { id: number; kind: 'info' | 'error' | 'success'; text: string; description?: string; sessionId?: string | null }
+/** A tap opens `sessionId`'s chat, else `itemId`'s inbox entry (an automation without a chat). */
+export type ToastItem = { id: number; kind: 'info' | 'error' | 'success'; text: string; description?: string; sessionId?: string | null; itemId?: string }
 let toastId = 0
 /** A notice: `text` is the title, `description` an optional second line; a click opens `sessionId`. */
-export function toast(text: string, kind: 'info' | 'error' | 'success' = 'info', sessionId?: string | null, description?: string) {
-  set((s) => ({ toasts: [...s.toasts, { id: ++toastId, kind, text, description, sessionId }].slice(-5) }))
+export function toast(text: string, kind: 'info' | 'error' | 'success' = 'info', sessionId?: string | null, description?: string, itemId?: string) {
+  set((s) => ({ toasts: [...s.toasts, { id: ++toastId, kind, text, description, sessionId, itemId }].slice(-5) }))
 }
 export const dismissToast = (id?: number) => set((s) => ({ toasts: id == null ? [] : s.toasts.filter((x) => x.id !== id) }))
 
@@ -291,6 +296,8 @@ export async function setPrefs(patch: Partial<Pick<State, 'days' | 'system' | 'c
   if ('days' in patch || 'system' in patch) { set({ sessions: {}, nextCursor: null, loadingMore: false }); loadSessions(false, true) }
 }
 export const setTab = (tab: Tab) => { set({ tab }); if (tab === 'inbox') loadInbox() }
+/** Opens the inbox at one entry (expanded, scrolled to); the inbox clears the focus once it is shown. */
+export const focusInboxItem = (id: string | null) => { set({ inboxFocus: id }); if (id) setTab('inbox') }
 
 function upsert(s: Session) { set((st) => ({ sessions: { ...st.sessions, [s.id]: s } })); persistBoard() }
 function remove(id: string) {
@@ -451,8 +458,17 @@ export const badgeCount = (st = state) => st.inbox.open.length + st.inbox.unread
 const KIND_LABEL: Record<string, string> = {
   approval: 'Freigabe nötig', clarify: 'Rückfrage von Hermes', permission: 'Paseo-Agent braucht eine Freigabe',
   done: 'Fertig', error: 'Fehler', 'paseo-done': 'Paseo-Agent fertig', 'paseo-error': 'Paseo-Agent mit Fehler', 'paseo-limit': 'Paseo-Agent hat ein Limit erreicht',
+  automation: 'Automation',
 }
 export const kindLabel = (k: string) => t(KIND_LABEL[k] || k)
+const SOURCE_LABEL: Record<string, string> = { hermes: 'Hermes', paseo: 'Paseo', cron: 'Cron', webhook: 'Webhook', notify: 'Notify' }
+export const sourceLabel = (s: string) => SOURCE_LABEL[s] || s
+/** What a notification or toast says about an entry: automations by result and group, chats by kind. */
+export function inboxItemLabel(item: InboxItem) {
+  if (item.kind !== 'automation') return { label: kindLabel(item.kind), title: item.source === 'paseo' && item.agentTitle ? item.agentTitle : item.title || 'Hermes' }
+  const failed = item.status === 'error'
+  return { label: `${sourceLabel(item.source)} · ${item.group || item.title || ''}`.replace(/ · $/, ''), title: failed ? `${t('Fehler')}: ${item.title || item.text}` : item.title || item.text }
+}
 
 // ---------- live events ----------
 let stopStream: (() => void) | null = null
@@ -522,10 +538,12 @@ export function connectEvents() {
 
 /** In the foreground: an in-app toast; in the background: a local system notification. */
 function onNewInboxItem(item: InboxItem) {
-  const title = item.source === 'paseo' && item.agentTitle ? item.agentTitle : item.title || 'Hermes'
-  if (appInBackground()) { notifyInboxItem(item, kindLabel(item.kind), title); return }
+  const { label, title } = inboxItemLabel(item)
+  // The automation switches (Settings) apply to system notifications; the in-app toast always shows.
+  if (appInBackground()) { if (wantsNotification(item)) notifyInboxItem(item, label, title); return }
   if ((item.kind === 'done' || item.kind === 'error') && item.sessionId && item.sessionId === state.openId) return
-  toast(kindLabel(item.kind), item.kind.endsWith('error') ? 'error' : item.kind === 'done' || item.kind === 'paseo-done' ? 'success' : 'info', item.sessionId, title)
+  const failed = item.kind.endsWith('error') || item.status === 'error'
+  toast(label, failed ? 'error' : item.kind === 'done' || item.kind === 'paseo-done' || item.kind === 'automation' ? 'success' : 'info', item.sessionId, title, item.kind === 'automation' ? item.id : undefined)
 }
 
 // Coming back to the foreground: reconnect the stream if it died while the app slept.

@@ -29,7 +29,9 @@ import { ColumnSheet } from '@/components/board/ColumnSheet'
 import { COLUMN_COLOR } from '@/components/board/status'
 import { ChevronDown } from 'lucide-react'
 
-const MESSAGING = new Set(['kanban', 'desktop', 'cli', 'oneshot'])
+// Sources whose chats are answered here without asking first. Cron and webhook runs have no chat
+// elsewhere: the first message reopens the run's session ("Zum Chat" from an automation entry).
+const MESSAGING = new Set(['kanban', 'desktop', 'cli', 'oneshot', 'cron', 'webhook'])
 
 function ToolChip({ m }: { m: ThreadMessage }) {
   const [open, setOpen] = useState(false)

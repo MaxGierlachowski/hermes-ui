@@ -28,10 +28,11 @@ What the board, the thread panel and the inbox do, in detail. The mobile app: [a
   - A deep link (`paseo://h/<server>/agent/<id>`) opens the agent in the Paseo app.
   - Images that agents reference by local path (`file:///…`, `/Users/…`) are served read-only by `/api/file`: image types only, only below the allowed roots (see `HERMES_UI_IMAGE_ROOTS`), checked on the real path. Missing files show a placeholder; a click opens a lightbox.
   - Files Hermes attaches to a reply with `MEDIA:<path>` (what Slack shows as attachments) appear under the message: images, audio players, other files by name. Only exactly those referenced files become readable, the tags never show up in the text, not even while streaming.
-- **Tabs:** Board and Inbox, in the header on a desktop and as a bottom tab bar on a phone. The tab is part of the URL (`#/board`, `#/inbox`, `#/inbox/<session>`), so a reload or a link keeps it. `g b` / `g i` switch.
+- **Tabs:** Board and Inbox, in the header on a desktop and as a bottom tab bar on a phone. The tab is part of the URL (`#/board`, `#/inbox`, `#/inbox/<session>`, `#/inbox/item/<entry>`), so a reload or a link keeps it. `g b` / `g i` switch.
 - **Inbox (across all chats):**
   - *Needs you:* every open Hermes approval and clarify question of every followed session, answerable in place with the same controls and countdown as in the thread, and every Paseo agent with a pending permission (agent, tool, command or description), answerable with Allow / Deny via paseo-mcp's `paseo_respond_permission`. Each entry names its chat and links to the thread.
-  - *History:* requests and how they were answered (here, elsewhere, expired), finished chats, errors, Paseo agents that finished, failed or hit a usage limit. Read/unread, "mark all read", filters by kind and source, grouped by day. Stored in `<data-dir>/inbox.json` (30 days / 1000 entries by default).
+  - *History:* requests and how they were answered (here, elsewhere, expired), finished chats, errors, Paseo agents that finished, failed or hit a usage limit, and automations (below). Read/unread, "mark all read", filters by kind and by source (Chats / Agents / Automations), grouped by day. Stored in `<data-dir>/inbox.json` (30 days / 1000 entries by default).
+  - *Automations:* cron runs, webhook runs and script messages that reported something, one group per job, route or notify group (unread count, newest first, ok / error). An entry shows title, one-line text, time and status; expanded, the full report as Markdown. With a chat (agent cron runs, webhook runs, notify with `sessionId`) *Open chat* opens it, and you can write on there; script runs without a chat only expand. See [Automations in the inbox](#automations-in-the-inbox).
   - A Hermes chat counts as *done* only when Hermes' turn is over **and** none of the Paseo agents it started or steers is still running or waiting for a permission (the same rule as the columns). A Paseo agent finishing is its own entry.
 - **In-app notifications:** toasts for new requests and finished chats while the app is visible (a click opens the thread or the inbox), a badge on the Inbox tab and on the app icon (Badging API where available).
 - **Push notifications (Web Push, see below).**
@@ -70,14 +71,50 @@ Standard Web Push with VAPID. The backend generates its key pair on first start 
 
 - **Enable** in Inbox → bell icon (or ⌘K → Notifications). Browsers only ask for permission after a click.
 - **iPhone / iPad:** push works only in the app added to the Home Screen (iOS / iPadOS 16.4 or later): Safari → Share → *Add to Home Screen*, open it from there, then enable. The settings dialog explains this when it runs in plain Safari.
-- **Per device:** which kinds push (approvals and questions, done, errors and limits, Paseo agents at all), optional quiet hours (in the device's time zone) and "don't push while the app is open and visible" (the UI reports its visibility; then only the in-app toast appears).
-- **Payload:** only the chat title and the kind ("Approval needed", "Done", "Error"). A click opens the thread or the inbox. On browsers with reliable notification actions (not Apple's push service) Hermes approvals get *Allow …* / *Deny …*; these open the app with a confirmation dialog and never answer by themselves.
+- **Per device:** which kinds push (approvals and questions, done, errors and limits, Paseo agents at all, automation reports, automation errors, script messages), optional quiet hours (in the device's time zone) and "don't push while the app is open and visible" (the UI reports its visibility; then only the in-app toast appears).
+- **Payload:** only the chat title and the kind ("Approval needed", "Done", "Error"); automations: the job / group name and the entry's one-line title. A click opens the thread or the inbox. On browsers with reliable notification actions (not Apple's push service) Hermes approvals get *Allow …* / *Deny …*; these open the app with a confirmation dialog and never answer by themselves.
 - **Lifecycle:** subscriptions belong to a paired device and are deleted when it is unpaired or signs out; subscriptions the push service reports as gone (404/410) are removed.
 - **Service worker:** `web/public/sw.js` is the one worker for the UI's scope. It imports iroh-fetch's `iroh-sw.js` (media over iroh) and adds the `push` and `notificationclick` handlers.
+
+## Automations in the inbox
+
+Hermes' cron jobs, webhook runs and your own scripts report into the inbox instead of a chat channel.
+Decision and details: [ADR 0014](decisions/0014-automations-in-the-inbox.md).
+
+- **Cron:** every run of every job, whatever its `deliver` target (also `deliver: local`), from the run
+  archives Hermes writes to `$HERMES_HOME/cron/output/<job>/<time>.md` (read-only). Only runs that
+  reported something: silent (`[SILENT]`), suppressed (`no_change`, wake gate off) and empty runs stay out.
+  Failures (`script failed`, `BLOCKED (configuration)`, an exception, the `[CRON_FAILURE]` marker,
+  a one-shot dropped before it fired) are entries with status *error*; the same error again only
+  counts up (×N) on the newest entry of its group. Agent runs link to their chat; no-agent scripts have none.
+- **Webhook:** every webhook run whose final reply is not `[SILENT]`, grouped by route (`webhook/<route>`),
+  linked to its chat.
+- **Scripts and other Hermes profiles:** `POST /api/notify` or the CLI:
+
+  ```sh
+  df -h /data | hermes-ui notify --title "Disk almost full" --group disk-alert --level warn
+  hermes-ui notify --title "Deploy done" --group deploy --text "**v1.4.2** is live" --url https://example.com/releases/1.4.2
+  curl -sS -X POST http://127.0.0.1:8787/api/notify -H "Authorization: Bearer $HERMES_UI_NOTIFY_TOKEN" \
+    -H 'Content-Type: application/json' -d '{"title":"Backup failed","group":"backup-check","level":"error","text":"exit 2"}'
+  ```
+
+  Fields: `title` (required, ≤ 200), `text` (Markdown, ≤ 8000), `group` (default `notify`), `level`
+  (`info` | `warn` | `error`; error counts as a failure), `sessionId` (a chat to open), `url` (http/https
+  link). Bodies over 64 KB are refused (413), no token 401. Auth: the board token or
+  `HERMES_UI_NOTIFY_TOKEN`, which may call nothing else.
+- **Chat jump:** cron and webhook sessions can be continued; Hermes' gateway reopens them with the first
+  new prompt. They still never appear as board cards.
+- **Start:** the first start begins at "now" (`HERMES_UI_AUTOMATIONS_BACKFILL_HOURS` reaches back);
+  restarts continue where the last scan stopped, without duplicates. Noisy jobs or routes:
+  `HERMES_UI_AUTOMATIONS_IGNORE`. All options: [configuration.md](configuration.md).
+- **Push:** *Automations: reports*, *Automations: errors* and *Script messages* per device (all on by
+  default). Title = job / route / group, text = the entry's one-line title; a tap opens the chat, or the
+  entry in the inbox.
 
 ## How it talks to Hermes
 
 - **Read:** `$HERMES_HOME/state.db`, opened read-only (`node:sqlite`) and polled every 1.5 s, plus the Hermes gateway's event stream.
+  Also read-only, every 15 s: `$HERMES_HOME/cron/output/` (run archives) and `cron/jobs.json` (job names) for [automations](#automations-in-the-inbox).
 - **Write:** like the Hermes desktop app does it. The backend gets a single-use ticket from `gateway.sock`, then uses the gateway WebSocket with JSON-RPC `session.create`, `prompt.submit`, `session.resume`, `session.interrupt`, `approval.respond` and `clarify.respond`. Images go through `/api/chat/image-upload`, voice through `/api/audio/transcribe`.
 - **Never:** it writes nothing under `$HERMES_HOME`, never restarts the Hermes gateway, and sends no commands to the Paseo daemon. The one write to Paseo is your own answer to a permission request from the inbox, through paseo-mcp.
 

@@ -8,7 +8,7 @@ import { badgeCount, useStore } from '@/lib/store'
 import { interceptExternalLinks, isDesktop, onShellEvent, setBadge } from '@/lib/desktop'
 import { setupNotifications } from '@/lib/notify'
 import { setTab } from '@/lib/store'
-import { showThread } from '@/lib/nav'
+import { openTarget } from '@/lib/nav'
 import { setupTooltips } from '@/lib/tooltip'
 
 // Geist, the web UI's typeface (files copied by scripts/web-vendor.mjs; `web:font-sans` in Text / Input).
@@ -72,8 +72,9 @@ export function PlatformShell({ children }: { children: ReactNode }) {
   // Desktop app: ask for notifications once there is something to notify about (first connection);
   // macOS shows its dialog only the first time, later calls just read the decision.
   useEffect(() => { if (isDesktop && auth === 'ok') setupNotifications(true).catch(() => {}) }, [auth === 'ok'])
-  // A click on a system notification: its chat, or the inbox.
-  useEffect(() => onShellEvent<string>('notification-click', (session) => { if (session) showThread(session); else setTab('inbox') }), [])
+  // A click on a system notification: its route (`#/inbox/item/<entry>` for an automation without a
+  // chat, lib/notify-target.ts) or, from older builds, the chat's id; nothing = the inbox.
+  useEffect(() => onShellEvent<string>('notification-click', (target) => { if (!openTarget(target)) setTab('inbox') }), [])
   useEffect(() => {
     const el = document.createElement('style')
     el.textContent = CSS

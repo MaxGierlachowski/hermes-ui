@@ -1,22 +1,27 @@
-import { useEffect, useMemo, useState } from 'react'
-import { BellRing, Bot, Check, CheckCheck, CheckCircle2, CircleHelp, ExternalLink, MessageSquareShare, ShieldAlert, TriangleAlert, X, XCircle } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { BellRing, Bot, Check, CheckCheck, CheckCircle2, ChevronRight, CircleHelp, Clock, ExternalLink, MessageSquareShare, ShieldAlert, SquareTerminal, TriangleAlert, Webhook, X, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Textarea } from '@/components/ui/textarea'
 import { OverlayScroll } from '@/components/common/OverlayScroll'
 import { PendingPrompt } from '@/components/thread/PendingPrompt'
+import { Markdown } from '@/components/ui/markdown'
 import { cn } from '@/lib/utils'
 import { relTime } from '@/lib/format'
-import { kindLabel, loadInbox, markRead, openThread, respondPaseo, useBoard } from '@/lib/store'
-import type { InboxItem, OpenItem } from '@/lib/types'
+import { clearInboxFocus, kindLabel, loadInbox, markRead, openThread, respondPaseo, sourceLabel, useBoard } from '@/lib/store'
+import type { InboxItem, InboxSource, OpenItem } from '@/lib/types'
+import { groupKey, historyEntries, isAutomation, isFailure, isRequest, matchesKind, matchesSource, sourceFilterFrom, type HistoryEntry, type InboxGroup, type InboxKindFilter, type InboxSourceFilter } from '@/lib/inbox-groups'
 import { t } from '@/lib/i18n'
 import { haptic } from '@/lib/haptics'
 
-type KindFilter = 'all' | 'requests' | 'done' | 'error'
-const REQUESTS = new Set(['approval', 'clarify', 'permission'])
-const matchesKind = (k: string, f: KindFilter) =>
-  f === 'all' || (f === 'requests' ? REQUESTS.has(k) : f === 'done' ? k === 'done' || k === 'paseo-done' : k === 'error' || k === 'paseo-error' || k === 'paseo-limit')
+const KIND_FILTERS: InboxKindFilter[] = ['all', 'requests', 'done', 'error']
+const kindFilterFrom = (v: string | null): InboxKindFilter => (KIND_FILTERS as string[]).includes(v || '') ? (v as InboxKindFilter) : 'all'
+const toggle = (set: Set<string>, key: string, on = !set.has(key)) => {
+  const next = new Set(set)
+  if (on) next.add(key); else next.delete(key)
+  return next
+}
 
 function dayLabel(ts: number) {
   const d = new Date(ts * 1000)
@@ -29,41 +34,77 @@ function dayLabel(ts: number) {
 
 export function Inbox({ onSettings }: { onSettings: () => void }) {
   const inbox = useBoard((s) => s.inbox)
-  const [kind, setKind] = useState<KindFilter>(() => (localStorage.getItem('hk_inbox_kind') as KindFilter) || 'all')
-  const [source, setSource] = useState<string>(() => localStorage.getItem('hk_inbox_source') || 'all')
+  const focus = useBoard((s) => s.inboxFocus)
+  const [kind, setKind] = useState<InboxKindFilter>(() => kindFilterFrom(localStorage.getItem('hk_inbox_kind')))
+  // Older builds stored hermes | paseo; sourceFilterFrom maps them to chats | agents.
+  const [source, setSource] = useState<InboxSourceFilter>(() => sourceFilterFrom(localStorage.getItem('hk_inbox_source')))
+  // Expanded automation groups (by group key) and entries (by id).
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set())
+  const [openEntries, setOpenEntries] = useState<Set<string>>(() => new Set())
+  const scrollTo = useRef<string | null>(null)
   useEffect(() => { if (!inbox.loaded) loadInbox() }, [inbox.loaded])
   useEffect(() => { localStorage.setItem('hk_inbox_kind', kind); localStorage.setItem('hk_inbox_source', source) }, [kind, source])
 
-  const open = inbox.open.filter((o) => (source === 'all' || o.source === source) && (kind === 'all' || kind === 'requests'))
-  const groups = useMemo(() => {
-    const out: { label: string; items: InboxItem[] }[] = []
-    for (const it of inbox.items) {
-      if (source !== 'all' && it.source !== source) continue
-      if (!matchesKind(it.kind, kind)) continue
+  // #/inbox/item/<id> (a push) or a toast: show that entry expanded, scroll to it, mark it read.
+  useEffect(() => {
+    if (!focus || !inbox.loaded) return
+    clearInboxFocus()
+    const it = inbox.items.find((x) => x.id === focus)
+    if (!it) return
+    if (!matchesSource(it.source, source)) setSource('all')
+    if (!matchesKind(it, kind)) setKind('all')
+    if (isAutomation(it)) {
+      setOpenGroups((g) => toggle(g, groupKey(it), true))
+      setOpenEntries((e) => toggle(e, it.id, true))
+    }
+    if (!it.read) markRead([it.id])
+    scrollTo.current = it.id
+  }, [focus, inbox.loaded, inbox.items, source, kind])
+
+  const open = inbox.open.filter((o) => matchesSource(o.source, source) && (kind === 'all' || kind === 'requests'))
+  const days = useMemo(() => {
+    const items = inbox.items.filter((it) => matchesSource(it.source, source) && matchesKind(it, kind)
       // Requests that are still open are shown above, not twice.
-      if (REQUESTS.has(it.kind) && !it.resolution && inbox.open.some((o) => o.key === it.id)) continue
-      const label = dayLabel(it.at)
-      if (out[out.length - 1]?.label !== label) out.push({ label, items: [] })
-      out[out.length - 1].items.push(it)
+      && !(isRequest(it) && !it.resolution && inbox.open.some((o) => o.key === it.id)))
+    const out: { label: string; entries: HistoryEntry[] }[] = []
+    for (const e of historyEntries(items)) {
+      const label = dayLabel(e.at)
+      if (out[out.length - 1]?.label !== label) out.push({ label, entries: [] })
+      out[out.length - 1].entries.push(e)
     }
     return out
   }, [inbox.items, inbox.open, kind, source])
 
+  // After the render that shows the focused entry expanded.
+  useEffect(() => {
+    const el = scrollTo.current && document.getElementById(`inbox-entry-${scrollTo.current}`)
+    if (!el) return
+    scrollTo.current = null
+    el.scrollIntoView({ block: 'center' })
+  }, [days, openEntries, focus])
+
+  const toggleEntry = (it: InboxItem) => {
+    const opening = !openEntries.has(it.id)
+    setOpenEntries((e) => toggle(e, it.id, opening))
+    if (opening && !it.read) markRead([it.id])
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
-        <ToggleGroup type="single" size="sm" variant="outline" value={kind} onValueChange={(v) => v && setKind(v as KindFilter)} className="text-xs max-md:w-full">
+        <ToggleGroup type="single" size="sm" variant="outline" value={kind} onValueChange={(v) => v && setKind(v as InboxKindFilter)} className="text-xs max-md:w-full">
           <ToggleGroupItem value="all" className="px-2.5 text-xs max-md:flex-1 touch:text-[13px]">{t('Alle')}</ToggleGroupItem>
           <ToggleGroupItem value="requests" className="px-2.5 text-xs max-md:flex-1 touch:text-[13px]">{t('Freigaben')}</ToggleGroupItem>
           <ToggleGroupItem value="done" className="px-2.5 text-xs max-md:flex-1 touch:text-[13px]">{t('Fertig')}</ToggleGroupItem>
           <ToggleGroupItem value="error" className="px-2.5 text-xs max-md:flex-1 touch:text-[13px]">{t('Fehler')}</ToggleGroupItem>
         </ToggleGroup>
-        <Select value={source} onValueChange={setSource}>
-          <SelectTrigger size="sm" className="h-8 w-[112px] text-xs touch:w-auto touch:text-[13px]" aria-label={t('Quelle')}><SelectValue /></SelectTrigger>
+        <Select value={source} onValueChange={(v) => setSource(v as InboxSourceFilter)}>
+          <SelectTrigger size="sm" className="h-8 w-[128px] text-xs touch:w-auto touch:text-[13px]" aria-label={t('Quelle')}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t('Alle Quellen')}</SelectItem>
-            <SelectItem value="hermes">Hermes</SelectItem>
-            <SelectItem value="paseo">Paseo</SelectItem>
+            <SelectItem value="chats">{t('Chats')}</SelectItem>
+            <SelectItem value="agents">{t('Agents')}</SelectItem>
+            <SelectItem value="automations">{t('Automationen')}</SelectItem>
           </SelectContent>
         </Select>
         <div className="ml-auto flex items-center gap-1">
@@ -94,12 +135,24 @@ export function Inbox({ onSettings }: { onSettings: () => void }) {
               <span className="text-foreground/90">{t('Verlauf')}</span>
               {inbox.unread > 0 && <span className="tabular-nums">{t('{n} ungelesen', { n: inbox.unread })}</span>}
             </h2>
-            {!groups.length && <div className="py-6 text-center text-xs text-muted-foreground">{inbox.loaded ? t('Noch keine Benachrichtigungen.') : '…'}</div>}
-            {groups.map((g) => (
-              <div key={g.label}>
-                <div className="mb-1.5 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/80">{g.label}</div>
+            {!days.length && <div className="py-6 text-center text-xs text-muted-foreground">{inbox.loaded ? t('Noch keine Benachrichtigungen.') : '…'}</div>}
+            {days.map((d) => (
+              <div key={d.label}>
+                <div className="mb-1.5 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/80">{d.label}</div>
                 <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border/70">
-                  {g.items.map((it, i) => <HistoryRow key={it.id} it={it} first={i === 0} />)}
+                  {d.entries.map((e, i) => e.type === 'item'
+                    ? <HistoryRow key={e.item.id} it={e.item} first={i === 0} />
+                    : (
+                      <AutomationGroup
+                        key={e.group.key}
+                        group={e.group}
+                        first={i === 0}
+                        open={openGroups.has(e.group.key)}
+                        onToggle={() => setOpenGroups((g) => toggle(g, e.group.key))}
+                        openEntries={openEntries}
+                        onToggleEntry={toggleEntry}
+                      />
+                    ))}
                 </div>
               </div>
             ))}
@@ -214,7 +267,7 @@ const CHOICE: Record<string, string> = { once: 'einmal', session: 'für die Sess
 
 function resolutionText(it: InboxItem) {
   const r = it.resolution
-  if (!r) return REQUESTS.has(it.kind) ? t('offen') : null
+  if (!r) return isRequest(it) ? t('offen') : null
   if (r.by === 'elsewhere') return t('anderswo beantwortet')
   if (r.by === 'expired') return t('abgelaufen')
   if (r.by === 'cancelled') return t('abgebrochen')
@@ -233,7 +286,7 @@ function HistoryRow({ it, first }: { it: InboxItem; first: boolean }) {
     if (it.sessionId) openThread(it.sessionId)
   }
   return (
-    <button onClick={click} className={cn('flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50', !first && 'border-t border-border/60')}>
+    <button id={`inbox-entry-${it.id}`} onClick={click} className={cn('flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50', !first && 'border-t border-border/60')}>
       <Icon className={cn('mt-0.5 size-4 shrink-0', cls)} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -251,4 +304,108 @@ function HistoryRow({ it, first }: { it: InboxItem; first: boolean }) {
       </div>
     </button>
   )
+}
+
+// ---------- automations (cron runs, webhook runs, POST /api/notify) ----------
+const SOURCE_ICON: Partial<Record<InboxSource, typeof Check>> = { cron: Clock, webhook: Webhook, notify: SquareTerminal }
+const clockTime = (ts: number) => new Date(ts * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+/** Time of day, with the date for entries of an earlier day (a group's entries can span days). */
+function stamp(ts: number) {
+  const d = new Date(ts * 1000)
+  if (d.toDateString() === new Date().toDateString()) return clockTime(ts)
+  return d.toLocaleString(undefined, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+const statusOf = (it: InboxItem) => (isFailure(it) ? 'error' : it.level === 'warn' ? 'warn' : 'ok')
+const STATUS: Record<'ok' | 'warn' | 'error', { Icon: typeof Check; cls: string; label: string }> = {
+  ok: { Icon: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400', label: 'OK' },
+  warn: { Icon: TriangleAlert, cls: 'text-amber-600 dark:text-amber-400', label: 'Warnung' },
+  error: { Icon: XCircle, cls: 'text-red-600 dark:text-red-400', label: 'Fehler' },
+}
+
+/** One job, route or notify group: a row that expands into its entries (newest first). */
+function AutomationGroup({ group, first, open, onToggle, openEntries, onToggleEntry }: {
+  group: InboxGroup; first: boolean; open: boolean; onToggle: () => void; openEntries: Set<string>; onToggleEntry: (it: InboxItem) => void
+}) {
+  const Icon = SOURCE_ICON[group.source] || SquareTerminal
+  const newest = group.items[0]
+  const st = STATUS[group.status === 'error' ? 'error' : statusOf(newest)]
+  return (
+    <div className={cn(!first && 'border-t border-border/60')} data-testid="automation-group">
+      <button onClick={onToggle} aria-expanded={open} className="flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50">
+        <Icon className={cn('mt-0.5 size-4 shrink-0', group.status === 'error' ? st.cls : 'text-muted-foreground')} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={cn('truncate text-sm', group.unread ? 'font-medium text-foreground' : 'text-foreground/80')}>{group.name}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground">{sourceLabel(group.source)}</span>
+            <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">{clockTime(group.at)}</span>
+            {group.unread > 0
+              ? <span className="min-w-4 shrink-0 rounded-full bg-primary px-1 text-center text-[10.5px] font-medium leading-4 tabular-nums text-primary-foreground" aria-label={t('{n} ungelesen', { n: group.unread })}>{group.unread}</span>
+              : <span className="size-1.5 shrink-0" />}
+          </div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+            <st.Icon className={cn('size-3 shrink-0', st.cls)} />
+            <span className={cn('shrink-0', group.status === 'error' ? st.cls : 'text-foreground/70')}>{t(st.label)}</span>
+            {newest.title && <span className="truncate">· {newest.title}</span>}
+            {group.items.length > 1 && <span className="ml-auto shrink-0 pl-2 tabular-nums">{t('{n} Einträge', { n: group.items.length })}</span>}
+          </div>
+        </div>
+        <ChevronRight className={cn('mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <div className="border-t border-border/60 bg-muted/20">
+          {group.items.map((it, i) => <AutomationEntry key={it.id} it={it} first={i === 0} open={openEntries.has(it.id)} onToggle={() => onToggleEntry(it)} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** One run or message: title, one-line preview; expanded the full report (Markdown), link and chat. */
+function AutomationEntry({ it, first, open, onToggle }: { it: InboxItem; first: boolean; open: boolean; onToggle: () => void }) {
+  const st = STATUS[statusOf(it)]
+  return (
+    <div id={`inbox-entry-${it.id}`} className={cn(!first && 'border-t border-border/40')} data-testid="automation-entry">
+      <button onClick={onToggle} aria-expanded={open} className="flex w-full items-start gap-2.5 py-2 pl-6 pr-3 text-left touch:min-h-11 transition-colors hover:bg-muted/50 sm:pl-10">
+        <st.Icon className={cn('mt-0.5 size-3.5 shrink-0', st.cls)} aria-label={t(st.label)} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={cn('truncate text-[13px]', it.read ? 'text-foreground/80' : 'font-medium text-foreground')}>{it.title || '—'}</span>
+            {(it.repeat ?? 0) > 1 && <span className="shrink-0 rounded bg-muted px-1 text-[11px] tabular-nums text-muted-foreground ring-1 ring-border/60" title={t('{n}× derselbe Fehler', { n: it.repeat! })}>×{it.repeat}</span>}
+            <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">{stamp(it.at)}</span>
+            <span className={cn('size-1.5 shrink-0 rounded-full', it.read ? 'bg-transparent' : 'bg-primary')} aria-label={it.read ? undefined : t('ungelesen')} />
+          </div>
+          {it.text && !open && <p className="mt-0.5 truncate text-xs text-muted-foreground/90">{it.text}</p>}
+        </div>
+        <ChevronRight className={cn('mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <div className="pb-3 pl-6 pr-3 sm:pl-10" data-testid="automation-body">
+          <div className="pl-6">
+            {it.body || it.text
+              ? <Markdown className="prose prose-sm prose-zinc max-w-none break-words text-foreground dark:prose-invert prose-pre:bg-muted prose-pre:text-foreground prose-code:before:content-none prose-code:after:content-none">{it.body || it.text}</Markdown>
+              : <p className="text-xs text-muted-foreground">{t('Kein Bericht.')}</p>}
+            {(it.link || it.sessionId) && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {it.sessionId && (
+                  <Button size="sm" variant="outline" className="text-xs" onClick={() => openThread(it.sessionId)}>
+                    <MessageSquareShare className="size-3.5" />{t('Zum Chat')}
+                  </Button>
+                )}
+                {it.link && (
+                  <Button size="sm" variant="ghost" asChild className="min-w-0 max-w-full text-xs">
+                    <a href={it.link} target="_blank" rel="noreferrer noopener"><ExternalLink className="size-3.5" /><span className="truncate">{linkLabel(it.link)}</span></a>
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** host/path of a link, without the scheme. */
+function linkLabel(url: string) {
+  try { const u = new URL(url); return `${u.host}${u.pathname === '/' ? '' : u.pathname}` } catch { return url }
 }

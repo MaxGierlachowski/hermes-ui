@@ -5,6 +5,21 @@ All notable changes. The backend + web UI and the app share one repository; app 
 
 ## Unreleased – universal spike
 
+### Inbox: cron runs, webhook runs and script messages
+- Cron and webhook runs that reported something arrive in the inbox, grouped per job / route, with
+  status ok / error, the full report as Markdown and a jump into the run's chat (you can write on
+  there). Silent and suppressed runs stay out; decided from Hermes' own run archives and markers, read-only
+  ([ADR 0014](docs/decisions/0014-automations-in-the-inbox.md)). Works for every `deliver` target.
+- `POST /api/notify` and `hermes-ui notify --title … [--group …] [--level info|warn|error] [--session …]
+  [--url …] < text.md` for scripts and other Hermes profiles; optional notify-only token
+  `HERMES_UI_NOTIFY_TOKEN`; 64 KB limit.
+- Inbox filter by source: Chats / Agents / Automations (app and web). Same error again → one entry ×N.
+- Push switches per device: automation reports, automation errors, script messages (all on). A tap opens
+  the chat or the entry (`#/inbox/item/<id>`).
+- New options: `HERMES_UI_AUTOMATIONS`, `HERMES_UI_AUTOMATIONS_BACKFILL_HOURS`,
+  `HERMES_UI_AUTOMATIONS_IGNORE`, `HERMES_UI_AUTOMATIONS_INTERVAL`, `HERMES_UI_NOTIFY_TOKEN`
+  ([configuration.md](docs/configuration.md)). Cron / webhook sessions still never become board cards.
+
 ### Agent cards stay attached to the right chat
 - Paseo agents link to a chat by label too: `hermes_session_id`, `hermes_chat_id` or `origin_ref`
   with a Hermes session id (contract in docs/features.md, "Linking agents to chats").

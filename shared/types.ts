@@ -153,13 +153,17 @@ export type OpenItem =
       canRespond: boolean
     }
 
-export type InboxKind = 'approval' | 'clarify' | 'permission' | 'done' | 'error' | 'paseo-done' | 'paseo-error' | 'paseo-limit'
+export type InboxKind = 'approval' | 'clarify' | 'permission' | 'done' | 'error' | 'paseo-done' | 'paseo-error' | 'paseo-limit' | 'automation'
+
+/** Where an inbox entry comes from: chats, agents, or automations (cron runs, webhook runs, `POST /api/notify`). */
+export type InboxSource = 'hermes' | 'paseo' | 'cron' | 'webhook' | 'notify'
+export const AUTOMATION_SOURCES: readonly InboxSource[] = ['cron', 'webhook', 'notify']
 
 /** One entry of the inbox history (backend data/inbox.json). */
 export type InboxItem = {
   id: string
   kind: InboxKind
-  source: 'hermes' | 'paseo'
+  source: InboxSource
   sessionId: string | null
   title: string | null
   text: string
@@ -168,6 +172,21 @@ export type InboxItem = {
   agentId?: string
   agentTitle?: string
   resolution?: { at: number; by: 'ui' | 'elsewhere' | 'cancelled' | 'expired'; choice?: string; answer?: string; decision?: string; device?: string }
+  // Automations (kind 'automation', source cron | webhook | notify):
+  /** Job name (cron), route name (webhook) or the caller's group (notify); the inbox groups by it. */
+  group?: string
+  /** ok = a run that reported something (or notify info/warn); error = a failed or blocked run, notify level error. */
+  status?: 'ok' | 'error'
+  /** notify only: the level the caller sent. */
+  level?: 'info' | 'warn' | 'error'
+  /** The full report as Markdown (bounded), shown when the entry is expanded. `text` is the one-line preview. */
+  body?: string
+  /** notify only: a link the caller attached (http/https). */
+  link?: string
+  /** cron only: the Hermes job id. */
+  jobId?: string
+  /** The same error again (same group, same text): folded into this entry instead of a new one. */
+  repeat?: number
 }
 
 export type PushSettings = {
@@ -175,6 +194,12 @@ export type PushSettings = {
   done: boolean
   error: boolean
   paseo: boolean
+  /** Automations that reported something (cron, webhook). */
+  automations: boolean
+  /** Automations that failed or were blocked. */
+  automationErrors: boolean
+  /** Messages sent with `POST /api/notify` / `hermes-ui notify` (level error counts as automationErrors). */
+  notify: boolean
   skipWhenVisible: boolean
   quiet: { enabled: boolean; from: string; to: string }
   tz: string | null

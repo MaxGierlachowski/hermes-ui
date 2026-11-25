@@ -25,6 +25,8 @@ import { attachmentHeader, createFileAccess, inlineType } from './src/file-acces
 import { fileRefKeys } from '../shared/file-refs.ts';
 import { Inbox } from './src/inbox.mjs';
 import { Push } from './src/push.mjs';
+import { parseNotify, readNotifyBody } from './src/notify.mjs';
+import { Automations } from './src/automations.mjs';
 import { parseUserMessage, previewOf } from './src/user-markers.mjs';
 import { Outbox, queuedRow } from './src/outbox.mjs';
 import { callsOf, paseoItem, paseoTool } from './src/paseo-calls.mjs';
@@ -884,6 +886,34 @@ function notify(ev) {
   push.notify({ ...ev, badge: badgeCount() }).catch((err) => console.warn('push', err.message));
 }
 
+// Automations (cron runs, webhook runs, POST /api/notify): one push per entry, under the switch of its
+// kind (failures: automationErrors; notify: notify; reports: automations). Title = group, body = the
+// entry's one-line title. A tap opens the run's chat when there is one, else the entry in the inbox.
+function notifyAutomation(item, { repeat = false } = {}) {
+  if (!item) return;
+  const failed = item.status === 'error';
+  const title = truncate(item.title || item.text || '', 120);
+  const body = failed ? t('nAutomationFailed', { title }) : title;
+  notify({
+    category: failed ? 'automationErrors' : item.source === 'notify' ? 'notify' : 'automations',
+    source: item.source, title: item.group || item.source,
+    body: repeat && item.repeat > 1 ? t('nAutomationRepeat', { title: body, n: item.repeat }) : body,
+    tag: `auto:${item.source}:${item.group || ''}`,
+    url: item.sessionId ? `#/board/${encodeURIComponent(item.sessionId)}` : `#/inbox/item/${encodeURIComponent(item.id)}`,
+    ttl: 86400,
+  });
+}
+
+// Cron and webhook runs that reported something (read-only on Hermes' files, src/automations.mjs).
+const automations = cfg.automations.enabled
+  ? new Automations({ hermesHome: HERMES_HOME, dataDir: cfg.dataDir, store, inbox, backfillHours: cfg.automations.backfillHours, ignore: cfg.automations.ignore, onItem: notifyAutomation, log: (s) => console.warn(s) })
+  : null;
+if (automations) {
+  const scan = () => { const n = automations.scan(); if (n) pushInbox(); };
+  setTimeout(scan, 2000);
+  setInterval(scan, cfg.automations.intervalS * 1000);
+}
+
 function recordRequest(sid, pr) {
   if (!pr?.prompt_id || inbox.has(`req:${pr.prompt_id}`)) return;
   const title = sessionTitle(sid) || t('newSession');
@@ -995,11 +1025,13 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
 }
-const tokenOk = (given) => {
+const sameSecret = (given, secret) => {
   const a = Buffer.from(String(given || ''));
-  const b = Buffer.from(TOKEN);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const b = Buffer.from(secret);
+  return !!secret && a.length === b.length && crypto.timingSafeEqual(a, b);
 };
+const tokenOk = (given) => sameSecret(given, TOKEN);
+const bearer = (req) => { const h = req.headers.authorization || ''; return h.startsWith('Bearer ') ? h.slice(7) : ''; };
 // A request is local only when it reached us directly on loopback with a loopback Host header.
 // Tunnels (cloudflared, tailscaled) also connect from loopback, but carry their public Host / forwarding headers.
 function isLocal(req) {
@@ -1094,6 +1126,17 @@ const server = http.createServer(async (req, res) => {
       syncIrohAccess();
       broadcast('devices', devices.list());
       return send(res, 200, { ok: true }, { 'Set-Cookie': deviceCookie(req, dev.cookie, dev.maxAgeS) });
+    }
+
+    // ---- notify: a message from a script or another Hermes profile, into the inbox ----
+    // The board token works, and so does HERMES_UI_NOTIFY_TOKEN, which may call nothing else.
+    if (p === '/api/notify' && req.method === 'POST') {
+      const by = sameSecret(bearer(req), cfg.notifyToken) ? 'notify-token' : authorized(req, url) ? 'token' : null;
+      if (!by) return send(res, 401, { error: 'unauthorized' });
+      const item = inbox.add(parseNotify(await readNotifyBody(req)));
+      notifyAutomation(item);
+      console.log(`notify: "${item.group}" (${item.level}) via ${by}`);
+      return send(res, 201, { ok: true, id: item.id });
     }
 
     const auth = authorized(req, url);

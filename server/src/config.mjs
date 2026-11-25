@@ -74,6 +74,8 @@ export function loadConfig(argv = []) {
   return {
     envFile,
     token,
+    // Optional second token that may only call POST /api/notify (scripts, other Hermes profiles). Empty = off.
+    notifyToken: get('HERMES_UI_NOTIFY_TOKEN', 'notify-token', ''),
     host: '127.0.0.1', // never configurable: remote access goes through a tunnel, not an open port
     port: Number(get('HERMES_UI_PORT', 'port', 8787)),
     dataDir,
@@ -117,6 +119,15 @@ export function loadConfig(argv = []) {
     inbox: {
       maxDays: Number(get('HERMES_UI_INBOX_DAYS', 'inbox-days', 30)),
       maxItems: Number(get('HERMES_UI_INBOX_MAX', 'inbox-max', 1000)),
+    },
+    // Cron and webhook runs that reported something, into the inbox (src/automations.mjs, ADR 0014).
+    automations: {
+      enabled: get('HERMES_UI_AUTOMATIONS', 'automations', 'on') !== 'off',
+      // First start only: also pick up the runs of the last N hours (default 0 = from now on).
+      backfillHours: Math.max(0, Number(get('HERMES_UI_AUTOMATIONS_BACKFILL_HOURS', 'automations-backfill-hours', 0)) || 0),
+      // Job names, job ids or webhook routes to leave out (comma separated, case-insensitive).
+      ignore: (get('HERMES_UI_AUTOMATIONS_IGNORE', 'automations-ignore', '') || '').split(',').map((x) => x.trim()).filter(Boolean),
+      intervalS: Math.max(5, Number(get('HERMES_UI_AUTOMATIONS_INTERVAL', 'automations-interval', 15)) || 15),
     },
     tailscale: { authKey: get('TS_AUTHKEY', 'ts-authkey', ''), hostname: get('TS_HOSTNAME', 'ts-hostname', 'hermes-ui') },
     paseo: {

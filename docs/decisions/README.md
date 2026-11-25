@@ -19,6 +19,7 @@ supersedes it and says so.
 | [0011](0011-touch-sizing-desktop-unchanged.md) | Touch sizing inside the base components, desktop pixel-identical | Accepted |
 | [0012](0012-universal-app.md) | One codebase for phone, web and desktop (spike result, measurements, parity) | Proposed |
 | [0013](0013-hermes-child-agents.md) | Hermes' own subagents and terminal `hermes chat` runs shown like Paseo agents | Proposed |
+| [0014](0014-automations-in-the-inbox.md) | Cron runs, webhook runs and script messages in the inbox | Accepted |
 
 ## Adding a record
 

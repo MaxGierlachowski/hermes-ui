@@ -3,11 +3,11 @@ import { View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { requestRecordingPermissionsAsync } from 'expo-audio'
 import { setTab, startDemo, toast, useStore } from '@/lib/store'
-import { showThread } from '@/lib/nav'
+import { showInboxItem, showThread } from '@/lib/nav'
 
 /**
  * <scheme>://demo starts the demo mode without the pairing screen (for reviewers and screenshots).
- * Optional: ?tab=inbox, ?thread=<demo chat id>, ?long=<n> (adds a chat with n messages, id demo-long), ?board=<n> (n chats in Done),
+ * Optional: ?tab=inbox, ?thread=<demo chat id>, ?item=<inbox entry id> (the inbox at that entry, like a notification's tap), ?long=<n> (adds a chat with n messages, id demo-long), ?board=<n> (n chats in Done),
  * ?selftest=microphone|camera (asks for the device at once; checks a build's permission setup). Ignored while the app is paired with a backend.
  */
 async function selfTest(kind: 'microphone' | 'camera') {
@@ -18,7 +18,7 @@ async function selfTest(kind: 'microphone' | 'camera') {
 }
 
 export default function DemoRoute() {
-  const { tab, thread, long, board, selftest } = useLocalSearchParams<{ tab?: string; thread?: string; long?: string; board?: string; selftest?: string }>()
+  const { tab, thread, item, long, board, selftest } = useLocalSearchParams<{ tab?: string; thread?: string; item?: string; long?: string; board?: string; selftest?: string }>()
   const auth = useStore((s) => s.auth)
   const demo = useStore((s) => s.demo)
   useEffect(() => {
@@ -28,6 +28,7 @@ export default function DemoRoute() {
       setTab(tab === 'inbox' ? 'inbox' : 'board')
       router.replace('/')
       if (thread) showThread(thread)
+      if (item) showInboxItem(item)
       // Permission check of a build: ask for the device at once, so the system dialog shows without
       // clicking (desktop-app: HERMES_UI_DESKTOP_ROUTE='/demo?selftest=microphone').
       if (selftest === 'microphone' || selftest === 'camera') selfTest(selftest)
