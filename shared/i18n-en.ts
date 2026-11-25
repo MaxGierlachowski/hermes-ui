@@ -404,4 +404,21 @@ export const EN: Record<string, string> = {
   'geändert {when}': 'modified {when}',
   'In Downloads gespeichert': 'Saved to Downloads',
   'Gespeichert': 'Saved',
+  // --- inbox automations (web) ---
+  'Automationen': 'Automations',
+  'Warnung': 'Warning',
+  '{n} Einträge': '{n} entries',
+  '{n}× derselbe Fehler': 'the same error {n}×',
+  'Kein Bericht.': 'No report.',
+  'Zum Chat': 'Open chat',
+  'Automationen: Meldungen': 'Automations: reports',
+  'Automationen: Fehler': 'Automations: failures',
+  'Nachrichten von Skripten (notify)': 'Messages from scripts (notify)',
+  'Cron- und Webhook-Läufe, die etwas melden': 'Cron and webhook runs that report something',
+  'Fehlgeschlagene oder blockierte Läufe, notify mit Level error': 'Failed or blocked runs, notify with level error',
+  'POST /api/notify und hermes-ui notify': 'POST /api/notify and hermes-ui notify',
+  // --- end inbox automations (web) ---
+  // --- inbox automations (app) ---
+  '{n} ältere anzeigen': 'Show {n} older',
+  // --- end inbox automations (app) ---
 }

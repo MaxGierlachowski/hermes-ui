@@ -18,6 +18,8 @@ import { t } from '@/lib/i18n'
 import { applyTheme } from '@/lib/theme-mode'
 import { confirm } from '@/lib/confirm'
 import { PermissionNotice } from '@/components/PermissionNotice'
+import { Switch } from '@/components/ui/switch'
+import { automationPush, loadAutomationPush, saveAutomationPush, type AutomationPush } from '@/lib/push-settings'
 import { haptic } from '@/lib/haptics'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -48,6 +50,13 @@ function Choice<T extends string>({ options, value, onChange }: { options: { id:
   )
 }
 
+// Which automation entries become a notification on this device (and, with FCM, a push of the backend).
+const AUTOMATION_SWITCHES: { key: keyof AutomationPush; label: string; hint: string }[] = [
+  { key: 'automations', label: 'Automationen: Meldungen', hint: 'Cron- und Webhook-Läufe, die etwas melden' },
+  { key: 'automationErrors', label: 'Automationen: Fehler', hint: 'Fehlgeschlagene oder blockierte Läufe, notify mit Level error' },
+  { key: 'notify', label: 'Nachrichten von Skripten (notify)', hint: 'POST /api/notify und hermes-ui notify' },
+]
+
 export default function Settings() {
   const insets = useSafeAreaInsets()
   const { colorScheme } = useColorScheme()
@@ -59,9 +68,11 @@ export default function Settings() {
   const [push, setPush] = useState('')
   const [keep, setKeep] = useState<KeepAliveMode>(keepAliveMode())
   const [notifBlocked, setNotifBlocked] = useState(false)
+  const [auto, setAuto] = useState<AutomationPush>(automationPush())
   const b = getBackend()
 
   useEffect(() => { AsyncStorage.getItem('hk_theme').then((v) => v && setTheme(v as typeof theme)) }, [])
+  useEffect(() => { loadAutomationPush().then(setAuto) }, [])
   useEffect(() => {
     const read = () => setPath(getBackend()?.connectionInfo() ?? null)
     read()
@@ -117,6 +128,17 @@ export default function Settings() {
               <Text className="text-xs text-muted-foreground">{t('Android friert Apps im Hintergrund nach Sekunden ein. Eine dezente Daueranzeige hält die Verbindung offen, damit Antworten ankommen. „Immer“ kostet mehr Akku.')}</Text>
             </>
           )}
+          <View className="gap-3 border-t border-border pt-3">
+            {AUTOMATION_SWITCHES.map((sw) => (
+              <View key={sw.key} className="flex-row items-center gap-3">
+                <View className="min-w-0 flex-1">
+                  <Text className="text-sm">{t(sw.label)}</Text>
+                  <Text className="text-xs text-muted-foreground">{t(sw.hint)}</Text>
+                </View>
+                <Switch value={auto[sw.key]} onValueChange={(v) => { setAuto((a) => ({ ...a, [sw.key]: v })); saveAutomationPush({ [sw.key]: v }) }} accessibilityLabel={t(sw.label)} />
+              </View>
+            ))}
+          </View>
           {notifBlocked && <PermissionNotice kind="notifications" />}
           <Button variant="outline" onPress={async () => { const ok = await setupNotifications(true); setNotifBlocked(!ok); if (ok) await testNotification() }}>
             <Text>{t('Test-Benachrichtigung')}</Text>

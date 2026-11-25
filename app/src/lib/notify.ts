@@ -8,6 +8,8 @@ import * as Notifications from 'expo-notifications'
 import { AppState, Platform } from 'react-native'
 import type { InboxItem } from '@shared/types'
 import { api } from './connection'
+import { targetUrl } from './notify-target'
+import { loadAutomationPush, rememberPushEndpoint } from './push-settings'
 
 export const CHANNEL = 'hermes'
 
@@ -46,7 +48,8 @@ export async function notifyInboxItem(item: InboxItem, label: string, title: str
       content: {
         title: `${label} · ${title}`,
         body: item.text ? (item.text.length > 140 ? `${item.text.slice(0, 139)}…` : item.text) : '',
-        data: { sessionId: item.sessionId, inbox: item.kind === 'approval' || item.kind === 'clarify' || item.kind === 'permission' },
+        // url: the route a tap opens (components/PlatformShell.tsx), the same the backend's pushes carry.
+        data: { url: targetUrl(item), sessionId: item.sessionId },
         ...(Platform.OS === 'android' ? { channelId: CHANNEL } : {}),
       },
       trigger: null,
@@ -66,7 +69,8 @@ export async function registerRemotePush(): Promise<'on' | 'unavailable' | 'deni
   let token: Notifications.DevicePushToken
   try { token = await Notifications.getDevicePushTokenAsync() } catch { return 'unavailable' }
   try {
-    await api('/api/push/native', { method: 'POST', json: { token: token.data, kind: token.type === 'ios' ? 'apns' : 'fcm', platform: Platform.OS } })
+    const r = await api<{ endpoint?: string }>('/api/push/native', { method: 'POST', json: { token: token.data, kind: token.type === 'ios' ? 'apns' : 'fcm', platform: Platform.OS, settings: await loadAutomationPush() } })
+    rememberPushEndpoint(r?.endpoint)
     return 'on'
   } catch { return 'backend-missing' }
 }

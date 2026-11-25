@@ -5,7 +5,8 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { Dimensions } from 'react-native'
 import { router } from 'expo-router'
-import { openThread } from './store'
+import { focusInboxItem, openThread, setTab } from './store'
+import { parseTarget, type NotifyTarget } from './notify-target'
 
 export type Layout = 'phone' | 'tablet' | 'desktop'
 /** Breakpoints (window width in dp/px): tablet = two columns side by side, desktop = four + split. */
@@ -74,4 +75,26 @@ export function closeThread() {
   if (isWide()) { openThread(null); set({ pane: { kind: 'thread' } }); return }
   if (router.canGoBack()) router.back()
   else router.replace('/')
+}
+
+/** The inbox at one entry (expanded, scrolled to, marked read); on a phone the screens above the home screen close. */
+export function showInboxItem(id: string) {
+  focusInboxItem(id)
+  if (!isWide() && router.canGoBack()) router.dismissTo('/')
+}
+
+/**
+ * A tap on a notification: a hash route (lib/notify-target.ts) or, from older notifications and the
+ * desktop shell, a bare session id. Returns false when there was nothing to open.
+ */
+export function openTarget(target: NotifyTarget | string | null | undefined) {
+  const to = typeof target !== 'string' ? target
+    : target.includes('#') ? parseTarget(target)
+      : target ? { tab: 'board' as const, sessionId: target, itemId: null } : null
+  if (!to) return false
+  if (to.itemId) { showInboxItem(to.itemId); return true }
+  if (to.tab === 'inbox') setTab('inbox')
+  if (to.sessionId) showThread(to.sessionId)
+  else if (to.tab === 'board') setTab('board')
+  return true
 }

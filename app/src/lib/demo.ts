@@ -120,7 +120,81 @@ function build(): Data {
     { id: 'demo-i2', kind: 'paseo-done', source: 'paseo', sessionId: 'demo-site', title: sessions[0].title, agentTitle: 'Lighthouse check', agentId: 'demo-agent-lh', text: L('Performance 98, accessibility 100.', 'Performance 98, Barrierefreiheit 100.'), at: T - 2400, read: false },
     { id: 'demo-i3', kind: 'error', source: 'hermes', sessionId: 'demo-invoices', title: sessions[6].title, text: L('Mail API: quota exceeded', 'Mail-API: Kontingent erschöpft'), at: T - 5000, read: true },
   ]
+  items.push(...automationItems(T))
+  items.sort((a, b) => b.at - a.at)
   return { sessions: new Map(sessions.map((x) => [x.id, x])), messages, open, items, agents, timelines }
+}
+
+/** Automation entries (backend: server/src/automations.mjs, server/src/notify.mjs), folded into groups by the inbox. */
+function automationItems(T: number): InboxItem[] {
+  const DAY = 86400
+  const auto = (id: string, source: InboxItem['source'], group: string, at: number, p: Partial<InboxItem>): InboxItem =>
+    ({ id, kind: 'automation', source, group, status: 'ok', sessionId: null, title: null, text: '', at, read: true, ...p })
+  const report = (day: string, issues: number, build: string) => L(
+    `## Daily report, ${day}\n\n- **${issues} new issues**, 2 closed\n- Build on \`main\`: ${build}\n- Nightly backup: ok (4.2 GB)\n\n| Service | Uptime | p95 |\n|---|---|---|\n| api | 100 % | 180 ms |\n| web | 99.9 % | 240 ms |\n\nNothing needs you today.`,
+    `## Tagesbericht, ${day}\n\n- **${issues} neue Issues**, 2 geschlossen\n- Build auf \`main\`: ${build}\n- Nächtliches Backup: ok (4,2 GB)\n\n| Dienst | Verfügbarkeit | p95 |\n|---|---|---|\n| api | 100 % | 180 ms |\n| web | 99,9 % | 240 ms |\n\nHeute braucht nichts dich.`)
+  const green = L('green', 'grün')
+  return [
+    // cron "daily-report": an agent job, its newest run has a chat (demo-daily).
+    auto('cron:job-daily:run-3', 'cron', 'daily-report', T - 1500, {
+      sessionId: 'demo-daily', read: false, jobId: 'job-daily',
+      title: L('Daily report: 3 new issues, build green', 'Tagesbericht: 3 neue Issues, Build grün'),
+      text: L('Daily report – 3 new issues, 2 closed, build on main green, nightly backup ok', 'Tagesbericht – 3 neue Issues, 2 geschlossen, Build auf main grün, Backup ok'),
+      body: report(L('today', 'heute'), 3, green),
+    }),
+    auto('cron:job-daily:run-2', 'cron', 'daily-report', T - 1500 - DAY, {
+      jobId: 'job-daily', title: L('Daily report: 1 new issue, build green', 'Tagesbericht: 1 neues Issue, Build grün'),
+      text: L('Daily report – 1 new issue, 2 closed, build on main green', 'Tagesbericht – 1 neues Issue, 2 geschlossen, Build auf main grün'),
+      body: report(L('yesterday', 'gestern'), 1, green),
+    }),
+    auto('cron:job-daily:run-1', 'cron', 'daily-report', T - 1500 - 2 * DAY, {
+      jobId: 'job-daily', title: L('Daily report: 5 new issues, build red', 'Tagesbericht: 5 neue Issues, Build rot'),
+      text: L('Daily report – 5 new issues, build on main red (flaky test)', 'Tagesbericht – 5 neue Issues, Build auf main rot (wackliger Test)'),
+      body: report(L('two days ago', 'vorgestern'), 5, L('red, a flaky test', 'rot, ein wackliger Test')),
+    }),
+    // cron "disk-alert": a script without an agent (no chat); the same failure three times, folded.
+    auto('cron:job-disk:run-7', 'cron', 'disk-alert', T - 420, {
+      status: 'error', repeat: 3, read: false, jobId: 'job-disk',
+      title: L('Run failed: /var is 93 % full', 'Lauf fehlgeschlagen: /var zu 93 % voll'),
+      text: L('check-disk.sh exited with code 1: /var is 93 % full (limit 90 %)', 'check-disk.sh endete mit Code 1: /var zu 93 % voll (Grenze 90 %)'),
+      body: L(
+        '## Error\n\n`check-disk.sh` exited with code 1.\n\n```\nFilesystem  Size  Used  Avail  Use%  Mounted on\n/dev/sda1    40G   37G   2.8G   93%  /var\n```\n\nLargest folders: `/var/log/journal` (11 GB), `/var/lib/docker` (9 GB).',
+        '## Fehler\n\n`check-disk.sh` endete mit Code 1.\n\n```\nFilesystem  Size  Used  Avail  Use%  Mounted on\n/dev/sda1    40G   37G   2.8G   93%  /var\n```\n\nGrößte Ordner: `/var/log/journal` (11 GB), `/var/lib/docker` (9 GB).'),
+    }),
+    // cron "backup-check": Hermes blocked the run before it started.
+    auto('cron:job-backup:run-4', 'cron', 'backup-check', T - 3 * 3600, {
+      status: 'error', jobId: 'job-backup',
+      title: L('BLOCKED (configuration): BACKUP_TARGET is not set', 'BLOCKED (configuration): BACKUP_TARGET ist nicht gesetzt'),
+      text: L('The job needs BACKUP_TARGET in its environment; the run was not started.', 'Der Job braucht BACKUP_TARGET in seiner Umgebung; der Lauf wurde nicht gestartet.'),
+      body: L(
+        'The run was **not started**: the job needs `BACKUP_TARGET` in its environment.\n\nSet it in the job\'s configuration, then run it again:\n\n```bash\nhermes cron run backup-check\n```',
+        'Der Lauf wurde **nicht gestartet**: Der Job braucht `BACKUP_TARGET` in seiner Umgebung.\n\nIn der Konfiguration des Jobs setzen und neu starten:\n\n```bash\nhermes cron run backup-check\n```'),
+    }),
+    // webhook "ci-pipeline": a run in the landing page chat.
+    auto('webhook:ci-pipeline:run-482', 'webhook', 'ci-pipeline', T - 2 * 3600, {
+      sessionId: 'demo-site',
+      title: L('Pipeline #482 passed on main', 'Pipeline #482 auf main erfolgreich'),
+      text: L('All 4 stages passed in 3 min 12 s; preview deployed.', 'Alle 4 Stufen in 3 min 12 s bestanden; Preview deployt.'),
+      body: L(
+        '**Pipeline #482** on `main` passed.\n\n1. Lint – 18 s\n2. Unit tests – 1 min 40 s (212 passed)\n3. Build – 52 s\n4. Preview deploy – 22 s\n\nThe preview is up; nothing failed.',
+        '**Pipeline #482** auf `main` erfolgreich.\n\n1. Lint – 18 s\n2. Unit-Tests – 1 min 40 s (212 bestanden)\n3. Build – 52 s\n4. Preview-Deploy – 22 s\n\nDie Preview steht; nichts ist fehlgeschlagen.'),
+    }),
+    // notify "deploy": messages a deploy script sent (hermes-ui notify), one of them with level error and a link.
+    auto('notify:3f6c1e2a-demo-deploy-2', 'notify', 'deploy', T - 240, {
+      status: 'error', level: 'error', read: false, link: 'https://example.com/deploys/1042',
+      title: L('Deploy failed: health check timed out', 'Deploy fehlgeschlagen: Health-Check abgelaufen'),
+      text: L('web 1.4.0 – /healthz did not answer within 60 s, rolled back to 1.3.2', 'web 1.4.0 – /healthz antwortete nicht in 60 s, zurück auf 1.3.2'),
+      body: L(
+        'The health check of **web 1.4.0** did not answer within 60 s.\n\n- Rolled back to `1.3.2`\n- Logs: `deploy-1042.log`',
+        'Der Health-Check von **web 1.4.0** antwortete nicht in 60 s.\n\n- Zurückgerollt auf `1.3.2`\n- Logs: `deploy-1042.log`'),
+    }),
+    auto('notify:9a41d7b0-demo-deploy-1', 'notify', 'deploy', T - 5400, {
+      level: 'info',
+      title: L('Deploy finished: api 2.8.1', 'Deploy fertig: api 2.8.1'),
+      text: L('Rolled out to 3 of 3 hosts in 48 s', 'Auf 3 von 3 Hosts ausgerollt in 48 s'),
+      body: L('Rolled out **api 2.8.1** to 3 of 3 hosts in 48 s.', '**api 2.8.1** auf 3 von 3 Hosts ausgerollt in 48 s.'),
+    }),
+  ]
 }
 
 // ---------- the stand-in backend ----------
