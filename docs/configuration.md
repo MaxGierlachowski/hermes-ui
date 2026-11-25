@@ -33,6 +33,11 @@ Settings come from CLI flags, then environment variables, then `.env`, then the 
 | `HERMES_UI_PUSH_SUBJECT` | `--push-subject` | `HERMES_UI_URL` if https | VAPID subject (`mailto:` or `https:`); Apple rejects anything else. |
 | `HERMES_UI_FCM_SERVICE_ACCOUNT` | `--fcm-service-account` | – | Firebase service-account JSON: push to the native Android app through FCM, next to Web Push. See [app.md](app.md). |
 | `HERMES_UI_INBOX_DAYS`, `HERMES_UI_INBOX_MAX` | `--inbox-days`, `--inbox-max` | `30`, `1000` | How long / how many inbox entries are kept. |
+| `HERMES_UI_AUTOMATIONS` | `--automations` | `on` | `off` = no cron / webhook runs in the inbox ([ADR 0014](decisions/0014-automations-in-the-inbox.md)). |
+| `HERMES_UI_AUTOMATIONS_BACKFILL_HOURS` | `--automations-backfill-hours` | `0` | First start only: also add the runs of the last N hours. Later starts continue where the last one stopped. |
+| `HERMES_UI_AUTOMATIONS_IGNORE` | `--automations-ignore` | – | Job names, job ids or webhook routes (comma separated, case-insensitive) that never go into the inbox. |
+| `HERMES_UI_AUTOMATIONS_INTERVAL` | `--automations-interval` | `15` | Seconds between scans of `$HERMES_HOME/cron/output` and the webhook sessions (minimum 5). |
+| `HERMES_UI_NOTIFY_TOKEN` | `--notify-token` | – | Optional second token that may only call `POST /api/notify` (scripts, other Hermes profiles). `hermes-ui notify` prefers it. |
 | `PASEO_DAEMON_URL` | `--paseo-url` | from `PASEO_MCP_CONFIG`, else `ws://127.0.0.1:6767/ws` | Paseo daemon. |
 | `PASEO_MCP_CONFIG` | `--paseo-mcp-config` | `~/.config/paseo-mcp/config.json` | Where the daemon URL is read from. |
 | `PASEO_OPS_FILE` | `--paseo-ops-file` | `$HERMES_HOME/ops-loop/paseo.json` | Optional agent goal / phase file. |

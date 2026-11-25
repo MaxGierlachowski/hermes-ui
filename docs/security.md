@@ -38,6 +38,9 @@ none of `X-Forwarded-For`, `X-Forwarded-Host`, `Cf-Connecting-Ip`, `Tailscale-Us
   stored (`data/devices.json`). Comparisons are constant-time.
 - Scripts may send the token as `Authorization: Bearer …`. The backend also accepts `?token=` in the
   URL for older clients; avoid it, because URLs end up in logs and history.
+- `HERMES_UI_NOTIFY_TOKEN` (optional) is a second bearer token that may call `POST /api/notify` and
+  nothing else: give it to scripts and other Hermes profiles that only report into the inbox. Notify
+  bodies are limited to 64 KB; links must be `http`/`https`.
 
 ### Pairing
 
@@ -121,6 +124,10 @@ messages, commands or answers. Where notification actions are reliable (not Appl
 Hermes approvals get *Allow* / *Deny* actions. They only open the app with a confirmation dialog; they
 never answer by themselves.
 
+Automations (cron runs, webhook runs, `POST /api/notify`) are the exception to "no content": their push
+carries the job, route or notify group and the entry's one-line title (a report replaces a chat-channel
+message), never the full report. Each device can switch these pushes off.
+
 ## Files and media
 
 The UI shows images from transcripts. The backend serves local files only under these rules
@@ -195,7 +202,8 @@ it that a chat mentions becomes readable by paired devices.
 | `data/devices.json` | Paired devices: name, iroh endpoint id, hash of the cookie secret, timestamps | `0600` |
 | `data/iroh/` | Gateway key, gateway access config, gateway log, downloaded binary | Directory `0700`, config `0600` |
 | `data/vapid.json`, `data/push.json` | Web Push key pair; push subscriptions and FCM tokens per device | `0600` |
-| `data/inbox.json` | Inbox history: chat titles, short excerpts of requests and replies, answers | `0600` |
+| `data/inbox.json` | Inbox history: chat titles, short excerpts of requests and replies, answers; automation reports (up to 8,000 characters each) | `0600` |
+| `data/automations.json` | How far the cron / webhook scan got (timestamps and recent run ids) | `0600` |
 | `data/board.json`, `data/media/` | Manual columns, drafts, outbox, copies of sent media | – |
 | `data/tailscale/` | State of the userspace Tailscale daemon (Tailscale modes) | Directory `0700` |
 | Browser | iroh key and remembered endpoint, preferences, the device cookie | Browser storage |
