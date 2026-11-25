@@ -9,6 +9,8 @@ export async function mockApi(page: Page, opts: { auth?: boolean; freezeClock?: 
   const auth = opts.auth ?? true
   // Frozen by default so relative times render the same; animations that read the clock need it running.
   if (opts.freezeClock ?? true) await page.clock.setFixedTime(NOW * 1000)
+  const read = new Set<string>() // inbox entries marked read during the test
+  const unread = () => INBOX_ITEMS.filter((x) => !x.read && !read.has(x.id)).length
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url())
     const p = url.pathname.replace(/^.*\/api\//, '/api/')
@@ -17,7 +19,12 @@ export async function mockApi(page: Page, opts: { auth?: boolean; freezeClock?: 
     if (!auth && p !== '/api/login') return route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"unauthorized"}' })
     if (p === '/api/events') return route.fulfill({ status: 200, contentType: 'text/event-stream', body: 'retry: 600000\n\nevent: gateway\ndata: {"connected":true}\n\n' })
     if (p === '/api/sessions' && method === 'GET') return route.fulfill(json({ sessions: SESSIONS, gateway: true }))
-    if (p === '/api/inbox') return route.fulfill(json({ open: OPEN, items: INBOX_ITEMS, unread: 2, paseo: { connected: true, canRespond: true } }))
+    if (p === '/api/inbox') return route.fulfill(json({ open: OPEN, items: INBOX_ITEMS.map((x) => (read.has(x.id) ? { ...x, read: true } : x)), unread: unread(), paseo: { connected: true, canRespond: true } }))
+    if (p === '/api/inbox/read' && method === 'POST') {
+      const { ids } = route.request().postDataJSON() as { ids: string[] | 'all' }
+      for (const x of INBOX_ITEMS) if (ids === 'all' || ids.includes(x.id)) read.add(x.id)
+      return route.fulfill(json({ unread: unread() }))
+    }
     if (p === '/api/remote') {
       return route.fulfill(json({
         local: true,
